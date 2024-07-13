@@ -11,6 +11,11 @@
  */
 
 /**
+ * This SSL key is a custom, Aegir generated one.
+ */
+define('HOSTING_SSL_CUSTOM_KEY', 'NULL');
+
+/**
  * Alters which site options are available.
  *
  * @param $return
@@ -25,15 +30,16 @@ function hook_hosting_site_options_alter(&$return, $node) {
   // From: hosting_ssl_hosting_site_options_alter().
 
   // Disable the ssl key fields by default.
-  if (!sizeof(hosting_ssl_get_servers())) {
+  if (!count(hosting_ssl_get_servers())) {
     $return['ssl_enabled'] = FALSE;
   }
 
-  $return['ssl_key'] = false;
-  $return['ssl_key_new'] = false;
+  $return['ssl_key'] = FALSE;
+  $return['ssl_key_new'] = FALSE;
 
   // Test if ssl has been enabled.
-  if ($node->ssl_enabled != 0) {
+  //if ($node->ssl_enabled != 0) {
+  if (isset($node->ssl_enabled) && $node->ssl_enabled) {
 
     $keys = hosting_ssl_get_keys($node->client, TRUE);
 
@@ -41,7 +47,7 @@ function hook_hosting_site_options_alter(&$return, $node) {
     $return['ssl_key'] = array_keys($keys);
 
     // properly default this value so things dont fall apart later.
-    if (sizeof($return['ssl_key']) == 1) {
+    if (count($return['ssl_key']) == 1) {
       $node->ssl_key = HOSTING_SSL_CUSTOM_KEY;
     }
 
@@ -49,7 +55,7 @@ function hook_hosting_site_options_alter(&$return, $node) {
     if ($node->ssl_key == HOSTING_SSL_CUSTOM_KEY) {
       // default the new key to the site's domain name, after filtering.
       $default = hosting_ssl_filter_key($node->title);
-      $return['ssl_key_new'] = (!empty($default)) ? $default : true;
+      $return['ssl_key_new'] = (!empty($default)) ? $default : TRUE;
     }
 
     // we need to ensure that the return value is properly indexed, otherwise it

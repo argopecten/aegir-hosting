@@ -24,6 +24,8 @@ function hosting_platform_hosting_feature() {
         'view locked platforms',
         'view platform',
         'create sites on locked platforms',
+        'create dunlock task',
+        'create dlock task',
       ),
       'aegir client' => array(
         'view platform',

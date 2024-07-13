@@ -59,7 +59,7 @@ function hosting_package_instance_sync($rid, $type) {
   foreach ($map as $plural => $key) {
     $merged = array();
     foreach ($args as $index => $arg) {
-      if (array_key_exists($plural, $args[$index])) {
+      if (is_array($args[$index]) && array_key_exists($plural, $args[$index])) {
         $merged = array_merge($merged, $args[$index][$plural]);
       }
     }

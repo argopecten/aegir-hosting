@@ -26,7 +26,15 @@ function example_provision_register_autoload() {
   static $loaded = FALSE;
   if (!$loaded) {
     $loaded = TRUE;
-    provision_autoload_register_prefix('Provision_', dirname(__FILE__));
+    $list = drush_commandfile_list();
+    $provision_dir = dirname($list['provision']);
+    if (is_readable($provision_dir . '/provision.inc')) {
+      include_once($provision_dir . '/provision.inc');
+      include_once($provision_dir . '/provision.service.inc');
+      if (function_exists('provision_autoload_register_prefix')) {
+        provision_autoload_register_prefix('Provision_', dirname(__FILE__));
+      }
+    }
   }
 }
 

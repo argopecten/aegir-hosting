@@ -50,13 +50,13 @@ function hosting_migrate_hosting_tasks() {
 
   $tasks['site']['migrate'] = array(
     'title' => t('Migrate Site'),
-    'description' => t('Move the site to a new platform.'),
+    'description' => t('You can move your site to a new platform using this form, but <b>avoid changing its domain name here at the same time</b>. If you wish to securely change the platform this site is hosted on, always <i>Clone</i> it in its <strong>current</strong> platform, then test <i>Migrate</i> of the cloned copy first and check if the cloned/migrated copy works fine, before you will try that with your live site.'),
     'dialog' => TRUE,
   );
 
   $tasks['platform']['migrate'] = array(
     'title' => t('Migrate Sites'),
-    'description' => t('Migrate sites to a new platform.'),
+    'description' => t('You can move your site to a new platform using this form, but <b>avoid changing its domain name here at the same time</b>. If you wish to securely change the platform this site is hosted on, always <i>Clone</i> it in its <strong>current</strong> platform, then test <i>Migrate</i> of the cloned copy first and check if the cloned/migrated copy works fine, before you will try that with your live site.'),
     'page arguments' => array('hosting_migrate_platform', 1),
     'dialog' => TRUE,
   );
@@ -133,7 +133,7 @@ function hosting_task_migrate_form($node) {
   );
 
   $db_servers = hosting_get_servers('db');
-  if (sizeof($db_servers) > 1) {
+  if (count($db_servers) > 1) {
     $form['new_db_server'] = array(
       '#type' => 'radios',
       '#title' => t('Database server'),

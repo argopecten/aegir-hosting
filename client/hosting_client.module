@@ -218,7 +218,7 @@ function hosting_client_form(&$node, &$form_state) {
     $form['email'] = array(
       '#type' => 'textfield',
       '#title' => t('Email address'),
-      '#description' => t('Email address of the contact created with this client. Optional - if none is provided, no user will be created with this client.'),
+      '#description' => t('Email address of the contact created with this client. Optional - if none is provided, no Aegir control panel user will be created with this client.'),
       '#required' => FALSE,
       '#size' => 40,
       '#default_value' => isset($node->email) ? $node->email : '',
@@ -305,7 +305,7 @@ function theme_hosting_client_form($variables) {
 function hosting_client_validate($node, $form, &$form_state) {
   // We don't allow duplicate client names.
   $title = $node->form_id == 'hosting_signup_form' ? 'client_name' : 'title';
-  $node_nid = db_query("SELECT nid FROM {node} WHERE type = 'client' AND title = ':title'", array(':title' => $node->title))->fetchField();
+  $node_nid = db_query("SELECT nid FROM {node} WHERE type = :type AND title = :title", array(':type' => 'client', ':title' => $node->title))->fetchField();
   if ($node_nid && $node->nid != $node_nid) {
     form_set_error($title, t("Client name already in use, try %suggestion.",
                               array('%suggestion' => hosting_client_validate_suggest($node->title))));
@@ -319,7 +319,7 @@ function hosting_client_validate($node, $form, &$form_state) {
     $node->uname = hosting_client_sanitize($node->title);
   }
   // @todo convert this statement to DBTNG syntax.
-  $nid = db_query("SELECT nid FROM {hosting_client} WHERE uname = ':uname'", array(':uname' => $node->uname))->fetchField();
+  $nid = db_query("SELECT nid FROM {hosting_client} WHERE uname = :uname", array(':uname' => $node->uname))->fetchField();
   if ($nid && $node->nid != $nid) {
     form_set_error('uname', t("Client internal name already in use, try %suggestion.",
                               array('%suggestion' => hosting_client_validate_suggest($node->uname, TRUE))));
@@ -490,19 +490,21 @@ function hosting_client_register_user($node) {
   $user = user_save($user, $edit);
 
   if ($user->uid && variable_get('hosting_client_send_welcome', FALSE)) {
-    if ($node->client_name) {
+    if (isset($node->client_name)) {
       $to = sprintf("%s <%s>", $node->client_name, $node->email);
     }
     else {
       $to = $node->email;
     }
 
+    $from = variable_get('site_mail', ini_get('sendmail_from'));
+
     $params = array(
       '!username' => $user->name,
       '!site' => variable_get('site_name', 'Drupal'),
       '!password' => $pass,
       '!uri' => $GLOBALS['base_url'],
-      '!uri_brief' => substr($base_url, strlen('http://')),
+      '!uri_brief' => substr($GLOBALS['base_url'], strlen('http://')),
       '!date' => format_date(REQUEST_TIME),
       '!login_uri' => url('user', array('absolute' => TRUE)),
       '!edit_uri' => url('user/' . $user->uid . '/edit', array('absolute' => TRUE)),
@@ -511,7 +513,7 @@ function hosting_client_register_user($node) {
     // No e-mail verification is required.
     // Create new user account, and login user immediately.
     $language = user_preferred_language($user);
-    drupal_mail('hosting_client', 'hosting-client-register-welcome', $to, $language, $params);
+    drupal_mail('hosting_client', 'hosting-client-register-welcome', $to, $language, $params, $from, TRUE);
   }
   return $user;
 }

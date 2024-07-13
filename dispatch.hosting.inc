@@ -41,6 +41,9 @@ function drush_hosting_dispatch() {
       }
 
       if ($info['enabled']) {
+        if (!isset($info['running_items'])) {
+          $info['running_items'] = 0;
+        }
         if (($now - $info["last"]) >= $info["calc_frequency"] || drush_get_option('force', FALSE)) {
           $count = $info['calc_items'] - $info['running_items'];
           if ($count <= 0) {
