@@ -13,16 +13,16 @@
         "issues": "https://www.drupal.org/project/issues/hosting",
         "docs": "http://docs.aegirproject.org/"
     },
+    "repositories": {
+          "drupal": {
+                "type": "composer",
+                "url": "https://packages.drupal.org/7"
+          }
+    },
     "require": {
         "symfony/process": "^3.4",
         "drupal/views_bulk_operations": "^3.7",
         "drupal/views": "^3.29"
-    },
-    "config": {
-        "sort-packages": true,
-        "platform": {
-            "php": "^8.1"
-        }
     },
     "minimum-stability": "dev",
     "prefer-stable": true
