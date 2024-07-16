@@ -1,5 +1,5 @@
 {
-    "name": "aegir/hosting",
+    "name": "drupal/hosting",
     "description": "Drupal modules for front-end of Aegir",
     "type": "drupal-module",
     "license": "GPL-2.0-or-later",
@@ -14,7 +14,9 @@
         "docs": "http://docs.aegirproject.org/"
     },
     "require": {
-        "symfony/process": "^3.4"
+        "symfony/process": "^3.4",
+        "drupal/views_bulk_operations": "^3.7",
+        "drupal/views": "^3.29"
     },
     "config": {
         "sort-packages": true,
