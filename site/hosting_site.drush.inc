@@ -16,7 +16,9 @@ function hosting_hosting_site_context_options(&$task) {
   $task->context_options['language'] = $task->ref->site_language;
 
   $profile = node_load($task->ref->profile);
-  $task->context_options['profile'] = $profile->short_name;
+  if (!empty($profile->short_name)) {
+    $task->context_options['profile'] = $profile->short_name;
+  }
 
   $client = node_load($task->ref->client);
   $user = user_load($task->uid);

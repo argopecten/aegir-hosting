@@ -71,7 +71,7 @@ function hosting_platform_node_info() {
     "name" => 'Platform',
     'base' => 'hosting_platform',
     "has_title" => TRUE,
-    "title_label" => t('Name'),
+    "title_label" => t('Platform Name'),
     "description" => hosting_node_help("platform"),
     "has_body" => 0,
     "body_label" => '',
@@ -95,7 +95,7 @@ function hosting_platform_edit_form_on_site_page($site) {
  * Wrapper for node_page_edit, for the "Edit Platform" tab.
  */
 function hosting_platform_edit_form_on_site_page_access($op, $site) {
-  if ($site->type == 'site') {
+  if ($site->type == 'site' && !empty($site->platform)) {
     $platform = node_load($site->platform);
     return node_access($op, $platform);
   }
@@ -107,7 +107,7 @@ function hosting_platform_edit_form_on_site_page_access($op, $site) {
 function hosting_platform_hosting_tasks() {
   $tasks = array();
   $tasks['platform']['verify'] = array(
-    'title' => t('Verify Platform'),
+    'title' => t('Verify + Lock Drush'),
     'description' => t('Verify that the platform is correctly installed and working.'),
     'weight' => 10,
     'provision_save' => TRUE,
@@ -122,7 +122,7 @@ function hosting_platform_hosting_tasks() {
     'dialog' => TRUE,
   );
   $tasks['platform']['lock'] = array(
-    'title' => t('Lock'),
+    'title' => t('Lock Platform'),
     'description' => t('Locking this platform will not delete or disable it or its sites, but will
         prevent any new sites from being created on it. This may be useful when you have sites that
         cannot be migrated onto a newer platform, but you wish to prevent other users or clients
@@ -131,9 +131,19 @@ function hosting_platform_hosting_tasks() {
     'weight' => 10,
   );
   $tasks['platform']['unlock'] = array(
-    'title' => t('Unlock'),
+    'title' => t('Unlock Platform'),
     'description' => t('Unlocking this platform will allow sites to be provisioned on it.
         Are you really sure you want to unlock this platform?'),
+    'weight' => 10,
+  );
+//   $tasks['platform']['dlock'] = array(
+//     'title' => t('Lock Local Drush'),
+//     'description' => t('Lock this platform Local Drush.'),
+//     'weight' => 10,
+//   );
+  $tasks['platform']['dunlock'] = array(
+    'title' => t('Unlock Local Drush'),
+    'description' => t('Unlock this platform Local Drush.'),
     'weight' => 10,
   );
 
@@ -167,6 +177,12 @@ function hosting_platform_permission() {
     'create sites on locked platforms' => array(
       'title' => t('create sites on locked platforms'),
     ),
+    'create dlock task' => array(
+      'title' => t('create dlock task'),
+    ),
+    'create dunlock task' => array(
+      'title' => t('create dunlock task'),
+    ),
   );
 }
 
@@ -196,6 +212,12 @@ function hosting_platform_node_access($node, $op, $account) {
 
     case 'view':
       return user_access('view platform', $account);
+
+    case 'dlock':
+      return user_access('create dlock task', $account);
+
+    case 'dunlock':
+      return user_access('create dunlock task', $account);
   }
 }
 
@@ -233,6 +255,24 @@ function hosting_platform_unlock_action($node) {
  */
 function hosting_platform_delete_action($node) {
   hosting_add_task($node->nid, 'delete');
+}
+
+/**
+ * Callback for platform lock action.
+ *
+ * @see: hosting_task_action_info().
+ */
+function hosting_platform_dlock_action($node) {
+  hosting_add_task($node->nid, 'dlock');
+}
+
+/**
+ * Callback for platform unlock action.
+ *
+ * @see: hosting_task_action_info().
+ */
+function hosting_platform_dunlock_action($node) {
+  hosting_add_task($node->nid, 'dunlock');
 }
 
 /**
@@ -357,9 +397,9 @@ function hosting_platform_form(&$node) {
   $type = node_type_get_type($node);
   $form['title'] = array(
     '#type' => 'textfield',
-    '#title' => t('Name'),
+    '#title' => t('Platform Name'),
     '#required' => TRUE,
-    '#description' => t('Choose a unique descriptive name for your platform. You very likely want this to be something like "Drupal 7.21".'),
+    '#description' => t('Choose a unique descriptive name for your platform. You very likely want this to be something like "Drupal 10.1".'),
     '#size' => 40,
     '#default_value' => $node->title,
     '#maxlength' => 255,
@@ -393,15 +433,15 @@ function hosting_platform_form(&$node) {
       '#machine_name' =>  array(
         'exists' => 'hosting_platform_path_exists',
         'source' => array('title'),
-        'label' => t('Publish path'),
+        'label' => t('Platform Path'),
         'standalone' => TRUE,
         'replace_pattern' => '[^a-z0-9_\.\-\/]+',
         'field_prefix' => variable_get('hosting_platform_base_path', '/var/aegir/platforms/'),
       ),
-      '#title' => t('Publish path'),
+      '#title' => t('Platform Path'),
       '#weight' => -5,
       '#required' => TRUE,
-      '#description' => t('The absolute path on the filesystem where the sites will be hosted. This needs to be created manually and initialized before your platform works properly. It also needs to be a unique path not already in use by a platform on any server.<br />For example, run the following shell commands:<pre>%commands</pre>Your publish path is the absolute path to the directory that gets created.<br />Alternatively, you can specify a makefile below, and the platform will be created automatically if the path specified here does not exist.<br />You are still required to enter the absolute path above, as it will be treated as the target directory by the makefile.', array('%commands' => "cd /var/aegir/platforms\ndrush dl drupal\n")),
+      '#description' => t('The absolute path on the filesystem where the sites will be hosted. This needs to be created manually and initialized before your platform works properly. It should be group writable: rwxrwxr-x. It also needs to be a unique path not already in use by any other platform on any server. Alternatively, you can specify a makefile below, and the platform will be created automatically if the path specified here does not exist. You are still required to enter the absolute path above, as it will be treated as the target directory by the makefile.', array('%commands' => "cd /var/aegir/platforms\ndrush dl drupal\n")),
       '#size' => 40,
       '#default_value' => $default_path,
       '#maxlength' => 255,
@@ -415,7 +455,7 @@ function hosting_platform_form(&$node) {
     // Display it.
     $form['info']['publish_path'] = array(
       '#type' => 'item',
-      '#title' => t('Publish path'),
+      '#title' => t('Platform Path'),
       '#markup' => $node->publish_path,
     );
     // Send it on form submission.
@@ -429,6 +469,7 @@ function hosting_platform_form(&$node) {
     '#type' => 'fieldset',
     '#tree' => TRUE,
     '#title' => t('Deploy from makefile'),
+    '#collapsed' => TRUE,
     '#collapsible' => TRUE,
     '#description' => t('You may deploy this platform from a makefile.'),
     '#weight' => -1,
@@ -436,8 +477,8 @@ function hosting_platform_form(&$node) {
 
   $form['frommakefile']['makefile'] = array(
     '#type' => 'textfield',
-    '#title' => t('Makefile'),
-    '#description' => t('The absolute path on the filesystem or public URL of a makefile that will be used to create the platform in the directory specified above. If the directory already exists, this file will be ignored.'),
+    '#title' => t('Platform Makefile'),
+    '#description' => t('<b>Wait a moment!</b> Do not confuse this field with Platform Path field - you need to start typing Platform Name above to see the small Edit link and use it to edit otherwise auto-generated Platform Path, which is required when you are adding already created Platform directory (typically on site import). This Makefile field is for the absolute path on the filesystem or public URL of a makefile that will be used to create the Platform in the path auto-generated or specified above in the Platform Path field - note that its parent directory must exist and must be group writable: rwxrwxr-x. If the Platform directory already exists, the makefile will be ignored.'),
     '#size' => 40,
     '#default_value' => isset($node->makefile) ? $node->makefile : NULL,
     '#maxlength' => 255,
@@ -610,10 +651,24 @@ function hosting_platform_delete($node) {
  */
 function hosting_platform_form_publish_path_validate($element, &$form_state, &$form) {
   $platform_base_path = variable_get('hosting_platform_base_path', '/var/aegir/platforms/');
-  
+
   // If platform path doesn't already begin with the basepath and does not begin with a "/", append default base path.
   if (strpos($element['#value'], $platform_base_path) !== 0 && strpos($element['#value'], '/') !== 0) {
     $full_path = hosting_path_normalize($platform_base_path . '/' . $element['#value']);
+
+    if (is_readable($full_path . '/docroot/index.php')) {
+      $full_path = $full_path  . '/docroot';
+    }
+    elseif (is_readable($full_path . '/web/index.php')) {
+      $full_path = $full_path  . '/web';
+    }
+    elseif (is_readable($full_path . '/html/index.php')) {
+      $full_path = $full_path  . '/html';
+    }
+    elseif (is_readable($full_path . '/www/index.php')) {
+      $full_path = $full_path  . '/www';
+    }
+
     form_set_value($element, $full_path, $form_state);
   }
 }
@@ -639,28 +694,20 @@ function hosting_platform_validate($node, &$form) {
       $args[':nid'] = $node->nid;
     }
     $result = db_query($sql, $args)->fetch();
-    if ($result) {
+    if (!empty($result)) {
       form_set_error('title',
         t('Platform name %name is already defined. Platform names must be unique across all servers.',
         array('%name' => $result->name))
       );
     }
 
-    // Make sure the path is unique. Remote servers can't have the same path to
-    // a platform that is in use by another server.
-    $exists = hosting_platform_path_exists($node->publish_path, isset($node->nid) ? $node->nid : NULL);
-    if ($exists) {
-      // Ensure that the visitor has access to view the other platform.
-      if (($other_node = node_load($exists->nid)) && node_access('view', $other_node)) {
-        form_set_error('publish_path', t('Publish path is already in use by platform: <a href="@link" target="_blank">%name</a>. Platform paths must be unique across all servers.',
-          array(
-            '%name' => $other_node->title,
-            '@link' => url('node/' . $exists->nid),
-          )));
-      }
-      else {
-        form_set_error('publish_path', t('Publish path is already in use by another platform. Platform paths must be unique across all servers.'));
-      }
+    // Make sure the path is unique. Remote servers can't have the same path to a platform that is in use by another server.
+    $exists = hosting_platform_path_exists($result->publish_path);
+    if (!empty($exists)) {
+      form_set_error('publish_path',
+        t('Path is already in use by platform %publish_path. Platform Paths must be unique across all servers.',
+        array('%publish_path' => $result->publish_path))
+      );
     }
 
     if (is_null($node->web_server)) {
@@ -670,29 +717,21 @@ function hosting_platform_validate($node, &$form) {
 }
 
 /**
- * Determine whether a given path has already been used with another platform.
- *
- * @param string $path
- *   The path to check.
- * @param int $exclude_nid
- *   Optionally exclude this platform from the check.
- *
- * @return mixed
- *   Either a result object or FALSE.
- *   The result object will contain the nid and name of the platform that uses
- *   the path.
+ * Determine whether a given path has already been used with an existing
+ * platform.
  */
-function hosting_platform_path_exists($path, $exclude_nid = NULL) {
-  $query = db_select('hosting_platform', 'h')
-    ->condition('h.publish_path', hosting_path_normalize($path))
-    ->condition('h.status', HOSTING_PLATFORM_LOCKED, '>=');
-  $query->innerJoin('node', 'n', 'n.nid = h.nid');
-  $query->addField('n', 'title', 'name');
-  $query->addField('n', 'nid');
-  if (!is_null($exclude_nid)) {
-    $query->condition('h.nid', $exclude_nid, '<>');
-  }
-  return $query->execute()->fetch();
+function hosting_platform_path_exists($path) {
+  $result = db_query("SELECT n.title AS name
+    FROM {hosting_platform} AS h
+      INNER JOIN {node} AS n ON n.nid = h.nid
+    WHERE h.publish_path = :publish_path
+      AND h.status >= :status",
+    array(
+      ':publish_path' => hosting_path_normalize($path),
+      ':status' => HOSTING_PLATFORM_QUEUED,
+    )
+  )->fetch();
+  return $result;
 }
 
 /**
@@ -787,7 +826,7 @@ function hosting_platform_view($node, $view_mode, $langcode = NULL) {
 
   $node->content['info']['publish_path'] = array(
     '#type' => 'item',
-    '#title' => t('Publish path'),
+    '#title' => t('Platform Path'),
     '#markup' => filter_xss($node->publish_path),
     '#weight' => -8,
   );
@@ -870,7 +909,7 @@ function hosting_platform_field_extra_fields() {
 function hosting_platform_entity_property_info() {
   $info['node']['bundles']['platform']['properties'] = array(
     'publish_path' => array(
-      'label' => t('Publish path'),
+      'label' => t('Platform Path'),
       'description' => t('The location on disk of the platform.'),
       'type' => 'text',
     ),

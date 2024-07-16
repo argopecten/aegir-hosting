@@ -817,6 +817,7 @@ function hosting_site_hosting_task_guarded_nodes() {
  * Allow other modules to alter the domain.
  */
 function hosting_site_get_domain($domain) {
+  $domain = hosting_site_clean_domain($domain);
   drupal_alter('hosting_site_domain', $domain);
   return $domain;
 }
@@ -835,4 +836,3 @@ function hosting_site_clean_domain($domain) {
   // Domain names are case-insensitive.
   return strtolower(trim($domain));
 }
-

@@ -351,16 +351,17 @@ function hosting_package_views_default_views() {
   $handler->display->display_options['header']['area']['table'] = 'views';
   $handler->display->display_options['header']['area']['field'] = 'area';
   $handler->display->display_options['header']['area']['content'] = 'These sites have the <em>%1</em> package enabled.';
-  $handler->display->display_options['header']['area']['format'] = '1';
+  $handler->display->display_options['header']['area']['format'] = 'filtered_html';
   $handler->display->display_options['header']['area']['tokenize'] = TRUE;
   $handler->display->display_options['defaults']['empty'] = FALSE;
   /* No results behavior: Global: Text area */
-  $handler->display->display_options['empty']['area']['id'] = 'area';
-  $handler->display->display_options['empty']['area']['table'] = 'views';
-  $handler->display->display_options['empty']['area']['field'] = 'area';
-  $handler->display->display_options['empty']['area']['content'] = 'No sites have the <em>%1</em> package enabled.';
-  $handler->display->display_options['empty']['area']['format'] = '1';
-  $handler->display->display_options['empty']['area']['tokenize'] = TRUE;
+  $handler->display->display_options['empty']['area_text_custom']['id'] = 'area_text_custom';
+  $handler->display->display_options['empty']['area_text_custom']['table'] = 'views';
+  $handler->display->display_options['empty']['area_text_custom']['field'] = 'area';
+  $handler->display->display_options['empty']['area_text_custom']['empty'] = TRUE;
+  $handler->display->display_options['empty']['area_text_custom']['content'] = 'No sites have the <em>%1</em> package enabled.';
+  $handler->display->display_options['empty']['area_text_custom']['format'] = 'filtered_html';
+  $handler->display->display_options['empty']['area_text_custom']['tokenize'] = TRUE;
   $handler->display->display_options['defaults']['relationships'] = FALSE;
   /* Relationship: Hosting Package Instance: Package ID */
   $handler->display->display_options['relationships']['package_id']['id'] = 'package_id';

@@ -151,7 +151,7 @@ function hosting_get_profile_platforms($profile, $check_old_short_name = FALSE) 
     $platform = node_load($instance->rid);
     // this is one of the default profiles
     if (in_array($instance->short_name, $defaults) &&
-      sizeof(array_diff(array_values($platform->profiles), $defaults)) &&
+      count(array_diff(array_values($platform->profiles), $defaults)) &&
       variable_get('hosting_ignore_default_profiles', FALSE)) {
       // there are other profiles available on this platform. skip this.
       continue;
@@ -174,7 +174,9 @@ function hosting_get_profile_languages($profile = NULL, $platform = NULL) {
       'i.rid' => $platform,
       'i.package_id' => $profile,
     ));
-    $languages = array_merge($languages, $instance->languages);
+    if ($instance->languages) {
+      $languages = array_merge($languages, $instance->languages);
+    }
   }
   else {
     $result = db_query("SELECT DISTINCT language FROM {hosting_package_languages}");
@@ -213,7 +215,7 @@ function _hosting_package_load($param) {
   while ($nid = $result->fetch()) {
     $return[$nid->nid] = node_load($nid->nid);
   }
-  if (sizeof($return)) {
+  if (count($return)) {
     return $return;
   }
   return NULL;
@@ -424,35 +426,37 @@ function _hosting_package_plural_map($key = NULL) {
  * @todo Make this prettier.
  */
 function hosting_package_sync(&$data) {
-  foreach ($data as $plural => $packages) {
-    $type = _hosting_package_plural_map($plural);
-    foreach ($packages as $short_name => $file) {
-      $name = isset($file['info']['name']) ? $file['info']['name'] : $short_name;
-      if (!($package = hosting_get_package($short_name, $type))) {
-        // Create a new package.
-        $package = new stdClass();
-        $package->type = 'package';
-        $package->uid = 1;
-        $package->package_type = $type;
-        $package->short_name = $short_name;
-        $package->old_short_name = isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '';
-        $package->status = 1;
+  if (!empty($data) && is_array($data)) {
+    foreach ($data as $plural => $packages) {
+      $type = _hosting_package_plural_map($plural);
+      foreach ($packages as $short_name => $file) {
+        $name = isset($file['info']['name']) ? $file['info']['name'] : $short_name;
+        if (!($package = hosting_get_package($short_name, $type))) {
+          // Create a new package.
+          $package = new stdClass();
+          $package->type = 'package';
+          $package->uid = 1;
+          $package->package_type = $type;
+          $package->short_name = $short_name;
+          $package->old_short_name = isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '';
+          $package->status = 1;
+        }
+
+        // we only call node save when the title, description changes
+        // or when it's a new package.
+        if (!isset($package->nid) ||
+          (isset($package->title) && ($package->title != $name)) ||
+          (isset($file['info']['description']) && ($package->description != $file['info']['description'])) ||
+          (isset($file['info']['old_short_name']) && ($package->old_short_name != $file['info']['old_short_name']))) {
+
+          $package->title = $name;
+          $package->description = isset($file['info']['description']) ? $file['info']['description'] : '';
+          $package->old_short_name = isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '';
+
+          node_save($package);
+        }
+        $data[$plural][$short_name]['package_id'] = $package->nid;
       }
-
-      // we only call node save when the title, description changes
-      // or when it's a new package.
-      if (!isset($package->nid) ||
-        (isset($package->title) && ($package->title != $name)) ||
-        (isset($file['info']['description']) && ($package->description != $file['info']['description'])) ||
-        (isset($file['info']['old_short_name']) && ($package->old_short_name != $file['info']['old_short_name']))) {
-
-        $package->title = $name;
-        $package->description = isset($file['info']['description']) ? $file['info']['description'] : '';
-        $package->old_short_name = isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '';
-
-        node_save($package);
-      }
-      $data[$plural][$short_name]['package_id'] = $package->nid;
     }
   }
 }

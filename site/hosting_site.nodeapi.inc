@@ -233,6 +233,7 @@ function hosting_site_delete($node) {
  */
 function hosting_site_nodeapi_site_presave(&$node) {
   $node->title = hosting_site_get_domain($node->title);
+  $node->title = hosting_site_clean_domain($node->title);
 }
 
 /**
@@ -339,6 +340,7 @@ function hosting_site_insert(&$node) {
  */
 function hosting_site_node_insert($node) {
   if ($node->type == "site") {
+    $node->title = hosting_site_clean_domain($node->title);
     if ((empty($node->old_vid))) {
       hosting_context_register($node->nid, isset($node->hosting_name) ? $node->hosting_name : $node->title);
       if (isset($node->import)) {
@@ -365,6 +367,9 @@ function hosting_site_update(&$node) {
     if ($node->site_status == HOSTING_SITE_DELETED) {
       $node->no_verify = TRUE;
     }
+
+    $client = hosting_get_client($node->client);
+    $node->client = isset($client->nid) ? $client->nid : '1';
 
     db_update('hosting_site')
       ->fields(array(

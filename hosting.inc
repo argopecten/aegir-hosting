@@ -33,8 +33,18 @@ function _hosting_valid_ip($hostname) {
  */
 function _hosting_valid_fqdn($fqdn) {
   // Regex is an implementation of RFC1035, a little relaxed to allow
-  // commonly registered hostnames (e.g. domaines starting with digits).
-  return preg_match("/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+$/i", $fqdn);
+  // commonly registered hostnames (e.g. domains starting with digits)
+  // original: return preg_match("/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+$/i", $fqdn);
+  //
+  // We don't allow IPs here.
+  if (!preg_match("/^([a-z0-9]+\.)?xn--/", $fqdn) && preg_match("/[-]{2,}/", $fqdn)) {
+    return FALSE;
+  }
+  else {
+    return (preg_match("/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+[a-z0-9]+$/", $fqdn) &&
+            preg_match("/[a-z]+/", $fqdn) &&
+           !preg_match("/[.]{2,}/", $fqdn));
+  }
 }
 
 /**
@@ -52,8 +62,32 @@ function _hosting_valid_fqdn($fqdn) {
  */
 function _hosting_valid_fqdn_wildcard($fqdn) {
   // Regex is an implementation of RFC1035, but allows "star" for wildcards.
-  return preg_match("/^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+$/i", $fqdn) &&
-    !preg_match("/^(\*\.)[^.]*$/", $fqdn); // don't allow wildcards on TLDs
+  //return preg_match("/^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+$/i", $fqdn) &&
+  //  !preg_match("/^(\*\.)[^.]*$/", $fqdn); // don't allow wildcards on TLDs
+  //
+  // We don't allow IPs here.
+  if (!preg_match("/^([a-z0-9]+\.)?xn--/", $fqdn) && preg_match("/[-]{2,}/", $fqdn)) {
+    return FALSE;
+  }
+  else {
+    return (preg_match("/^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+[a-z0-9]+$/", $fqdn) &&
+            preg_match("/[a-z]+/", $fqdn) &&
+           !preg_match("/[.]{2,}/", $fqdn) &&
+           !preg_match("/^(\*\.)[a-z]+$/", $fqdn) &&
+           !preg_match("/^(\*\.)[^.]*$/", $fqdn) &&
+           !preg_match("/^(\*\.)[a-z]{3}\.[a-z]{2}$/", $fqdn));
+  }
+}
+
+/**
+ * Check if the FQDN or IP provided is valid.
+ */
+function _hosting_valid_fqdn_ip($fqdn) {
+  # regex is an implementation of RFC1035
+  #
+  # We allow IPs here.
+  return (preg_match("/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.?)+[a-z0-9]+$/", $fqdn) &&
+         !preg_match("/[.]{2,}/", $fqdn));
 }
 
 /**
@@ -114,5 +148,7 @@ function hosting_get_hostmaster_site_nid() {
  */
 function hosting_get_hostmaster_platform_nid() {
   $hostmaster_site = node_load(hosting_get_hostmaster_site_nid());
-  return $hostmaster_site->platform;
+  if (!is_null($hostmaster_site) && isset($hostmaster_site->platform)) {
+    return $hostmaster_site->platform;
+  }
 }

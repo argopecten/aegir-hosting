@@ -105,6 +105,8 @@ function hosting_alias_form_data(&$form, &$form_state) {
     '#tree' => FALSE,
     '#title' => t('Domain Aliases'),
     '#type' => 'fieldset',
+    '#collapsed' => TRUE,
+    '#collapsible' => TRUE,
     '#prefix' => '<div class="clear-block" id="hosting-aliases-wrapper">',
     '#suffix' => '</div>',
   );

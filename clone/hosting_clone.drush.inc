@@ -45,7 +45,9 @@ function hosting_clone_post_hosting_clone_task($task, $data) {
     $clone = new stdClass();
     # copy some of the settings of the cloned site ($task->ref) to $clone
     foreach (array('type', 'status', 'uid', 'comment', 'promote', 'moderate', 'sticky', 'name', 'format', 'client', 'db_server', 'profile', 'site_status', 'site_language') as $field) {
-      $clone->$field = $task->ref->$field;
+      if (isset($task->ref->$field)) {
+        $clone->$field = $task->ref->$field;
+      }
     }
     $clone->title = hosting_site_clean_domain($task->task_args['new_uri']);
     $clone->hosting_name = hosting_site_get_domain($clone->title);

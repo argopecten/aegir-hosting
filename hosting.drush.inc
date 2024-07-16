@@ -146,7 +146,8 @@ function hosting_drush_import($alias) {
     $node->type = $context->type;
     // Set the hosting name too.
     $node->hosting_name = trim($context->name, '@');
-    $node->status = 1;
+    $node->status = TRUE;
+    $node->import = TRUE;
   }
 
   // Iterate through all the Drush commands which may want to save this node.

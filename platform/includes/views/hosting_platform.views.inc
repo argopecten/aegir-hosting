@@ -31,7 +31,7 @@ function hosting_platform_views_data() {
   );
 
   $data['hosting_platform']['publish_path'] = array(
-    'title' => t('Publish Path'),
+    'title' => t('Platform Path'),
     'help' => t('The path on the server where this platform is installed.'),
     'field' => array(
       'handler' => 'views_handler_field_xss',

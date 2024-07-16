@@ -7,16 +7,17 @@
 /**
  * This SSL key is a custom, Aegir generated one.
  */
-define('HOSTING_SSL_CUSTOM_KEY', 'null');
+define('HOSTING_SSL_CUSTOM_KEY', 'NULL');
 
 /**
  * Form API code to extend the site form with SSL fields.
  */
 function hosting_ssl_site_form(&$form, &$form_state, $form_id) {
-  $node = $form['#node'];
 
+  $node = $form['#node'];
   $new_site = TRUE;
   $ssl_available = FALSE;
+
   // Only allow the user to modify these values when the platform is SSL enabled.
   if (isset($node->nid)) {
     $new_site = FALSE;
@@ -31,55 +32,59 @@ function hosting_ssl_site_form(&$form, &$form_state, $form_id) {
     $ssl_available = TRUE;
   }
 
-
   if (!$ssl_available) {
     return;
   }
 
-  _hosting_site_field($form, $node, 'hosting_ssl_wrapper', array(
-    '#type' => 'fieldset',
-    '#title' => t('SSL Settings'),
-    '#default_value' => NULL,
-  ), 'filter_xss', $ssl_available);
+  if (!$new_site) {
+    _hosting_site_field($form, $node, 'hosting_ssl_wrapper', array(
+      '#type' => 'fieldset',
+      '#title' => t('SSL Settings'),
+      '#collapsed' => TRUE,
+      '#collapsible' => TRUE,
+      '#default_value' => NULL,
+    ), 'filter_xss', $ssl_available);
 
-  _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_enabled', array(
-    '#type' => 'radios',
-    '#title' => t('Encryption'),
-    '#options' => hosting_ssl_status_options(),
-    '#description' => t('Enabling encryption will publish your site on both HTTP and HTTPS ports, allowing you to redirect users to the more secure version for certain pages that require the additional security. Requiring encryption will automatically redirect all unencrypted traffic to your HTTPS site.'),
-    '#required' => TRUE,
-    '#default_value' => (isset($node->ssl_enabled)) ? $node->ssl_enabled : HOSTING_SSL_DISABLED,
-    '#access' => user_access('create ssl certificate'),
-  ), 'hosting_ssl_status_options', $ssl_available);
+    _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_enabled', array(
+      '#type' => 'radios',
+      '#title' => t('Encryption'),
+      '#options' => hosting_ssl_status_options(),
+      '#description' => t('Enabling encryption will publish your site on both HTTP and HTTPS ports, allowing you to redirect users to the more secure version for certain pages that require the additional security. Requiring encryption will automatically redirect all unencrypted traffic to your HTTPS site.'),
+      '#required' => TRUE,
+      '#default_value' => (isset($node->ssl_enabled)) ? $node->ssl_enabled : HOSTING_SSL_DISABLED,
+      '#access' => user_access('create ssl certificate'),
+    ), 'hosting_ssl_status_options', $ssl_available);
 
-  _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_key', array(
-    '#type' => 'radios',
-    '#title' => t('Encryption key'),
-    '#description' => t("Choose an existing SSL certificate. If you do not wish to use any of your existing certificates, you may choose to generate a new one."),
-    '#options' => hosting_ssl_get_keys(NULL, TRUE),
-    '#required' => TRUE,
-    '#default_value' => (isset($node->ssl_key) && $node->ssl_key > 0) ? $node->ssl_key : HOSTING_SSL_CUSTOM_KEY,
-    '#access' => user_access('create ssl certificate'),
-    '#states' => array(
-      'visible' => array(
-        ':input[name="ssl_enabled"]' => array('!value' => 0),
+    _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_key', array(
+      '#type' => 'radios',
+      '#title' => t('Encryption key'),
+      '#description' => t("Choose an existing SSL certificate. If you do not wish to use any of your existing certificates, you may choose to generate a new one."),
+      '#options' => hosting_ssl_get_keys(NULL, TRUE),
+      '#required' => TRUE,
+      '#default_value' => (isset($node->ssl_key) && $node->ssl_key > 0) ? $node->ssl_key : HOSTING_SSL_CUSTOM_KEY,
+      '#access' => user_access('create ssl certificate'),
+      '#states' => array(
+        'visible' => array(
+          ':input[name="ssl_enabled"]' => array('!value' => 0),
+        ),
       ),
-    ),
-  ), 'hosting_ssl_output_key', $ssl_available, !$new_site);
+    ), 'hosting_ssl_output_key', $ssl_available, !$new_site);
 
-  _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_key_new', array(
-    '#type' => 'textfield',
-    '#title' => t('New encryption key'),
-    '#description' => t("A name for the certificate, often relating to the domain name. This field should only contain lower case alpha-numeric and '_', '-' or '.' characters. If the SSL certificate is not found in config/ssl.d, Aegir will automatically generate a self-signed certificate for you. You can replace the generated with a properly signed version later. Any required intermediate certificates can be added in a file called config/ssl.d/&lt;name&gt;/openssl_chain.crt"),
-    '#default_value' => '',
-    '#access' => user_access('create ssl certificate'),
-    '#states' => array(
-      'visible' => array(
-        ':input[name="ssl_enabled"]' => array('!value' => 0),
-        ':input[name="ssl_key"]' => array('value' => HOSTING_SSL_CUSTOM_KEY),
+    _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_key_new', array(
+      '#type' => 'textfield',
+      '#title' => t('New encryption key'),
+      '#description' => t("A name for the certificate, often relating to the domain name. This field should only contain lower case alpha-numeric and '_', '-' or '.' characters. If the SSL certificate is not found in config/ssl.d, Aegir will automatically generate a self-signed certificate for you. You can replace the generated with a properly signed version later. Any required intermediate certificates can be added in a file called config/ssl.d/&lt;name&gt;/openssl_chain.crt"),
+      '#default_value' => (!empty($node->title)) ? $node->title : 'NONE',
+      '#access' => user_access('create ssl certificate'),
+      '#states' => array(
+        'visible' => array(
+          ':input[name="ssl_enabled"]' => array('!value' => 0),
+          ':input[name="ssl_key"]' => array('value' => HOSTING_SSL_CUSTOM_KEY),
+        ),
       ),
-    ),
-  ), 'filter_xss', $ssl_available, FALSE);
+    ), 'filter_xss', $ssl_available, FALSE);
+
+  }
 }
 
 /**
@@ -99,6 +104,7 @@ function hosting_ssl_hosting_site_options_alter(&$return, $node) {
   if (isset($node->ssl_enabled) && $node->ssl_enabled) {
 
     $keys = hosting_ssl_get_keys($node->client, TRUE);
+
     // Return the list of valid keys, including the special 'new key' option.
     $return['ssl_key'] = array_keys($keys);
 
@@ -137,9 +143,8 @@ function hosting_ssl_nodeapi_site_view(&$node, $teaser = FALSE) {
   if (isset($node->ssl_enabled) && $node->ssl_enabled == TRUE) {
     $node->content['info']['ssl_key'] = array(
       '#type' => 'item',
-      '#title' => t('Encryption key'),
-      '#markup' => hosting_ssl_output_key($node->ssl_key),
-      '#description' => hosting_ssl_get_key($node->ssl_key) ? t("This site is using SSL certificates located at %path.", array('%path' => sprintf("config/ssl.d/%s/", hosting_ssl_output_key($node->ssl_key)))) : t("(key deleted)"),
+      '#title' => t('SSL key'),
+      '#markup' => hosting_ssl_get_key($node->ssl_key) ? t("%path", array('%path' => sprintf("%s", hosting_ssl_output_key($node->ssl_key)))) : t("(key deleted)"),
       '#weight' => 7,
     );
   }
@@ -209,6 +214,9 @@ function hosting_ssl_status_options($status = NULL) {
  * Only lowercase alphanumeric- and '.', '_' or '-' characters are allowed for ssl keys.
  */
 function hosting_ssl_filter_key($key) {
+  if (function_exists('idna_convert_encode')) {
+    $key = idna_convert_encode(strtolower(trim($key)));
+  }
   return strtolower(preg_replace("/[^\w\.\-]/", "", $key));
 }
 
@@ -216,11 +224,11 @@ function hosting_ssl_filter_key($key) {
  * Implements hook_nodeapi_TYPE_OP().
  */
 function hosting_ssl_nodeapi_site_validate($node, &$form) {
-  if (isset($node->ssl_enabled) && $node->ssl_enabled) {
+  if (!empty($node->ssl_enabled)) {
     // TODO: find a way to avoid calling this function multiple times in hook_validate
     $valid_options = hosting_site_available_options($node);
 
-    if ($node->ssl_key == HOSTING_SSL_CUSTOM_KEY) {
+    if (!empty($node->ssl_key) && $node->ssl_key == HOSTING_SSL_CUSTOM_KEY) {
       if (!strlen($node->ssl_key_new)) {
         form_set_error('ssl_key_new', t("The encryption key field is required to enable us to generate a new SSL certificate for your site."));
       }
@@ -369,9 +377,9 @@ function hosting_ssl_save_key($node) {
       $obj->client = $client->nid;
       $obj->status = 0;
       drupal_write_record("hosting_ssl_cert", $obj);
-      if (!hosting_ip_allocate($obj, $node)) {
-        form_set_error('ssl_key_new', t("Unable to allocate IP address for certificate, assuming SNI (Server Name Indication) will work (incompatible with Safari and IE on Windows XP, Android 2.2, etc)."));
-      }
+      // if (!hosting_ip_allocate($obj, $node)) {
+      //   form_set_error('ssl_key_new', t("Unable to allocate IP address for certificate, assuming SNI (Server Name Indication) will work (incompatible with Safari and IE on Windows XP, Android 2.2, etc)."));
+      // }
       $node->ssl_key = $obj->cid;
     }
   }
@@ -409,7 +417,7 @@ function hosting_ssl_get_keys($client = NULL, $ask_custom = FALSE) {
   $result = db_query($query, $args);
 
   while ($obj = $result->fetchObject()) {
-    if (strlen($obj->ssl_key)) {
+    if (!empty($obj->ssl_key)) {
       $keys[$obj->cid] = $obj->ssl_key;
     }
   }

@@ -272,7 +272,7 @@ function hosting_site_views_default_views() {
   $handler = $view->new_display('page', 'Site List Page', 'page_sites');
   $handler->display->display_options['defaults']['access'] = FALSE;
   $handler->display->display_options['access']['type'] = 'perm';
-  $handler->display->display_options['access']['perm'] = 'create site';
+  $handler->display->display_options['access']['perm'] = 'view site';
   $handler->display->display_options['defaults']['style_plugin'] = FALSE;
   $handler->display->display_options['style_plugin'] = 'table';
   $handler->display->display_options['style_options']['row_class'] = '[status]';
@@ -325,12 +325,13 @@ function hosting_site_views_default_views() {
   $handler->display->display_options['defaults']['row_plugin'] = FALSE;
   $handler->display->display_options['defaults']['row_options'] = FALSE;
   $handler->display->display_options['defaults']['empty'] = FALSE;
-  /* No results behavior: Global: Unfiltered text */
+  /* No results behavior: Global: Text area */
   $handler->display->display_options['empty']['area_text_custom']['id'] = 'area_text_custom';
   $handler->display->display_options['empty']['area_text_custom']['table'] = 'views';
   $handler->display->display_options['empty']['area_text_custom']['field'] = 'area_text_custom';
   $handler->display->display_options['empty']['area_text_custom']['empty'] = TRUE;
   $handler->display->display_options['empty']['area_text_custom']['content'] = 'No sites have been created. <a href="/node/add/site">Click here</a> to add one.';
+  $handler->display->display_options['empty']['area_text_custom']['format'] = 'filtered_html';
   $handler->display->display_options['path'] = 'hosting/sites';
   $handler->display->display_options['menu']['type'] = 'normal';
   $handler->display->display_options['menu']['title'] = 'Sites';
@@ -343,13 +344,14 @@ function hosting_site_views_default_views() {
   /* Display: Site List Block */
   $handler = $view->new_display('block', 'Site List Block', 'block_sites');
   $handler->display->display_options['defaults']['empty'] = FALSE;
-  /* No results behavior: Global: Unfiltered text */
+  /* No results behavior: Global: Text area */
   $handler->display->display_options['empty']['area_text_custom']['id'] = 'area_text_custom';
   $handler->display->display_options['empty']['area_text_custom']['table'] = 'views';
   $handler->display->display_options['empty']['area_text_custom']['field'] = 'area_text_custom';
   $handler->display->display_options['empty']['area_text_custom']['empty'] = TRUE;
   $handler->display->display_options['empty']['area_text_custom']['content'] = 'No sites have been created for this client. <a href="/node/!1/platform-add-site">Click here</a> to add one.';
   $handler->display->display_options['empty']['area_text_custom']['tokenize'] = TRUE;
+  $handler->display->display_options['empty']['area_text_custom']['format'] = 'filtered_html';
   $handler->display->display_options['defaults']['arguments'] = FALSE;
   /* Contextual filter: Content: Nid */
   $handler->display->display_options['arguments']['nid']['id'] = 'nid';

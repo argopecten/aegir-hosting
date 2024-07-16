@@ -92,7 +92,7 @@ function hosting_client_views_default_views() {
   $handler->display->display_options['footer']['area']['table'] = 'views';
   $handler->display->display_options['footer']['area']['field'] = 'area';
   $handler->display->display_options['footer']['area']['content'] = '<a href="/node/add/client" class="add-new-client">Add new client</a>';
-  $handler->display->display_options['footer']['area']['format'] = '1';
+  $handler->display->display_options['footer']['area']['format'] = 'filtered_html';
   $handler->display->display_options['block_description'] = 'Clients block';
 
   $views[$view->name] = $view;

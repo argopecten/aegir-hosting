@@ -96,5 +96,8 @@ function hosting_migrate_post_hosting_migrate_task($task, $data) {
     // Record the backup created during migrate.
     $task->task_args['description'] = t('Pre-migration backup');
     hosting_site_post_hosting_backup_task($task, $data);
+
+    // Run an extra verify task to update the vhost
+    hosting_add_task($site->nid, 'verify');
   }
 }
