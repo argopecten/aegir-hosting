@@ -169,6 +169,59 @@ function hosting_platform_verify_action($node) {
 }
 
 /**
+ * Validate platform runtime requirements before verification.
+ */
+function hosting_platform_validate_runtime($platform) {
+  if (!$platform instanceof \Drupal\Core\Entity\ContentEntityInterface || $platform->getEntityTypeId() !== 'hosting_platform') {
+    return FALSE;
+  }
+
+  $php_path = trim((string) ($platform->get('php_path')->value ?? ''));
+  if ($php_path === '' || !is_file($php_path) || !is_executable($php_path)) {
+    drush_set_error('HOSTING_PLATFORM_PHP_MISSING', dt('PHP binary path is missing or not executable for platform @platform.', array(
+      '@platform' => $platform->label(),
+    )));
+    $platform->set('status', HOSTING_PLATFORM_LOCKED);
+    $platform->set('verified', 0);
+    $platform->no_verify = TRUE;
+    $platform->save();
+    return FALSE;
+  }
+
+  $publish_path = trim((string) ($platform->get('publish_path')->value ?? ''));
+  $roots = array($publish_path);
+  if (preg_match('#/(web|docroot|html)$#', $publish_path)) {
+    $roots[] = dirname($publish_path);
+  }
+  $roots = array_values(array_unique($roots));
+
+  $drush_candidates = array();
+  foreach ($roots as $root) {
+    $drush_candidates[] = $root . '/vendor/bin/drush';
+    $drush_candidates[] = $root . '/vendor/drush/drush/drush';
+  }
+  $drush_path = NULL;
+  foreach ($drush_candidates as $candidate) {
+    if (is_file($candidate) && is_executable($candidate)) {
+      $drush_path = $candidate;
+      break;
+    }
+  }
+  if ($drush_path === NULL) {
+    drush_set_error('HOSTING_PLATFORM_DRUSH_MISSING', dt('Drush binary not found for platform @platform.', array(
+      '@platform' => $platform->label(),
+    )));
+    $platform->set('status', HOSTING_PLATFORM_LOCKED);
+    $platform->set('verified', 0);
+    $platform->no_verify = TRUE;
+    $platform->save();
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
  * Callback for platform lock action.
  *
  * @see: hosting_task_action_info().
@@ -993,6 +1046,8 @@ function hosting_hosting_platform_context_options(&$task) {
   // Trim the path so we dont pass extra spaces.
   $publish_path = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface ? $task->ref->get('publish_path')->value : $task->ref->publish_path;
   $task->context_options['root'] = trim($publish_path ?? '', " ");
+  $php_path = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface ? $task->ref->get('php_path')->value : ($task->ref->php_path ?? NULL);
+  $task->context_options['php_path'] = $php_path ? trim($php_path, " ") : NULL;
 }
 
 /**
@@ -1007,6 +1062,9 @@ function hosting_platform_drush_context_import($context, &$node) {
       }
       $node->set('web_server', hosting_context_entity_id($context->web_server));
       $node->set('publish_path', $context->root);
+      if (isset($context->php_path)) {
+        $node->set('php_path', $context->php_path);
+      }
     }
     else {
       if (!isset($node->label)) {
@@ -1014,6 +1072,9 @@ function hosting_platform_drush_context_import($context, &$node) {
       }
       $node->web_server = hosting_context_entity_id($context->web_server);
       $node->publish_path = $context->root;
+      if (isset($context->php_path)) {
+        $node->php_path = $context->php_path;
+      }
     }
   }
 }

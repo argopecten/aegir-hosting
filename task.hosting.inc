@@ -85,6 +85,14 @@ function drush_hosting_task_validate($id, $type = NULL) {
     $task->args = array();
     $task->set('changed', REQUEST_TIME);
     $task->set('executed', REQUEST_TIME);
+    if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      if ($task->ref->getEntityTypeId() === 'hosting_platform' && $task->get('task_type')->value === 'verify') {
+        hosting_platform_validate_runtime($task->ref);
+        if (drush_get_error()) {
+          return;
+        }
+      }
+    }
     /* if not already running, remove the task from the queue
      * this is to avoid concurrent task runs */
     if ((int) $task->get('task_status')->value == HOSTING_TASK_PROCESSING && !drush_get_option('force', FALSE)) {
@@ -113,7 +121,6 @@ function drush_hosting_task_validate($id, $type = NULL) {
       '!context' => $id,
     )));
   }
-
 }
 
 /**

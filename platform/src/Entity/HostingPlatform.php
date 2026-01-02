@@ -70,6 +70,13 @@ class HostingPlatform extends HostingEntityBase {
       ->setDisplayConfigurable('form', TRUE)
       ->setDisplayConfigurable('view', TRUE);
 
+    $fields['php_path'] = BaseFieldDefinition::create('string')
+      ->setLabel(t('PHP binary path'))
+      ->setDescription(t('Absolute path to the PHP binary used by this platform.'))
+      ->setRequired(TRUE)
+      ->setDisplayConfigurable('form', TRUE)
+      ->setDisplayConfigurable('view', TRUE);
+
     $fields['verified'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Verified'))
       ->setDefaultValue(0);

@@ -24,9 +24,17 @@ content:
       rows: 2
       placeholder: ''
     third_party_settings: { }
+  php_path:
+    type: string_textfield
+    weight: 2
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: { }
   web_server:
     type: options_buttons
-    weight: 2
+    weight: 3
     region: content
     settings: { }
     third_party_settings: { }
