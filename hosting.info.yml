@@ -1,0 +1,9 @@
+name: 'Hosting'
+type: module
+description: 'Allow this Drupal site to deploy hosted sites.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'drupal:views'
+  - 'drupal:eldir'
+configure: 'hosting.admin'

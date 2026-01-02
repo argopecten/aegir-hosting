@@ -1,0 +1,14 @@
+hosting.admin.features:
+  route_name: hosting.admin.features
+  title: 'Features'
+  base_route: hosting.admin
+
+hosting.admin.queues:
+  route_name: hosting.admin.queues
+  title: 'Queues'
+  base_route: hosting.admin
+
+hosting.admin.settings:
+  route_name: hosting.admin.settings
+  title: 'Settings'
+  base_route: hosting.admin

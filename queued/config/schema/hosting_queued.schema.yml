@@ -1,0 +1,13 @@
+hosting_queued.settings:
+  type: config_object
+  label: 'Hosting queued settings'
+  mapping:
+    hosting_queued_post_task_delay:
+      type: integer
+      label: 'Post task delay'
+    hosting_queued_process_lifetime:
+      type: integer
+      label: 'Process lifetime'
+    hosting_queued_paused:
+      type: boolean
+      label: 'Queue paused'

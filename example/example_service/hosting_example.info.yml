@@ -1,0 +1,7 @@
+name: 'Hosting example'
+type: module
+description: 'Contains example implementations of the Hosting API.'
+package: 'Hosting Examples'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'

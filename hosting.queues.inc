@@ -74,17 +74,20 @@ function hosting_get_queues($refresh = FALSE) {
     if (!is_array($queues)) {
       $queues = array();
     }
-    drupal_alter('hosting_queues', $queues);
+    \Drupal::moduleHandler()->alter('hosting_queues', $queues);
+    $config = \Drupal::config('hosting.queues');
+    $state = \Drupal::state();
     foreach ($queues as $key => $queue) {
       $queue = array_merge($defaults, $queue);
 
+      $queue_config = $config->get('queues.' . $key) ?: [];
       // Configurable settings.
       $configured = array(
-        'frequency' => variable_get('hosting_queue_' . $key . '_frequency', $queue['frequency']),
-        'items' => variable_get('hosting_queue_' . $key . '_items', $queue['items']),
-        'enabled' => variable_get('hosting_queue_' . $key . '_enabled', $queue['enabled']),
-        'last_run' => variable_get('hosting_queue_' . $key . '_last_run', FALSE),
-        'interval' => variable_get('hosting_queue_' . $key . '_interval', FALSE),
+        'frequency' => array_key_exists('frequency', $queue_config) ? $queue_config['frequency'] : $queue['frequency'],
+        'items' => array_key_exists('items', $queue_config) ? $queue_config['items'] : $queue['items'],
+        'enabled' => array_key_exists('enabled', $queue_config) ? $queue_config['enabled'] : $queue['enabled'],
+        'last_run' => $state->get('hosting_queue_' . $key . '_last_run', FALSE),
+        'interval' => $state->get('hosting_queue_' . $key . '_interval', FALSE),
       );
       $queue = array_merge($queue, $configured);
 
@@ -123,11 +126,11 @@ function hosting_get_queues($refresh = FALSE) {
         $queue['calc_items'] = $queue['items'];
       }
 
-      $queue['last'] = variable_get('hosting_queue_' . $key . '_last_run', 0);
+      $queue['last'] = $state->get('hosting_queue_' . $key . '_last_run', 0);
       $queues[$key] = $queue;
     }
     // Allow altering the processed queue data.
-    drupal_alter('hosting_processed_queues', $queues);
+    \Drupal::moduleHandler()->alter('hosting_processed_queues', $queues);
     $cache = $queues;
   }
 
@@ -146,7 +149,7 @@ function hosting_run_queue() {
   $count = drush_get_option(array('i', 'items'), 5); // process a default of 5 items at a time.
   $semaphore = "hosting_queue_{$queue}_running";
 
-  variable_set('hosting_queue_' . $queue . '_last_run', $t = REQUEST_TIME);
+  \Drupal::state()->set('hosting_queue_' . $queue . '_last_run', $t = REQUEST_TIME);
 
   drush_log(dt('Acquiring lock on @queue queue.', array('@queue' => $queue)));
   $lock_wait = drush_get_option('lock-wait', HOSTING_QUEUE_DEFAULT_LOCK_WAIT);

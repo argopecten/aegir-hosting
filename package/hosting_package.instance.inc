@@ -16,13 +16,13 @@
  * will be referenced to the node.
  *
  * @param $rid
- *   The nid of the entity on which we are operating.
+ *   The id of the entity on which we are operating.
  * @param $type
  *   The type of the entity on which we are operating (platform, site or
- *   profile.
+ *   profile).
  */
 function hosting_package_instance_sync($rid, $type) {
-  db_update('hosting_package_instance')
+  \Drupal::database()->update('hosting_package_instance')
     ->fields(array(
       'status' => -1, // @todo remove magic number?
     ))
@@ -35,25 +35,30 @@ function hosting_package_instance_sync($rid, $type) {
 
   $rid = array_shift($args);
   // We need to pass in $type, since there's a possibility of collision b/w a
-  // profile's iid, and the nid of a site or platform.
+  // profile's iid, and the id of a site or platform.
   $type = array_shift($args);
 
-  // Figure out the platform nid
+  // Figure out the platform id.
   if ($type == 'platform') {
     $platform = $rid;
   }
   elseif ($type == 'site') {
-    $node = node_load($rid);
-    $platform = $node->platform;
+    $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($rid);
+    if ($site instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      $platform = $site->get('platform')->target_id;
+    }
+    else {
+      $platform = is_object($site) && isset($site->platform) ? $site->platform : NULL;
+    }
   }
   elseif ($type == 'profile') {
     $sql = 'SELECT rid
             FROM {hosting_package_instance}
             WHERE iid = :rid';
-    $platform = db_query($sql, array(':rid' => $rid))->fetchField();
+    $platform = \Drupal::database()->query($sql, array(':rid' => $rid))->fetchField();
   }
   else {
-    watchdog('hosting_package', 'Unrecognized entity type (' . $type . ') passed to hosting_package_instance_sync().', array(), WATCHDOG_WARNING);
+    \Drupal::logger('hosting_package')->warning('Unrecognized entity type (' . $type . ') passed to hosting_package_instance_sync().');
   }
 
   foreach ($map as $plural => $key) {
@@ -85,7 +90,7 @@ function hosting_package_instance_sync($rid, $type) {
       hosting_package_instance_save($instance);
     }
   }
-  db_delete('hosting_package_instance')
+  \Drupal::database()->delete('hosting_package_instance')
     ->condition('rid', $rid)
     ->condition('status', -1) // @todo remove magic number?
     ->execute();
@@ -93,11 +98,11 @@ function hosting_package_instance_sync($rid, $type) {
 
 function _hosting_package_instance_languages($instance) {
   if (isset($instance->languages) && count($instance->languages)) {
-    db_delete('hosting_package_languages')
+    \Drupal::database()->delete('hosting_package_languages')
       ->condition('iid', $instance->iid)
       ->execute();
     foreach ($instance->languages as $language) {
-      $id = db_insert('hosting_package_languages')
+      $id = \Drupal::database()->insert('hosting_package_languages')
         ->fields(array(
           'iid' => $instance->iid,
           'language' => $language,
@@ -115,7 +120,7 @@ function _hosting_package_instance_languages($instance) {
  * @see http://drupal.org/node/1354
  */
 function hosting_package_instance_update(&$instance) {
-  $id = db_update('hosting_package_instance')
+  $id = \Drupal::database()->update('hosting_package_instance')
     ->fields(array(
       'rid' => $instance->rid,
       'package_id' => $instance->package_id,
@@ -137,7 +142,7 @@ function hosting_package_instance_update(&$instance) {
  * @see http://drupal.org/node/1354
  */
 function hosting_package_instance_create(&$instance) {
-  $id = db_insert('hosting_package_instance')
+  $id = \Drupal::database()->insert('hosting_package_instance')
     ->fields(array(
       'rid' => $instance->rid,
       'package_id' => $instance->package_id,
@@ -186,16 +191,15 @@ function hosting_package_instances_load($param) {
 function _hosting_package_instances_load($param, $multiple = FALSE) {
   $instances = array();
 
-  $query = db_select('hosting_package_instance', 'i')
+  $query = \Drupal::database()->select('hosting_package_instance', 'i')
     ->addTag('hosting_package_instances_load')
     ->fields('i', array('iid', 'version', 'version_code', 'schema_version', 'status', 'rid', 'package_id'));
-  $package_alias = $query->leftJoin('hosting_package', 'p', 'i.package_id = %alias.nid');
-  $query->fields($package_alias, array('package_type', 'nid', 'description', 'short_name', 'old_short_name'));
-  $node_package_alias = $query->leftJoin('node', 'n', $package_alias . '.nid = %alias.nid');
-  $query->fields($node_package_alias, array('title'));
-  $node_instance_alias = $query->leftJoin('node', 'r', 'i.rid = %alias.nid');
-  $query->fields($node_instance_alias, array('type'));
-  $platform_alias = $query->leftJoin('hosting_platform', 'h', $node_instance_alias . '.nid = %alias.nid');
+  $package_alias = $query->leftJoin('hosting_package', 'p', 'i.package_id = %alias.id');
+  $query->fields($package_alias, array('package_type', 'id', 'description', 'short_name', 'old_short_name'));
+  $query->addField($package_alias, 'label', 'title');
+  $site_alias = $query->leftJoin('hosting_site', 's', 'i.rid = %alias.id');
+  $platform_alias = $query->leftJoin('hosting_platform', 'h', 'i.rid = %alias.id');
+  $query->addExpression("CASE WHEN {$site_alias}.id IS NOT NULL THEN 'site' WHEN {$platform_alias}.id IS NOT NULL THEN 'platform' ELSE '' END", 'type');
 
   if (is_numeric($param)) {
     $query->condition('i.iid', $param);
@@ -236,7 +240,7 @@ function _hosting_package_instances_load_languages($instance_id = NULL, $reset =
     $languages = array('en' => 'en');
 
     // load language options: if argument is null, load all language options
-    $lang_result = db_query("SELECT DISTINCT(language) FROM {hosting_package_languages} WHERE iid = :iid", array(':iid' => $instance_id));
+    $lang_result = \Drupal::database()->query("SELECT DISTINCT(language) FROM {hosting_package_languages} WHERE iid = :iid", array(':iid' => $instance_id));
     while ($language = $lang_result->fetch()) {
       $languages[$language->language] = _hosting_language_name($language->language);
     }
@@ -268,10 +272,10 @@ function hosting_package_instance_save(&$instance) {
  * @see http://drupal.org/node/1354
  */
 function hosting_package_instance_delete($instance) {
-  db_delete('hosting_package_languages')
+  \Drupal::database()->delete('hosting_package_languages')
     ->condition('iid', $instance->iid)
     ->execute();
-  db_delete('hosting_package_instance')
+  \Drupal::database()->delete('hosting_package_instance')
     ->condition('iid', $instance->iid)
     ->execute();
 }
@@ -337,10 +341,10 @@ function hosting_package_comparison($current, $target) {
   $target_table = _hosting_package_temporary_table($target);
 
   $status = array();
-  $result = db_query("SELECT count(c.nid) AS error
+  $result = \Drupal::database()->query("SELECT count(c.id) AS error
                       FROM $current_table c
                       LEFT JOIN $target_table t
-                      ON c.nid=t.nid
+                      ON c.id=t.id
                       WHERE (t.schema_version > 0) && (c.schema_version > t.schema_version)
                       AND c.status = :cstatus",
                       array(
@@ -352,11 +356,11 @@ function hosting_package_comparison($current, $target) {
     $status['error'] = $obj->error;
   }
 
-  $result = db_query("SELECT COUNT(c.nid) AS missing
+  $result = \Drupal::database()->query("SELECT COUNT(c.id) AS missing
                       FROM $current_table c
                       LEFT JOIN $target_table t
-                      ON c.nid=t.nid
-                      WHERE t.nid IS NULL
+                      ON c.id=t.id
+                      WHERE t.id IS NULL
                       AND c.status = :c_status",
                       array(
                         ':c_status' => 1,
@@ -366,10 +370,10 @@ function hosting_package_comparison($current, $target) {
     $status['missing'] = $obj->missing;
   }
 
-  $result = db_query("SELECT COUNT(c.nid) as upgrade
+  $result = \Drupal::database()->query("SELECT COUNT(c.id) as upgrade
                       FROM $current_table c
                       LEFT JOIN $target_table t
-                      ON c.nid=t.nid
+                      ON c.id=t.id
                       WHERE (c.version_code < t.version_code) OR (c.schema_version < t.schema_version)
                       AND c.status = :c_status",
                       array(
@@ -381,10 +385,10 @@ function hosting_package_comparison($current, $target) {
     $status['upgrade'] = $obj->upgrade;
   }
 
-  $result = db_query("SELECT count(c.nid) AS downgrade
+  $result = \Drupal::database()->query("SELECT count(c.id) AS downgrade
                       FROM $current_table c
                       LEFT JOIN $target_table t
-                      ON c.nid=t.nid
+                      ON c.id=t.id
                       WHERE (c.version_code > t.version_code)");
 
   foreach ($result as $obj) {
@@ -400,13 +404,14 @@ function _hosting_package_temporary_table($ref) {
 
   if (!isset($names[$ref])) {
     // Generate a unique table name for this $ref.
-    $names[$ref] = db_query_temporary("SELECT p.nid, p.short_name, p.old_short_name, i.version_code, i.schema_version, i.version, i.status
+    $table = 'hosting_pkg_tmp_' . uniqid('', FALSE);
+    \Drupal::database()->query("CREATE TEMPORARY TABLE {{$table}} AS SELECT p.id AS id, p.short_name, p.old_short_name, i.version_code, i.schema_version, i.version, i.status
               FROM {hosting_package} p
               LEFT JOIN {hosting_package_instance} i
-              ON p.nid = i.package_id
+              ON p.id = i.package_id
               WHERE i.rid = :rid and i.platform != :platform",
-              array( ':rid' => $ref, ':platform' => HOSTING_PACKAGE_INSTANCE_EXCLUDE));
-
+              array(':rid' => $ref, ':platform' => HOSTING_PACKAGE_INSTANCE_EXCLUDE));
+    $names[$ref] = $table;
   }
 
   return $names[$ref];
@@ -416,7 +421,7 @@ function _hosting_package_temporary_table($ref) {
  * Helper to determine if a particular site has a module installed.
  */
 function _hosting_package_site_has_module($node, $module) {
-  $package = hosting_package_instance_load(array('rid' => $node->nid, 'p.short_name' => $module));
+  $package = hosting_package_instance_load(array('rid' => hosting_entity_id($node), 'p.short_name' => $module));
   if (!is_object($package)) {
     return FALSE;
   }

@@ -3,8 +3,8 @@
  * @file Define a Hosting service class for NGINX w/SSL.
  */
 
-module_load_include('service.inc', 'hosting_web_server');
-module_load_include('service.inc', 'hosting_ssl');
+\Drupal::moduleHandler()->loadInclude('hosting_web_server', 'service.inc');
+\Drupal::moduleHandler()->loadInclude('hosting_ssl', 'service.inc');
 
 class hostingService_http_nginx_ssl extends hostingService_http_ssl {
 
@@ -13,7 +13,14 @@ class hostingService_http_nginx_ssl extends hostingService_http_ssl {
   protected $has_restart_cmd = TRUE;
 
   function default_restart_cmd() {
-    return "sudo /etc/init.d/nginx reload";
+    $systemctl = NULL;
+    if (is_executable('/usr/bin/systemctl')) {
+      $systemctl = '/usr/bin/systemctl';
+    }
+    elseif (is_executable('/bin/systemctl')) {
+      $systemctl = '/bin/systemctl';
+    }
+    return "sudo $systemctl reload nginx";
   }
 
 }

@@ -8,7 +8,7 @@ class hostingService {
 
   public $server;
 
-  // The full server node attached to this service.
+  // The full server entity attached to this service.
   public $server_node;
 
   // The service this class represents. ie 'http', 'db'
@@ -51,20 +51,31 @@ class hostingService {
     return $this->has_restart_cmd;
   }
 
+  protected function getServerId() {
+    if ($this->server_node instanceof \Drupal\Core\Entity\EntityInterface) {
+      return (int) $this->server_node->id();
+    }
+    if (is_object($this->server) && isset($this->server->id)) {
+      return (int) $this->server->id;
+    }
+    return NULL;
+  }
+
   public function load() {
+    $server_id = $this->getServerId();
     $this->mergeData("SELECT port, restart_cmd, available
                       FROM {hosting_service}
-                      WHERE vid = :vid
+                      WHERE server_id = :server_id
                       AND type = :type",
                       array(
-                        ':vid' => $this->server->vid,
+                        ':server_id' => $server_id,
                         ':type' => $this->type
                       )
                     );
   }
 
   protected function mergeData($query, $args = array()) {
-    $result = db_query($query, $args)->fetchAssoc();
+    $result = \Drupal::database()->query($query, $args)->fetchAssoc();
     $this->setValues($result);
   }
 
@@ -77,12 +88,12 @@ class hostingService {
   }
 
   public function save($node) {
-    if (isset($node->nid)) {
+    $server_id = hosting_entity_id($node);
+    if ($server_id) {
       $this->server_node = $node;
       $this->server = new stdClass();
-      $this->server->nid = $node->nid;
-      $this->server->vid = $node->vid;
-      $this->server->title = $node->title;
+      $this->server->id = $server_id;
+      $this->server->label = hosting_entity_label($node);
     }
   }
 
@@ -95,10 +106,10 @@ class hostingService {
   }
 
   public function insert() {
-    $id = db_insert('hosting_service')
+    $server_id = $this->getServerId();
+    $id = \Drupal::database()->insert('hosting_service')
       ->fields(array(
-        'nid' => $this->server->nid,
-        'vid' => $this->server->vid,
+        'server_id' => $server_id,
         'service' => $this->service,
         'type' => $this->type,
         'port' => $this->port,
@@ -114,16 +125,18 @@ class hostingService {
   }
 
   public function delete() {
-    db_delete('hosting_service')
+    $server_id = $this->getServerId();
+    \Drupal::database()->delete('hosting_service')
       ->condition('service', $this->service)
-      ->condition('nid', $this->server->nid)
+      ->condition('server_id', $server_id)
       ->execute();
   }
 
   public function delete_revision() {
-    db_delete('hosting_service')
+    $server_id = $this->getServerId();
+    \Drupal::database()->delete('hosting_service')
       ->condition('service', $this->service)
-      ->condition('vid', $this->server->vid)
+      ->condition('server_id', $server_id)
       ->execute();
   }
 
@@ -193,7 +206,12 @@ class hostingService {
   public function validate(&$node, &$form, &$form_state) {
     if ($this->has_port) {
       if ((int) $this->port <= 0) {
-        form_set_error('port', t("The port you specify must be a number."));
+        if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+          $form_state->setErrorByName('port', t("The port you specify must be a number."));
+        }
+        else {
+          \Drupal::messenger()->addError(t("The port you specify must be a number."));
+        }
       }
     }
   }
@@ -223,4 +241,3 @@ class hostingService {
   }
 
 }
-

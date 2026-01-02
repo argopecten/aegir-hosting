@@ -1,0 +1,6 @@
+alias_form:
+  js:
+    js/hosting_alias_form.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings

@@ -1,0 +1,46 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+id: hosting_site.default
+targetEntityType: hosting_site
+bundle: hosting_site
+mode: default
+content:
+  label:
+    type: string_textfield
+    weight: -10
+    settings:
+      size: 60
+      placeholder: ''
+  profile:
+    type: options_buttons
+    weight: 0
+    settings: {  }
+  platform:
+    type: options_select
+    weight: 5
+    settings: {  }
+  client:
+    type: options_select
+    weight: 10
+    settings: {  }
+  db_server:
+    type: options_select
+    weight: 15
+    settings: {  }
+  language:
+    type: options_select
+    weight: 20
+    settings: {  }
+hidden:
+  created: true
+  changed: true
+  cron_key: true
+  db_name: true
+  hosting_name: true
+  last_cron: true
+  status: true
+  uuid: true
+  verified: true

@@ -1,0 +1,6 @@
+cron:
+  title: 'Cron queue'
+  description: 'Keeps track of running the cron process on all your sites.'
+  status: enabled
+  module: hosting_cron
+  group: optional

@@ -1,0 +1,5 @@
+services:
+  hosting_alias.commands:
+    class: Drupal\hosting_alias\Commands\HostingAliasCommands
+    tags:
+      - { name: drush.command }

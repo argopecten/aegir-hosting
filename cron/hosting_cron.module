@@ -29,14 +29,25 @@ function hosting_cron_hosting_queues() {
  * Implements hosting_QUEUE_TYPE_queue().
  */
 function hosting_cron_queue($count) {
-  $result = db_query("SELECT n.nid FROM {node} n LEFT JOIN {hosting_site} s ON n.nid=s.nid WHERE n.type = :type and s.status = :status ORDER BY s.last_cron ASC, n.nid ASC", array(':type' => 'site', ':status' => HOSTING_SITE_ENABLED));
+  $site_ids = \Drupal::entityTypeManager()->getStorage('hosting_site')->getQuery()
+    ->condition('status', HOSTING_SITE_ENABLED)
+    ->sort('last_cron', 'ASC')
+    ->sort('id', 'ASC')
+    ->range(0, $count)
+    ->execute();
 
   $i = 0;
-  while ($i < $count && $nid = $result->fetch()) {
-    $site = node_load($nid->nid);
-    $site_name = hosting_context_name($site->nid);
+  foreach ($site_ids as $site_id) {
+    if ($i >= $count) {
+      break;
+    }
+    $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($site_id);
+    if (!$site) {
+      continue;
+    }
+    $site_name = hosting_context_name($site->id());
 
-    if (variable_get('hosting_cron_use_backend', TRUE)) {
+  if (\Drupal::config('hosting.settings')->get('hosting_cron_use_backend') ?? TRUE) {
       provision_backend_invoke($site_name, "cron");
     }
     else {
@@ -50,21 +61,27 @@ function hosting_cron_queue($count) {
       }
       if (!empty($major_version) && $major_version >= 8) {
         $url = _hosting_site_url($site) . '/cron';
-        if (!empty($site->cron_key)) {
-          $url .= '/' . rawurlencode($site->cron_key);
+        if (!empty($site->get('cron_key')->value)) {
+          $url .= '/' . rawurlencode($site->get('cron_key')->value);
         }
       }
       else {
         // Optionally add the cron_key querystring key if the site has one.
         $url = _hosting_site_url($site) . '/cron.php';
-        if (!empty($site->cron_key)) {
-          $url .= '?cron_key=' . rawurlencode($site->cron_key);
+        if (!empty($site->get('cron_key')->value)) {
+          $url .= '?cron_key=' . rawurlencode($site->get('cron_key')->value);
         }
       }
       drush_log(dt("running cron on URL %url", array('%url' => $url)));
-      $response = drupal_http_request($url);
-      if (isset($response->error) && $response->error) {
-        watchdog('hosting_cron', 'cron failed on site %site with error %error', array('%site' => $site->title, '%error' => $response->error), WATCHDOG_NOTICE);
+      $error = '';
+      try {
+        \Drupal::httpClient()->request('GET', $url, array('timeout' => 30));
+      }
+      catch (\Exception $e) {
+        $error = $e->getMessage();
+      }
+      if ($error) {
+        \Drupal::logger('hosting_cron')->notice('cron failed on site %site with error %error', ['%site' => $site->label(), '%error' => $error]);
         continue; // don't update the timestamp
       }
     }
@@ -73,11 +90,11 @@ function hosting_cron_queue($count) {
     // with the task queue. There exists a chance that they might both try to save the
     // same node at the same time, and then an old record from the cron queue might
     // replace the newly updated record.
-    db_update('hosting_site')
+    \Drupal::database()->update('hosting_site')
       ->fields(array(
         'last_cron' => REQUEST_TIME,
       ))
-      ->condition('nid', $site->nid)
+      ->condition('id', $site->id())
       ->execute();
     $i++;
   }

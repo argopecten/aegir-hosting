@@ -1,0 +1,6 @@
+nginx:
+  title: 'Nginx web servers'
+  description: 'Provide support for the NGINX web server.'
+  status: disabled
+  module: hosting_nginx
+  group: optional

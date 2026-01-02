@@ -1,0 +1,7 @@
+name: 'server_data'
+type: module
+description: 'Example implementation of saving data into a server context.'
+package: 'Hosting Examples'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_server'

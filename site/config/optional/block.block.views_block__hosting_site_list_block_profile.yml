@@ -1,0 +1,31 @@
+uuid: a54c7d65-d64f-493c-af9f-d6b6a88a70ae
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+    - views
+    - hosting
+  config:
+    - views.view.hosting_site_list
+  theme:
+    - eldir
+id: views_block__hosting_site_list_block_profile
+theme: eldir
+region: content_bottom
+weight: 0
+provider: null
+plugin: 'views_block:hosting_site_list-block_profile'
+settings:
+  id: 'views_block:hosting_site_list-block_profile'
+  label: ''
+  label_display: '0'
+  provider: views
+  views_label: ''
+  items_per_page: none
+visibility:
+  hosting_callback_visibility:
+    id: hosting_callback_visibility
+    callback: hosting_site_profile_block_visibility
+    negate: false
+    context_mapping: {  }

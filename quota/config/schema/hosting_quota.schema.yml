@@ -1,0 +1,10 @@
+hosting_quota.settings:
+  type: config_object
+  label: 'Hosting quota settings'
+  mapping:
+    default_limits:
+      type: mapping
+      label: 'Default quota limits'
+      mapping:
+        '*':
+          type: integer

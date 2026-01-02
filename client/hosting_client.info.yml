@@ -1,0 +1,8 @@
+name: 'Client'
+type: module
+description: 'Allow Hostmaster to configure clients.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'
+  - 'drupal:user'

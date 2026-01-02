@@ -1,0 +1,13 @@
+task:
+  js:
+    hosting_task.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery
+
+table:
+  js:
+    js/hosting_task.table.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery

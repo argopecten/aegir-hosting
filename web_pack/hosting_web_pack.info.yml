@@ -1,0 +1,7 @@
+name: 'Web Pack'
+type: module
+description: 'Allow hostmaster to configure web "packs", which have masters and slaves.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_web_server'

@@ -1,0 +1,19 @@
+client:
+  title: 'Clients'
+  description: 'Track and manage ownership of hosted sites, and access to platforms.'
+  status: required
+  module: hosting_client
+  entity_type: hosting_client
+  group: required
+  role_permissions:
+    'aegir platform manager':
+      - 'administer clients'
+    'aegir account manager':
+      - 'administer clients'
+      - 'create client'
+      - 'edit client users'
+      - 'view client'
+      - 'edit client uname'
+    'aegir client':
+      - 'edit own client'
+      - 'view client'

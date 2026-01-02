@@ -1,0 +1,5 @@
+services:
+  hosting_example.commands:
+    class: Drupal\hosting_example\Commands\HostingExampleCommands
+    tags:
+      - { name: drush.command }

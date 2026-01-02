@@ -13,19 +13,13 @@ function hosting_web_pack_schema() {
   return array(
     'hosting_web_pack' => array(
       'fields' => array(
-        'vid' => array(
+        'server_id' => array(
           'type' => 'int',
           'unsigned' => TRUE,
           'not null' => TRUE,
           'default' => 0,
         ),
-        'nid' => array(
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'default' => 0,
-        ),
-        'web_server_nid' => array(
+        'web_server_id' => array(
           'type' => 'int',
           'unsigned' => TRUE,
           'not null' => TRUE,
@@ -38,8 +32,7 @@ function hosting_web_pack_schema() {
           'default' => 'slave', // can also be 'master'
         ),
       ),
-      'primary key' => array('vid', 'web_server_nid'),
+      'primary key' => array('server_id', 'web_server_id'),
     ),
   );
 }
-

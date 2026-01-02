@@ -1,0 +1,8 @@
+example:
+  title: 'Example feature'
+  description: 'Example feature documenting how to create your own extensions.'
+  status: disabled
+  module: hosting_example
+  enable: 'hosting_example_feature_enable_callback'
+  disable: 'hosting_example_feature_disable_callback'
+  group: experimental

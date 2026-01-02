@@ -4,13 +4,11 @@
  * Allow clients to be created and granted permissions over sites, tasks etc.
  */
 
-include dirname(__FILE__) . '/hosting_client.access.inc';
-
 /**
- * Implements hook_init().
+ * Implements hook_page_attachments().
  */
-function hosting_client_init() {
-  drupal_add_css(drupal_get_path('module', 'hosting_client') . '/hosting_client.css');
+function hosting_client_page_attachments(array &$attachments) {
+  $attachments['#attached']['library'][] = 'hosting_client/base';
 }
 
 /**
@@ -25,27 +23,9 @@ function hosting_client_init() {
 define('HOSTING_CLIENT_MAX_GROUP_LENGTH', 16);
 
 /**
- * Implements hook_node_info().
+ * Implements hook_\Drupal::service('theme.manager')->render().
  */
-function hosting_client_node_info() {
-  $types["client"] = array(
-    "name" => t('Client'),
-    'base' => 'hosting_client',
-    "has_title" => TRUE,
-    "title_label" => 'Client name',
-    "description" => hosting_node_help("client"),
-    "has_body" => 0,
-    "body_label" => '',
-    "min_word_count" => 0,
-  );
-
-  return $types;
-}
-
-/**
- * Implements hook_theme().
- */
-function hosting_client_theme($existing, $type, $theme, $path) {
+function hosting_client_\Drupal::service('theme.manager')->render($existing, $type, $theme, $path) {
   return array(
     'hosting_client_user_form' => array(
       'file' => 'hosting_client.access.inc',
@@ -92,56 +72,22 @@ function hosting_client_permission() {
 }
 
 /**
- * Implements hook_node_access().
+ * Implements hook_hosting_platform_delete().
  */
-function hosting_client_node_access($node, $op, $account) {
-  if (!hosting_feature('client')) {
-    // Multiple client support has been disabled for this site.
-    return FALSE;
+function hosting_client_hosting_platform_delete(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_platform') {
+    return;
   }
-
-  $type = is_string($node) ? $node : $node->type;
-  if ($type != 'client' ) {
-    return NODE_ACCESS_IGNORE;
-  }
-
-
-  if (user_access('administer clients', $account)) {
-    return TRUE;
-  }
-  else {
-
-    switch ($op) {
-      case 'create':
-        return user_access('create client', $account);
-
-      case 'view':
-        // TODO shoudn't this SQL query be covered by node_grants?
-        return user_access('view client', $account) && db_query("SELECT user FROM {hosting_client_user} WHERE user = :user and client = :client", array(':user' => $account->uid, ':client' => $node->nid))->fetchAssoc();
-
-      case 'update':
-        if (user_access('edit own client', $account) && $account->uid == $node->uid) {
-          return TRUE;
-        }
-        break;
-
-      case 'delete':
-        if ((user_access('delete own client', $account) && $account->uid == $node->uid)) {
-          return TRUE;
-        }
-        break;
-
-      default:
-        break;
-    }
-  }
+  \Drupal::database()->delete('hosting_platform_client_access')
+    ->condition('pid', $entity->id())
+    ->execute();
 }
 
 /**
- * Get a client by name or nid.
+ * Get a client by name or id.
  *
  * @param int|object $client
- *   Either the nid or the client title
+ *   Either the id or the client title
  *
  * @return bool|object
  *   The client node object of FALSE.
@@ -149,15 +95,18 @@ function hosting_client_node_access($node, $op, $account) {
 function hosting_get_client($client) {
   if (is_numeric($client)) {
     // @todo: confirm that we validate against numeric client names.
-    return node_load($client);
+    return \Drupal::entityTypeManager()->getStorage('hosting_client')->load($client);
   }
   else {
-    if ($nodes = entity_load('node', FALSE, array('type' => 'client', 'title' => $client))) {
-      return array_shift($nodes);
-    }
-    else {
+    $ids = \Drupal::entityQuery('hosting_client')
+      ->accessCheck(FALSE)
+      ->condition('label', $client)
+      ->range(0, 1)
+      ->execute();
+    if (!$ids) {
       return FALSE;
     }
+    return \Drupal::entityTypeManager()->getStorage('hosting_client')->load(reset($ids));
   }
 }
 
@@ -173,58 +122,31 @@ function hosting_get_client($client) {
  *   The client node object of FALSE.
  */
 function hosting_get_client_by_uname($uname) {
-  $result = db_query("SELECT c.nid FROM {hosting_client} c JOIN {node} n ON c.nid = n.nid WHERE c.uname = :uname AND n.type = :type", array(':uname' => $uname, ':type' => 'client'))->fetchField();
-  if ($result) {
-    return node_load($result);
-  }
-  else {
+  $ids = \Drupal::entityQuery('hosting_client')
+    ->accessCheck(FALSE)
+    ->condition('uname', $uname)
+    ->range(0, 1)
+    ->execute();
+  if (!$ids) {
     return FALSE;
   }
+  return \Drupal::entityTypeManager()->getStorage('hosting_client')->load(reset($ids));
 }
 
 /**
  * Implements hook_form().
  */
 function hosting_client_form(&$node, &$form_state) {
-  $type = node_type_get_type('client');
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_client') {
+    $node = \Drupal::entityTypeManager()->getStorage('hosting_client')->create(['status' => 1]);
+  }
+  $node_id = $node->id();
+  $form['#entity'] = $node;
+  $config = \Drupal::config('hosting_client.settings');
+  $form_display = \Drupal::service('entity_display.repository')->getFormDisplay('hosting_client', 'default');
+  $form_display->buildForm($node, $form, $form_state);
 
-  $form['title'] = array(
-    '#type' => 'textfield',
-    '#title' => check_plain($type->title_label),
-    '#required' => TRUE,
-    '#size' => 40,
-    '#default_value' => isset($node->title) ? $node->title : '',
-    '#maxlength' => 100,
-    '#description' => t('The name of this client, generally the organization name or the contact name for individuals.'),
-  );
-
-  $form['uname'] = array(
-    '#type' => 'machine_name',
-    '#title' => t('Internal name'),
-    '#size' => HOSTING_CLIENT_MAX_GROUP_LENGTH,
-    '#maxlength' => HOSTING_CLIENT_MAX_GROUP_LENGTH,
-    '#default_value' => isset($node->uname) ? $node->uname : '',
-    '#access' => user_access('edit client uname'),
-    '#description' => t('A machine-usable name that can be used internally, for example to map to a UNIX group in the backend. It is unique accross the system. If no value is provided, it is deduced from the client name, by stripping spaces and metacharacters and adding a prefix (%prefix).', array('%prefix' => variable_get('hosting_client_prefix', 'no prefix define'))),
-    '#machine_name' => array(
-      'exists' => 'hosting_get_client_by_uname',
-      'source' => array('title'),
-      'label' => t('Internal name'),
-      'replace_pattern' => '[^a-z0-9_-]+',
-      'replace' => '_',
-    ),
-  );
-  if (!isset($node->nid) && variable_get('hosting_client_register_user', FALSE)) {
-    $form['email'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Email address'),
-      '#description' => t('Email address of the contact created with this client. Optional - if none is provided, no user will be created with this client.'),
-      '#required' => FALSE,
-      '#size' => 40,
-      '#default_value' => isset($node->email) ? $node->email : '',
-      '#maxlength' => 100,
-    );
-
+  if (!$node_id && ($config->get('hosting_client_register_user') ?? FALSE)) {
     $form['email_confirm'] = array(
       '#type' => 'textfield',
       '#title' => t('Confirm Email address'),
@@ -232,19 +154,25 @@ function hosting_client_form(&$node, &$form_state) {
       '#size' => 40,
       '#maxlength' => 100,
     );
+    if (isset($form['email']['#weight'])) {
+      $form['email_confirm']['#weight'] = $form['email']['#weight'] + 1;
+    }
+  }
+  else {
+    unset($form['email']);
   }
 
-  if (isset($node->nid)) {
+  if ($node_id) {
     $users = hosting_client_users($node);
     $user_list = array();
     foreach ($users as $uid => $uname) {
       $form['user_edit']['name'][$uid] = array(
         '#type' => 'markup',
-        '#value' => l($uname, 'user/' . $uid),
+        '#value' => \Drupal\Core\Link::fromTextAndUrl($uname, \Drupal\Core\Url::fromUserInput('/user/' . $uid))->toString(),
       );
       $user_list[$uid] = '';
     }
-    if (user_access('edit client users')) {
+    if (\Drupal::currentUser()->hasPermission('edit client users')) {
       $form['user_edit']['users'] = array(
         '#type' => 'checkboxes',
         '#options' => $user_list,
@@ -254,7 +182,7 @@ function hosting_client_form(&$node, &$form_state) {
       '#type' => 'value',
       '#value' => array(array('data' => t('Allowed users')), array('data' => t('Remove'))),
     );
-    if (user_access('edit client users')) {
+    if (\Drupal::currentUser()->hasPermission('edit client users')) {
       $form['user_edit']['new_user'] = array(
         '#type' => 'textfield',
         '#title' => t('Associate a user to this Client'),
@@ -287,54 +215,137 @@ function theme_hosting_client_form($variables) {
   foreach (element_children($form['name'], FALSE) as $user) {
     $row = array();
     // @todo: Figure out why drupal_render isn't working here.
-    //$row['data'][] = drupal_render($form['name'][$user]);
+    //$row['data'][] = \Drupal::service('renderer')->render($form['name'][$user]);
     $row['data'][] = $form['name'][$user]['#value'];
-    if (user_access('edit client users')) {
-      $row['data'][] = drupal_render($form['users'][$user]);
+    if (\Drupal::currentUser()->hasPermission('edit client users')) {
+      $row['data'][] = \Drupal::service('renderer')->render($form['users'][$user]);
     }
     $rows[] = $row;
   }
-  $output = theme('table', array('header' => $form['header']['#value'], 'rows' => $rows));
-  $output .= drupal_render_children($form);
+  $output = \Drupal::service('theme.manager')->render('table', array('header' => $form['header']['#value'], 'rows' => $rows));
+  $output .= \Drupal::service('renderer')->render($form);
   return $output;
 }
 
 /**
  * Implements hook_validate().
  */
+function hosting_client_form_error_name(array $form, $field_name, array $value_keys = array('value')) {
+  if (isset($form[$field_name]['widget'][0])) {
+    foreach ($value_keys as $key) {
+      if (isset($form[$field_name]['widget'][0][$key]['#parents'])) {
+        return implode('][', $form[$field_name]['widget'][0][$key]['#parents']);
+      }
+    }
+  }
+  if (isset($form[$field_name]['#parents'])) {
+    return implode('][', $form[$field_name]['#parents']);
+  }
+  if (isset($form['client'][$field_name]['#parents'])) {
+    return implode('][', $form['client'][$field_name]['#parents']);
+  }
+  return $field_name;
+}
+
+/**
+ * Read a client form value from form state, supporting nested forms.
+ */
+function hosting_client_form_get_field_value(array $form, $form_state, $field_name, array $value_keys = array('value')) {
+  if (isset($form[$field_name]['widget'][0])) {
+    foreach ($value_keys as $key) {
+      if (isset($form[$field_name]['widget'][0][$key]['#parents'])) {
+        $parents = $form[$field_name]['widget'][0][$key]['#parents'];
+        if (is_object($form_state) && method_exists($form_state, 'getValue')) {
+          $value = $form_state->getValue($parents);
+        }
+        elseif (isset($form_state['values'])) {
+          $value = \Drupal\Component\Utility\NestedArray::getValue($form_state['values'], $parents);
+        }
+        else {
+          $value = NULL;
+        }
+        if ($value !== NULL && $value !== '') {
+          return $value;
+        }
+      }
+    }
+  }
+
+  if (is_object($form_state) && method_exists($form_state, 'getValue')) {
+    $value = $form_state->getValue($field_name);
+    if ($value === NULL) {
+      $value = $form_state->getValue(array('client', $field_name));
+    }
+  }
+  else {
+    $value = $form_state['values'][$field_name] ?? ($form_state['values']['client'][$field_name] ?? NULL);
+  }
+
+  if (is_array($value)) {
+    foreach ($value_keys as $key) {
+      if (isset($value[0][$key])) {
+        return $value[0][$key];
+      }
+    }
+  }
+
+  return $value;
+}
+
 function hosting_client_validate($node, $form, &$form_state) {
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_client') {
+    return;
+  }
+  $set_error = function ($name, $message) use (&$form_state) {
+    if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+      $form_state->setErrorByName($name, $message);
+    }
+    else {
+      \Drupal::messenger()->addError($message);
+    }
+  };
   // We don't allow duplicate client names.
-  $title = $node->form_id == 'hosting_signup_form' ? 'client_name' : 'title';
-  $node_nid = db_query("SELECT nid FROM {node} WHERE type = 'client' AND title = ':title'", array(':title' => $node->title))->fetchField();
-  if ($node_nid && $node->nid != $node_nid) {
-    form_set_error($title, t("Client name already in use, try %suggestion.",
-                              array('%suggestion' => hosting_client_validate_suggest($node->title))));
+  if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+    $build_info = $form_state->getBuildInfo();
+    $form_id = $build_info['form_id'] ?? ($form['#form_id'] ?? '');
+  }
+  else {
+    $form_id = $form_state['build_info']['form_id'] ?? ($form['#form_id'] ?? '');
+  }
+  $title = 'label';
+  $client_id = $node->id();
+  $label = $node->label();
+  $existing_id = \Drupal::database()->query("SELECT id FROM {hosting_client} WHERE label = :label", array(':label' => $label))->fetchField();
+  if ($existing_id && $client_id != $existing_id) {
+    $set_error(hosting_client_form_error_name($form, 'label', array('value')), t("Client name already in use, try %suggestion.", array(
+      '%suggestion' => hosting_client_validate_suggest($label),
+    )));
   }
 
   // We don't allow duplicate internal client names.
-  if ($node->uname) {
-    $node->uname = hosting_client_sanitize($node->uname);
-  }
-  else {
-    $node->uname = hosting_client_sanitize($node->title);
-  }
+  $uname = $node->get('uname')->value;
+  $uname = $uname ? hosting_client_sanitize($uname) : hosting_client_sanitize($label);
+  $node->set('uname', $uname);
   // @todo convert this statement to DBTNG syntax.
-  $nid = db_query("SELECT nid FROM {hosting_client} WHERE uname = ':uname'", array(':uname' => $node->uname))->fetchField();
-  if ($nid && $node->nid != $nid) {
-    form_set_error('uname', t("Client internal name already in use, try %suggestion.",
-                              array('%suggestion' => hosting_client_validate_suggest($node->uname, TRUE))));
+  $existing_id = \Drupal::database()->query("SELECT id FROM {hosting_client} WHERE uname = :uname", array(':uname' => $uname))->fetchField();
+  if ($existing_id && $client_id != $existing_id) {
+    $set_error(hosting_client_form_error_name($form, 'uname', array('value')), t("Client internal name already in use, try %suggestion.", array(
+      '%suggestion' => hosting_client_validate_suggest($uname, TRUE),
+    )));
   }
 
-  if (!empty($node->nid) && !empty($node->email)) {
-    $user = user_load_by_mail($node->email);
+  $email = $node->hasField('email') ? $node->get('email')->value : NULL;
+  if ($client_id && !empty($email)) {
+    $user = user_load_by_mail($email);
     if ($user) {
-      form_set_error('email', t("Email address already exists."));
+      $set_error(hosting_client_form_error_name($form, 'email', array('value')), t("Email address already exists."));
     }
-    if ($node->email != $node->email_confirm) {
-      form_set_error('email_confirm', t("Email addresses do not match"));
+    $email_confirm = hosting_client_form_get_field_value($form, $form_state, 'email_confirm');
+    if ($email_confirm !== NULL && $email != $email_confirm) {
+      $set_error(hosting_client_form_error_name($form, 'email_confirm'), t("Email addresses do not match"));
     }
-    if (!valid_email_address($node->email)) {
-      form_set_error('email', t("Email address invalid."));
+    if (!valid_email_address($email)) {
+      $set_error(hosting_client_form_error_name($form, 'email', array('value')), t("Email address invalid."));
     }
   }
 }
@@ -354,23 +365,16 @@ function hosting_client_validate($node, $form, &$form_state) {
  */
 function hosting_client_validate_suggest($name, $internal = FALSE) {
   $suggestion = FALSE;
-  $table = $internal ? 'hosting_client' : 'node';
-  $field = $internal ? 'uname' : 'title';
+  $field = $internal ? 'uname' : 'label';
   $name = $internal ? hosting_client_sanitize($name) : $name;
 
   for ($i = 0; $i < 20; $i++) {
-    // @todo convert this statement to DBTNG syntax.
-    $nid = db_query("SELECT nid
-                     FROM {:table}
-                     WHERE uname
-                     LIKE '%:name%'
-                    ", array(
-                      ':table' => $table,
-                      ':field' => $field,
-                      ':name' => $name . $i,
-                    )
-                   )->fetchField();
-    if (!$nid) {
+    $query = \Drupal::database()->select('hosting_client', 'hc')
+      ->fields('hc', array('id'))
+      ->condition($field, '%' . \Drupal::database()->escapeLike($name . $i) . '%', 'LIKE')
+      ->range(0, 1);
+    $existing_id = $query->execute()->fetchField();
+    if (!$existing_id) {
       return $name . $i;
     }
   }
@@ -379,75 +383,112 @@ function hosting_client_validate_suggest($name, $internal = FALSE) {
 /**
  * Implements hook_form_FORM_ID_alter().
  */
-function hosting_client_form_site_node_form_alter(&$form, &$form_state, $form_id) {
+function hosting_client_form_hosting_site_form_alter(&$form, &$form_state, $form_id) {
+  hosting_client_site_form_alter($form, $form_state);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function hosting_client_form_hosting_site_add_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  hosting_client_site_form_alter($form, $form_state);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function hosting_client_form_hosting_site_edit_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  hosting_client_site_form_alter($form, $form_state);
+}
+
+/**
+ * Apply client selection logic to site forms.
+ */
+function hosting_client_site_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state) {
   global $user;
-  $node = $form['#node'];
+  $node = $form['#entity'] ?? $form['#node'] ?? NULL;
+  if (!$node) {
+    return;
+  }
 
   $client_ids = hosting_get_client_from_user($user->uid);
-  if (empty($client_ids) && !user_access('administer clients') && variable_get('hosting_client_require_client_to_create_site', FALSE)) {
-    form_set_error('client', t('Your user is not associated with any clients so you are not allowed to create new sites'));
+  if (empty($client_ids) && !\Drupal::currentUser()->hasPermission('administer clients') && (\Drupal::config('hosting_client.settings')->get('hosting_client_require_client_to_create_site') ?? FALSE)) {
+    $error_name = 'client';
+    if (isset($form['client']['widget'][0]['target_id']['#parents'])) {
+      $error_name = implode('][', $form['client']['widget'][0]['target_id']['#parents']);
+    }
+    $form_state->setErrorByName($error_name, t('Your user is not associated with any clients so you are not allowed to create new sites'));
     $form['#access'] = 0;
     return $form;
   }
 
-  $editable = ((!isset($node->client) || !isset($node->nid)) || user_access('administer sites')) && hosting_feature('client');
+  $editable = (!hosting_entity_id($node) || \Drupal::currentUser()->hasPermission('administer sites')) && hosting_feature('client');
   $add_client_text = '';
-  if (user_access('administer clients') || user_access('create client')) {
-    $add_client_text = t('Click !here to add a new client.', array('!here' => l(t('here'), 'node/add/client', array('attributes' => array('target' => '_blank')))));
+  if (\Drupal::currentUser()->hasPermission('administer clients') || \Drupal::currentUser()->hasPermission('create client')) {
+    $add_client_text = t('Click !here to add a new client.', array(
+      '!here' => \Drupal\Core\Link::fromTextAndUrl(t('here'), \Drupal\Core\Url::fromRoute('entity.hosting_client.add_form', array(), array('attributes' => array('target' => '_blank'))))->toString(),
+    ));
   }
-  _hosting_site_field($form, $node, 'client', array(
-    '#type' => 'textfield',
-    '#required' => TRUE,
-    '#title' => t('Client'),
-    '#default_value' => _hosting_client_site_default($node),
-    '#description' => t('The client to whom this site belongs.') . ' ' . $add_client_text,
-    '#autocomplete_path' => 'hosting_client/autocomplete/client',
-  ), 'filter_xss', $editable);
 
+  if (!isset($form['client']['widget'][0]['target_id'])) {
+    return $form;
+  }
+
+  $client_element = &$form['client']['widget'][0]['target_id'];
+  $client_element['#required'] = TRUE;
+  $description = $client_element['#description'] ?? '';
+  $client_element['#description'] = trim($description . ' ' . $add_client_text);
+  $client_element['#disabled'] = !$editable;
+
+  $options = hosting_client_site_options($node);
+  if ($options) {
+    $client_element['#options'] = $options;
+  }
+
+  $default_client = _hosting_client_site_default($node);
+  if ($default_client !== NULL && (!$options || isset($options[$default_client]))) {
+    $client_element['#default_value'] = $default_client;
+  }
 }
 
 /**
  * Implements hook_insert().
  */
 function hosting_client_insert($node) {
-  if (!empty($node->uname)) {
-    $node->uname = hosting_client_sanitize($node->uname);
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_client') {
+    return;
   }
-  else {
-    $node->uname = hosting_client_sanitize($node->title);
-  }
-  $id = db_insert('hosting_client')
+  $client_id = $node->id();
+  $uname = $node->get('uname')->value;
+  $uname = $uname ? hosting_client_sanitize($uname) : hosting_client_sanitize($node->label());
+  $node->set('uname', $uname);
+  \Drupal::database()->update('hosting_client')
     ->fields(array(
-      'vid' => $node->vid,
-      'nid' => $node->nid,
-      'uname' => $node->uname,
+      'uname' => $uname,
     ))
+    ->condition('id', $client_id)
     ->execute();
 
-  if (variable_get('hosting_client_register_user', FALSE)
-     && user_load_multiple(array(), array('mail' => $node->email)) == FALSE) {
+  $email = $node->hasField('email') ? $node->get('email')->value : NULL;
+  if ((\Drupal::config('hosting_client.settings')->get('hosting_client_register_user') ?? FALSE)
+     && $email
+     && user_load_multiple(array(), array('mail' => $email)) == FALSE) {
     $user = hosting_client_register_user($node);
-    $node->uid = $user->uid;
-    db_update('node')
+    $node->set('uid', $user->uid);
+    \Drupal::database()->update('hosting_client')
       ->fields(array(
         'uid' => $user->uid,
       ))
-      ->condition('nid', $node->nid)
-      ->execute();
-    db_update('node_revision')
-      ->fields(array(
-        'uid' => $user->uid,
-      ))
-      ->condition('vid', $node->vid)
+      ->condition('id', $client_id)
       ->execute();
   }
   if (isset($node->new_user)) {
     $user = user_load_multiple(array(), array('name' => $node->new_user));
     $user = array_shift($user);
     if ($user) {
-      $id = db_insert('hosting_client_user')
+      $id = \Drupal::database()->insert('hosting_client_user')
         ->fields(array(
-          'client' => $node->nid,
+          'client' => $client_id,
           'user' => $user->uid,
           'contact_type' => '',
         ))
@@ -466,7 +507,7 @@ function hosting_client_insert($node) {
  * @deprecated remove this function once the above setting is implemented
  */
 function _hosting_client_get_role() {
-  return db_query("SELECT rid FROM {role} WHERE name = :name", array(':name' => 'aegir client'))->fetchField();
+  return \Drupal::database()->query("SELECT rid FROM {role} WHERE name = :name", array(':name' => 'aegir client'))->fetchField();
 }
 
 /**
@@ -481,37 +522,35 @@ function _hosting_client_get_role() {
 function hosting_client_register_user($node) {
   $pass = user_password();
   $user = new stdClass();
-  $edit['name'] = $node->uname;
-  $edit['hosting_client'] = $node->nid;
-  $edit['mail'] = $node->email;
+  $edit['name'] = $node->get('uname')->value;
+  $edit['hosting_client'] = hosting_entity_id($node);
+  $edit['mail'] = $node->get('email')->value;
   $edit['pass'] = $pass;
   $edit['status'] = 1;
   $edit['roles'][_hosting_client_get_role()] = TRUE;
   $user = user_save($user, $edit);
 
-  if ($user->uid && variable_get('hosting_client_send_welcome', FALSE)) {
-    if ($node->client_name) {
-      $to = sprintf("%s <%s>", $node->client_name, $node->email);
-    }
-    else {
-      $to = $node->email;
-    }
+  if ($user->uid && (\Drupal::config('hosting_client.settings')->get('hosting_client_send_welcome') ?? FALSE)) {
+    $email = $node->get('email')->value;
+    $label = $node->label();
+    $to = $label ? sprintf("%s <%s>", $label, $email) : $email;
 
     $params = array(
       '!username' => $user->name,
-      '!site' => variable_get('site_name', 'Drupal'),
+      '!site' => \Drupal::config('system.site')->get('name') ?? 'Drupal',
       '!password' => $pass,
       '!uri' => $GLOBALS['base_url'],
       '!uri_brief' => substr($base_url, strlen('http://')),
       '!date' => format_date(REQUEST_TIME),
-      '!login_uri' => url('user', array('absolute' => TRUE)),
-      '!edit_uri' => url('user/' . $user->uid . '/edit', array('absolute' => TRUE)),
+      '!login_uri' => \Drupal\Core\Url::fromUserInput('/user', array('absolute' => TRUE))->toString(),
+      '!edit_uri' => \Drupal\Core\Url::fromUserInput('/user/' . $user->uid . '/edit', array('absolute' => TRUE))->toString(),
       '!login_url' => user_pass_reset_url($user),
     );
     // No e-mail verification is required.
     // Create new user account, and login user immediately.
     $language = user_preferred_language($user);
-    drupal_mail('hosting_client', 'hosting-client-register-welcome', $to, $language, $params);
+    $langcode = $language instanceof \Drupal\Core\Language\LanguageInterface ? $language->getId() : $language;
+    \Drupal::service('plugin.manager.mail')->mail('hosting_client', 'hosting-client-register-welcome', $to, $langcode, $params);
   }
   return $user;
 }
@@ -536,37 +575,38 @@ function hosting_client_mail($key, &$message, $params) {
  */
 function hosting_client_update($node) {
   // If this is a new node or we're adding a new revision.
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_client') {
+    return;
+  }
   if ($node->revision) {
     hosting_client_insert($node);
   }
   else {
-    if ($node->uname) {
-      $node->uname = hosting_client_sanitize($node->uname);
-    }
-    else {
-      $node->uname = hosting_client_sanitize($node->title);
-    }
-    db_update('hosting_client')
+    $client_id = $node->id();
+    $uname = $node->get('uname')->value;
+    $uname = $uname ? hosting_client_sanitize($uname) : hosting_client_sanitize($node->label());
+    $node->set('uname', $uname);
+    \Drupal::database()->update('hosting_client')
       ->fields(array(
-        'uname' => $node->uname,
+        'uname' => $uname,
       ))
-      ->condition('nid', $node->nid)
+      ->condition('id', $client_id)
       ->execute();
   }
   if ($node->users) {
     foreach ($node->users as $user) {
-      db_delete('hosting_client_user')
+      \Drupal::database()->delete('hosting_client_user')
         ->condition('user', $user)
-        ->condition('client', $node->nid)
+        ->condition('client', hosting_entity_id($node))
         ->execute();
     }
   }
   if ($node->new_user) {
     $user = user_load_multiple(array(), array('name' => $node->new_user));
     $user = array_shift($user);
-    $id = db_insert('hosting_client_user')
+    $id = \Drupal::database()->insert('hosting_client_user')
       ->fields(array(
-        'client' => $node->nid,
+        'client' => hosting_entity_id($node),
         'user' => $user->uid,
         'contact_type' => '',
       ))
@@ -575,25 +615,14 @@ function hosting_client_update($node) {
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
- *
- * @see hosting_nodeapi()
- */
-function hosting_nodeapi_client_delete_revision(&$node) {
-  db_delete('hosting_client')
-    ->condition('vid', $node->vid)
-    ->execute();
-}
-
-/**
  * Implements hook_delete().
  */
 function hosting_client_delete($node) {
-  db_delete('hosting_client')
-    ->condition('nid', $node->nid)
-    ->execute();
-  db_delete('hosting_client_user')
-    ->condition('client', $node->nid)
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_client') {
+    return;
+  }
+  \Drupal::database()->delete('hosting_client_user')
+    ->condition('client', $node->id())
     ->execute();
 }
 
@@ -601,60 +630,56 @@ function hosting_client_delete($node) {
  * Implements hook_load().
  */
 function hosting_client_load($nodes) {
-  foreach ($nodes as $nid => &$node) {
-    $additions = db_query('SELECT uname FROM {hosting_client} WHERE vid = :vid', array(':vid' => $node->vid))->fetch();
-    foreach ($additions as $property => &$value) {
-      $node->$property = $value;
-    }
-  }
+  // Legacy property hydration removed; use entity fields directly.
 }
 
 /**
  * Return a list of users for a given client.
  *
  * @param int|object $node
- *   Client node (as nid or node object).
+ *   Client entity id or object.
  *
  * @return array
  *   Array of user names indexed by uid.
  */
 function hosting_client_users($node) {
-  if (is_object($node)) {
-    $node = $node->nid;
-  }
-  elseif (!is_numeric($node)) {
+  $client_id = hosting_entity_id($node);
+  if (!$client_id) {
     return array();
   }
-  // @todo: Figure out why variable substitution doesn't work here.
-  return db_query("SELECT u.uid, u.name, h.client FROM {hosting_client_user} h INNER JOIN {users} u ON u.uid = h.user WHERE h.client = $node")->fetchAllKeyed();
+  return \Drupal::database()->query("SELECT u.uid, u.name, h.client FROM {hosting_client_user} h INNER JOIN {users} u ON u.uid = h.user WHERE h.client = :client", array(':client' => $client_id))->fetchAllKeyed();
 }
 
 /**
  * Implements hook_view().
  */
-function hosting_client_view($node, $view_mode, $langcode = NULL) {
-  $type = node_type_get_type($node);
-
-  $node->content['info']['#prefix'] = '<div id="hosting-client-info">';
-  $node->content['info']['title'] = array(
-    '#type' => 'item',
-    '#title' => $type->title_label,
-    '#markup' => filter_xss($node->title),
+function hosting_client_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  if ($entity->getEntityTypeId() !== 'hosting_client') {
+    return;
+  }
+  $build['info'] = array(
+    '#type' => 'container',
+    '#attributes' => array('id' => 'hosting-client-info'),
+    '#weight' => 0,
   );
-  $node->content['info']['uname'] = array(
+  $build['info']['title'] = array(
+    '#type' => 'item',
+    '#title' => t('Client name'),
+    '#markup' => filter_xss($entity->label()),
+  );
+  $build['info']['uname'] = array(
     '#type' => 'item',
     '#title' => t('Internal name'),
     '#weight' => 1,
-    '#markup' => filter_xss($node->uname),
+    '#markup' => filter_xss($entity->get('uname')->value),
   );
 
-  $node->content['info']['#suffix'] = '</div>';
-  if ($view_mode = 'full') {
+  if ($view_mode === 'full') {
     $rows = array();
-    $users = hosting_client_users($node);
+    $users = hosting_client_users($entity);
     foreach ($users as $uid => $uname) {
-      if (user_access('access user profiles') || ($uid == $GLOBALS['user']->uid)) {
-        $rows[] = array(l($uname, 'user/' . $uid));
+      if (\Drupal::currentUser()->hasPermission('access user profiles') || ($uid == $GLOBALS['user']->uid)) {
+        $rows[] = array(\Drupal\Core\Link::fromTextAndUrl($uname, \Drupal\Core\Url::fromUserInput('/user/' . $uid))->toString());
       }
       else {
         $rows[] = array($uname);
@@ -662,16 +687,15 @@ function hosting_client_view($node, $view_mode, $langcode = NULL) {
     }
 
     $header = array(t('Allowed users'));
-    $node->content['users_view'] = array(
+    $build['users_view'] = array(
       '#type' => 'item',
-      '#markup' => theme('table', array('header' => $header, 'rows' => $rows)),
+      '#markup' => \Drupal::service('theme.manager')->render('table', array('header' => $header, 'rows' => $rows)),
       '#class' => 'client',
       '#prefix' => '<div id="hosting-site-list">',
       '#suffix' => '</div>',
       '#weight' => 11,
     );
   }
-  return $node;
 }
 
 /**
@@ -694,96 +718,44 @@ function hosting_import_client($name) {
   $client = hosting_get_client_by_uname($name);
 
   if (!$client) {
-    $client = new stdClass();
-    $client->type = 'client';
-    $client->uid = 1;
-    $client->title = trim($name);
-    $client->status = 1;
-    node_save($client);
+    $client = \Drupal::entityTypeManager()->getStorage('hosting_client')->create(array(
+      'label' => trim($name),
+      'uname' => trim($name),
+      'uid' => 1,
+      'status' => 1,
+    ));
+    $client->save();
   }
 
   return $client;
 }
 
 /**
- * Implements hook_menu().
- */
-function hosting_client_menu() {
-  $items['node/%node/site/add'] = array(
-    'title' => 'Add site',
-    'description' => 'Add a site to the current client',
-    'page callback' => 'hosting_client_site_form',
-    'page arguments' => array('site_node_form', 1),
-    'access callback' => 'hosting_client_menu_access',
-    'access arguments' => array('create site', 1),
-    'type' => MENU_LOCAL_TASK,
-    'weight' => 5,
-  );
-
-  $items['hosting_client/autocomplete'] = array(
-    'title' => 'hosting client get client autocomplete',
-    'page callback' => 'hosting_client_autocomplete',
-    'access arguments' => array('access content'),
-    'type' => MENU_CALLBACK,
-  );
-
-  $items['admin/hosting/client'] = array(
-    'title' => 'Clients',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('hosting_client_configure'),
-    'access callback' => '_hosting_client_configure_access',
-    'type' => MENU_LOCAL_TASK,
-  );
-
-  $items['hosting/clients/list'] = array(
-    'title' => 'List',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => -10,
-  );
-
-  $items['hosting/clients/add'] = array(
-    'title' => 'Add client',
-    'type' => MENU_LOCAL_TASK,
-    'page callback' => 'drupal_goto',
-    'page arguments' => array('node/add/client'),
-    'access callback' => 'node_access',
-    'access arguments' => array('create', 'client'),
-  );
-
-  $items['node/%node/clients'] = array(
-    'title' => 'Clients',
-    'type' => MENU_LOCAL_TASK,
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('hosting_client_platform_access_form', 1),
-    'access callback' => '_hosting_client_platform_access',
-    'access arguments' => array(1),
-  );
-
-  return $items;
-}
-
-/**
  * Access callback for the client platform access tab.
  */
-function _hosting_client_platform_access($node) {
-  return $node->type == 'platform' &&
-         $node->platform_status != HOSTING_PLATFORM_DELETED &&
-         node_access('update', $node) &&
-         user_access('administer clients');
+function _hosting_client_platform_access($platform) {
+  if (!$platform instanceof \Drupal\Core\Entity\EntityInterface || $platform->getEntityTypeId() !== 'hosting_platform') {
+    return FALSE;
+  }
+  return hosting_entity_status($platform, 'platform') !== HOSTING_PLATFORM_DELETED &&
+    $platform->access('update') &&
+    \Drupal::currentUser()->hasPermission('administer clients');
 }
 
 /**
  * Page callback for the client platform access form.
  */
-function hosting_client_platform_access_form($form, $form_state, $node) {
+function hosting_client_platform_access_form($form, $form_state, $platform) {
   $form = array();
-  $clients = isset($node->clients) ? $node->clients : array();
+  $clients = hosting_platform_client_ids($platform);
   if (count($clients)) {
     foreach ($clients as $client) {
       $client_node = hosting_get_client($client);
       $form['names'][$client] = array(
         '#type' => 'markup',
-        '#value' => l($client_node->title, 'node/' . $client),
+        '#value' => $client_node instanceof \Drupal\Core\Entity\EntityInterface
+          ? \Drupal\Core\Link::fromTextAndUrl($client_node->label(), $client_node->toUrl('canonical'))->toString()
+          : (string) $client,
       );
       // Remove the label for the checkbox.
       $clients[$client] = '';
@@ -819,7 +791,7 @@ function hosting_client_platform_access_form($form, $form_state, $node) {
   $form['apply'] = array(
     '#type' => 'submit',
     '#value' => t('Apply'),
-    '#access' => user_access('administer clients'),
+    '#access' => \Drupal::currentUser()->hasPermission('administer clients'),
     '#submit' => array('hosting_client_platform_access_form_submit'),
     '#weight' => 10,
   );
@@ -836,8 +808,8 @@ function theme_hosting_client_platform_access_form($variables) {
     $row = array();
 
     $row['data'][] = $form['names'][$client]['#value'];
-    if ($client != '_all' && user_access('administer clients')) {
-      $row['data'][] = drupal_render($form['clients'][$client]);
+    if ($client != '_all' && \Drupal::currentUser()->hasPermission('administer clients')) {
+      $row['data'][] = \Drupal::service('renderer')->render($form['clients'][$client]);
     }
     else {
       // Nothing to remove if there aren't any clients...
@@ -845,25 +817,25 @@ function theme_hosting_client_platform_access_form($variables) {
     }
     $rows[] = $row;
   }
-  $output = theme('table', array('header' => $form['header']['#value'], 'rows' => $rows));
-  $output .= drupal_render_children($form);
+  $output = \Drupal::service('theme.manager')->render('table', array('header' => $form['header']['#value'], 'rows' => $rows));
+  $output .= \Drupal::service('renderer')->render($form);
   return $output;
 }
 
 /**
  * Submit handler for the client platform access form.
  */
-function hosting_client_platform_access_form_submit($form, $form_state) {
-  $clients = $form_state['values']['clients'];
-  $new_client = isset($form_state['values']['new_client']) ? $form_state['values']['new_client'] : FALSE;
-  $platform = $form_state['build_info']['args'][0];
-  $existing = isset($platform->clients) ? $platform->clients : array();
+function hosting_client_platform_access_form_submit($form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  $clients = (array) $form_state->getValue('clients');
+  $new_client = $form_state->getValue('new_client');
+  $build_info = $form_state->getBuildInfo();
+  $platform = $build_info['args'][0] ?? NULL;
 
   // Remove the selected client(s).
   foreach ($clients as $cid => $remove) {
     if ($remove) {
-      db_delete('hosting_platform_client_access')
-        ->condition('pid', $platform->nid)
+      \Drupal::database()->delete('hosting_platform_client_access')
+        ->condition('pid', hosting_entity_id($platform))
         ->condition('cid', $cid)
         ->execute();
     }
@@ -873,19 +845,19 @@ function hosting_client_platform_access_form_submit($form, $form_state) {
   if ($new_client) {
     $client = hosting_get_client($new_client);
     if ($client) {
-      db_insert('hosting_platform_client_access')
+      \Drupal::database()->insert('hosting_platform_client_access')
         ->fields(array(
-          'pid' => $platform->nid,
-          'cid' => $client->nid,
+          'pid' => hosting_entity_id($platform),
+          'cid' => hosting_entity_id($client),
         ))
         ->execute();
     }
     else {
       $add_client = '';
-      if (user_access('create client') || user_access('administer clients')) {
-        $add_client = ' ' . t('or') . '' . l(t('add a new client'), 'node/add/client');
+      if (\Drupal::currentUser()->hasPermission('create client') || \Drupal::currentUser()->hasPermission('administer clients')) {
+        $add_client = ' ' . t('or') . '' . \Drupal\Core\Link::fromTextAndUrl(t('add a new client'), \Drupal\Core\Url::fromRoute('entity.hosting_client.add_form'))->toString();
       }
-      form_set_error('new_client', t('The client name (%client) was not recognized. Please try again', array('%client' => $new_client)) . $add_client . '.');
+      $form_state->setErrorByName('new_client', t('The client name (%client) was not recognized. Please try again', array('%client' => $new_client)) . $add_client . '.');
     }
   }
 }
@@ -897,22 +869,25 @@ function hosting_client_platform_access_form_submit($form, $form_state) {
  * @param object $node
  *   The site to the the clients for.
  *
- * @return string|null
- *   The client name.
+ * @return int|null
+ *   The client ID.
  */
 function _hosting_client_site_default($node) {
   // Find the right client.
   global $user;
   $current_client_id = 0;
+  $node_client_id = NULL;
+  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface && $node->hasField('client')) {
+    $node_client_id = $node->get('client')->target_id;
+  }
 
   if ($user->uid) {
     $client_ids = hosting_get_client_from_user($user->uid);
     $clients = array();
     foreach ($client_ids as $client_id => $client_permissions) {
       $client_id = $client_id ? $client_id : HOSTING_DEFAULT_CLIENT;
-      $client = node_load($client_id);
-      $clients[$client->title] = $client->title;
-      if ((isset($node->client) && $node->client == $client_id) || !$current_client_id) {
+      $client = \Drupal::entityTypeManager()->getStorage('hosting_client')->load($client_id);
+      if (($node_client_id && $node_client_id == $client_id) || !$current_client_id) {
         $current_client_id = $client_id;
       }
     }
@@ -923,47 +898,81 @@ function _hosting_client_site_default($node) {
   }
 
   // Allow admins to override.
-  if (isset($node->client) && $node->client && user_access('administer clients')) {
-    $current_client_id = $node->client;
+  if ($node_client_id && \Drupal::currentUser()->hasPermission('administer clients')) {
+    $current_client_id = $node_client_id;
   }
 
-  $client = node_load($current_client_id);
+  $client = \Drupal::entityTypeManager()->getStorage('hosting_client')->load($current_client_id);
   if (!$client) {
-    // We give up, couldn't find a client, we're probably in a preview so
-    // just use the node client.
-    $client = new stdClass();
-    $client->title = isset($node->client) ? $node->client : NULL;
+    return NULL;
   }
 
-  return $client->title;
+  return (int) $client->id();
 }
 
 /**
- * Wrapper around the regular site_node_form that passes a dummy site with a proper client.
- */
-function hosting_client_site_form($form, $node) {
-
-  // Must explicitly load node.pages.inc in order to load the node_form.
-  module_load_include('module', 'node', 'pages.inc');
-
-  $site = new stdClass();
-  $site->type = 'site';
-  $site->client = $node->nid;
-  return drupal_get_form('site_node_form', $site);
-}
-
-/**
- * Menu access callback for the site creation tab in the client node.
+ * Build client options for site forms.
  *
- * @see hosting_client_menu()
+ * @param object $node
+ *   Site entity or legacy object.
+ *
+ * @return array
+ *   Client options keyed by client ID.
  */
-function hosting_client_menu_access($perm, $node) {
-  if ($node->type == 'client') {
-    return user_access($perm);
+function hosting_client_site_options($node) {
+  $options = array();
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_client');
+
+  if (\Drupal::currentUser()->hasPermission('administer clients') || \Drupal::currentUser()->hasPermission('administer sites')) {
+    $ids = \Drupal::entityQuery('hosting_client')
+      ->accessCheck(FALSE)
+      ->execute();
   }
   else {
+    $ids = array_keys(hosting_get_client_from_user(\Drupal::currentUser()->id()));
+  }
+
+  if ($ids) {
+    $clients = $storage->loadMultiple($ids);
+    foreach ($clients as $client_id => $client) {
+      $options[$client_id] = $client->label();
+    }
+  }
+
+  if (!isset($options[HOSTING_DEFAULT_CLIENT])) {
+    $default_client = $storage->load(HOSTING_DEFAULT_CLIENT);
+    if ($default_client) {
+      $options[HOSTING_DEFAULT_CLIENT] = $default_client->label();
+    }
+  }
+
+  return $options;
+}
+
+/**
+ * Build a site add form scoped to a client.
+ */
+function hosting_client_site_form($form, $client) {
+  if (!$client instanceof \Drupal\Core\Entity\EntityInterface || $client->getEntityTypeId() !== 'hosting_client') {
+    return array('#markup' => t('Client not found.'));
+  }
+
+  $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->create(array(
+    'client' => $client->id(),
+  ));
+
+  return \Drupal::service('entity.form_builder')->getForm($site, 'add');
+}
+
+/**
+ * Access callback for the site creation tab on a client.
+ */
+function hosting_client_menu_access($perm, $client) {
+  if (!$client instanceof \Drupal\Core\Entity\EntityInterface || $client->getEntityTypeId() !== 'hosting_client') {
     return FALSE;
   }
+
+  return $client->access('view') && \Drupal::currentUser()->hasPermission($perm);
 }
 
 /**
@@ -972,7 +981,7 @@ function hosting_client_menu_access($perm, $node) {
  * @see hosting_client_menu()
  */
 function _hosting_client_configure_access() {
-  return user_access('administer clients') && hosting_feature('client');
+  return \Drupal::currentUser()->hasPermission('administer clients') && hosting_feature('client');
 }
 
 /**
@@ -984,7 +993,7 @@ function _hosting_client_configure_access() {
  */
 function _hosting_client_mail_text($messageid, $variables = array()) {
   // Check if an admin setting overrides the default string.
-  if ($admin_setting = variable_get('hosting_client_mail_' . $messageid, FALSE)) {
+  if ($admin_setting = (\Drupal::config('hosting_client.settings')->get('hosting_client_mail.' . $messageid) ?? FALSE)) {
     return strtr($admin_setting, $variables);
   }
 
@@ -1004,56 +1013,9 @@ function _hosting_client_mail_text($messageid, $variables = array()) {
  * @see hosting_client_menu()
  */
 function hosting_client_configure($form, &$form_state) {
-  $form['hosting_client_prefix'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Client internal name prefix'),
-    '#description' => t('Client nodes have an internal name that can be mapped to a UNIX group. This is the prefix assigned to that internal name to make sure it is in a separate namespace. Note that UNIX groups are generally limited to 16 characters so this prefix should be kept short. It can also be empty, in which case no prefix will be added.'),
-    '#default_value' => variable_get('hosting_client_prefix', ''),
-    '#size' => 5,
-    '#maxlength' => 16,
-  );
-  $form['hosting_client_register_user'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Automatically create user accounts for new clients.'),
-    '#description' => t('If this setting is on, any new client nodes will automatically have a system user account generated for them, and associated with the new client node. Users going through the signup form module have a user created regardless of this setting.'),
-    '#default_value' => variable_get('hosting_client_register_user', FALSE),
-  );
-  $form['hosting_client_require_client_to_create_site'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Require users to have a client to create a site.'),
-    '#description' => t('If this setting is on, users will not be able to create sites unless they are associated with a client.'),
-    '#default_value' => variable_get('hosting_client_require_client_to_create_site', FALSE),
-  );
-  // User e-mail settings.
-  $form['email'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('User e-mail settings'),
-  );
-  $form['email']['hosting_client_send_welcome'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Send welcome mail to new clients.'),
-    '#description' => t('If this setting is on, new clients will receive a welcome email containing their login details.'),
-    '#default_value' => variable_get('hosting_client_send_welcome', FALSE),
-  );
-  $form['email']['hosting_client_mail_welcome_subject'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Subject of welcome e-mail'),
-    '#default_value' => _hosting_client_mail_text('welcome_subject'),
-    '#maxlength' => 180,
-    '#description' => t('Customize the subject of your welcome e-mail, which is sent to new members upon registering.')
-    . ' ' . t('Available variables are:') . ' !username, !site, !password, !uri, !uri_brief, !date, !login_uri, !edit_uri, !login_url.',
-  );
-  $form['email']['hosting_client_mail_welcome_body'] = array(
-    '#type' => 'textarea',
-    '#title' => t('Body of welcome e-mail'),
-    '#default_value' => _hosting_client_mail_text('welcome_body'),
-    '#rows' => 15,
-    '#description' => t('Customize the body of the welcome e-mail, which is sent to new members upon registering.')
-    . ' ' . t('Available variables are:') . ' !username, !site, !password, !uri, !uri_brief, !login_uri, !edit_uri, !login_url.',
-  );
-
-  return system_settings_form($form);
+  return \Drupal::formBuilder()->getForm(\Drupal\hosting_client\Form\HostingClientSettingsForm::class);
 }
+
 
 /**
  * Get 25 clients in a paged query.
@@ -1062,15 +1024,13 @@ function hosting_client_configure($form, &$form_state) {
  */
 function _hosting_get_clients() {
   $return = array();
-  $query = db_select('node', 'n')->extend('PagerDefault');
+  $query = \Drupal::database()->select('hosting_client', 'c')->extend('PagerDefault');
   $result = $query
-    ->fields('n', array('nid', 'title'))
-    ->condition('type', 'client')
+    ->fields('c', array('id', 'label'))
     ->limit(25)
-    ->addTag('node_access')
     ->execute();
   foreach ($result as $client) {
-    $return[$client->nid] = $client->title;
+    $return[$client->id] = $client->label;
   }
   return $return;
 }
@@ -1082,33 +1042,17 @@ function hosting_client_autocomplete($type, $keyword) {
   $matches = array();
 
   if ($type == 'client') {
-    // @todo Confirm that these are equivalent, especially the db_rewrite_sql -> addTag('node_access')
-    // $query = db_query(db_rewrite_sql("SELECT * FROM {node} n WHERE type = '%s' AND title LIKE '%s%%'"), $type, addcslashes($keyword, '\%_'));
-    $query = db_select('node', 'n')
-      ->condition('type', $type);
-    $query->addField('n', 'title');
+    $query = \Drupal::database()->select('hosting_client', 'c');
+    $query->addField('c', 'label');
     $query = $query
-      ->condition('title', '%' . $keyword . '%', 'LIKE')
-      ->addTag('node_access');
+      ->condition('label', '%' . \Drupal::database()->escapeLike($keyword) . '%', 'LIKE');
     $result = $query->execute();
     foreach ($result as $client) {
-      $matches[$client->title] = $client->title;
+      $matches[$client->label] = $client->label;
     }
   }
 
-  drupal_json_output($matches);
-  exit();
-}
-
-/**
- * Implements hook_node_delete().
- */
-function hosting_client_node_delete($node) {
-  if ($node->type == 'platform') {
-    db_delete('hosting_platform_client_access')
-      ->condition('pid', $node->nid)
-      ->execute();
-  }
+  return new \Symfony\Component\HttpFoundation\JsonResponse($matches);
 }
 
 /**
@@ -1143,27 +1087,21 @@ function _hosting_get_allowed_platforms($uid = NULL, $reset = FALSE) {
   if (!isset($platforms[$uid])) {
     $platforms[$uid] = array();
 
-    $result = db_query("SELECT n.nid, n.title
-                        FROM {node} n
-                        LEFT JOIN {hosting_platform} h
-                        ON n.nid = h.nid
+    $result = \Drupal::database()->query("SELECT h.id, h.label
+                        FROM {hosting_platform} h
                         LEFT JOIN {hosting_platform_client_access} p
-                        ON n.nid = p.pid
+                        ON h.id = p.pid
                         LEFT JOIN {hosting_client_user} c
                         ON c.client = p.cid
-                        WHERE n.type = :type
-                        AND n.status = :nstatus
-                        AND h.status > :hstatus
+                        WHERE h.status > :hstatus
                         AND (c.user = :cuser OR p.pid IS NULL)",
                         array(
-                          ':type' => 'platform',
-                          ':nstatus' => 1,
                           ':hstatus' => HOSTING_PLATFORM_LOCKED,
                           ':cuser' => $uid,
                         )
                       );
-    foreach ($result as $server) {
-      $platforms[$uid][$server->nid] = $server->title;
+    foreach ($result as $platform) {
+      $platforms[$uid][$platform->id] = $platform->label;
     }
   }
   return $platforms[$uid];
@@ -1187,7 +1125,7 @@ function _hosting_get_allowed_platforms($uid = NULL, $reset = FALSE) {
  * @see HOSTING_CLIENT_MAX_GROUP_LENGTH
  */
 function hosting_client_sanitize($title) {
-  $prefix = variable_get('hosting_client_prefix', '');
+  $prefix = \Drupal::config('hosting_client.settings')->get('hosting_client_prefix') ?? '';
 
   // Remove anything but "word characters", dots and dashes.
   $title = preg_replace("/^$prefix/", "", $title);
@@ -1199,11 +1137,24 @@ function hosting_client_sanitize($title) {
 }
 
 /**
- * Implements hook_views_api().
+ * Implements hook_views_data().
  */
-function hosting_client_views_api() {
-  return array(
-    'api' => 3,
-    'path' => drupal_get_path('module', 'hosting_client') . '/includes/views',
-  );
+function hosting_client_views_data() {
+  $data['hosting_client'] = [
+    'table' => [
+      'group' => t('Hosting Client'),
+      'title' => t('Client'),
+      'entity type' => 'hosting_client',
+    ],
+    'uname' => [
+      'title' => t('Internal name'),
+      'help' => t('The internal name for this client.'),
+      'field' => [
+        'id' => 'standard',
+        'click sortable' => TRUE,
+      ],
+    ],
+  ];
+
+  return $data;
 }

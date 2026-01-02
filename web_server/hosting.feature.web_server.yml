@@ -1,0 +1,6 @@
+web_server:
+  title: 'Web servers'
+  description: 'API to provide support for web servers.'
+  status: required
+  module: hosting_web_server
+  group: required

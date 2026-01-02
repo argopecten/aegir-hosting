@@ -1,0 +1,6 @@
+task_gc:
+  title: 'Task garbage collection'
+  description: 'Cleanup task records for deleted sites.'
+  status: disabled
+  module: hosting_task_gc
+  group: experimental

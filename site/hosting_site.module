@@ -24,74 +24,18 @@ define('HOSTING_SITE_QUEUED', 0);
  */
 define('HOSTING_SITE_ENABLED', 1);
 
-include_once 'hosting_site.nodeapi.inc';
 include_once 'hosting_site.form.inc';
 include_once 'hosting_site.backups.inc';
 
 //Conditonally include site quotas
-if (module_exists('hosting_quota')) {
+if (\Drupal::moduleHandler()->moduleExists('hosting_quota')) {
   include_once 'hosting_site.quota.inc';
 }
 
 /**
- * Implements hook_menu().
+ * Implements hook_\Drupal::service('theme.manager')->render().
  */
-function hosting_site_menu() {
-  $items = array();
-
-  $items['hosting/sites/list'] = array(
-    'title' => 'List',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => -10,
-  );
-
-  $items['hosting/sites/add'] = array(
-    'title' => 'Add site',
-    'type' => MENU_LOCAL_TASK,
-    'page callback' => 'drupal_goto',
-    'page arguments' => array('node/add/site'),
-    'access callback' => 'node_access',
-    'access arguments' => array('create', 'site'),
-  );
-
-  $items['node/%node/platform-add-site'] = array(
-    'title' => 'Add site',
-    'type' => MENU_LOCAL_TASK,
-    'page callback' => 'hosting_site_add_by_platform',
-    'page arguments' => array(1),
-    'access callback' => 'hosting_site_add_by_platform_access',
-    'access arguments' => array(1),
-  );
-
-  $items['hosting/hosting_site_form_check'] = array(
-    'page callback' => '_hosting_site_form_check',
-    'type' => MENU_CALLBACK,
-    'access arguments' => array('access content'),
-  );
-
-  // Provide autocomplete functionality.
-  $items['hosting/sites/autocomplete'] = array(
-    'title' => 'Autocomplete for sites',
-    'page callback' => 'hosting_site_autocomplete_sites',
-    'access arguments' => array('access content'),
-    'type' => MENU_CALLBACK,
-  );
-
-  $items['node/%node/goto_site'] = array(
-    'page callback' => 'hosting_site_goto',
-    'page arguments' => array(1),
-    'access callback' => 'node_access',
-    'access arguments' => array('view', 1),
-    'type' => MENU_CALLBACK,
-  );
-
-  return $items;
-}
-
-/**
- * Implements hook_theme().
- */
-function hosting_site_theme($existing, $type, $theme, $path) {
+function hosting_site_\Drupal::service('theme.manager')->render($existing, $type, $theme, $path) {
   $items = array();
 
   $items['hosting_site_profile'] = array(
@@ -115,10 +59,13 @@ function _hosting_site_form_check() {
   if (isset($_GET['platform'])) {
     $platform = $_GET['platform'];
   }
-  drupal_json_output(
-    hosting_site_available_options($_POST, $platform)
+  $values = $_POST;
+  if (isset($values['site_language']) && !isset($values['language'])) {
+    $values['language'] = $values['site_language'];
+  }
+  return new \Symfony\Component\HttpFoundation\JsonResponse(
+    hosting_site_available_options($values, $platform)
   );
-  exit();
 }
 
 /**
@@ -132,35 +79,31 @@ function _hosting_site_form_check() {
  */
 function hosting_site_autocomplete_sites($string) {
 
-  // Fetch the list of matching active sites. Don't use EntityFieldQuery here
-  // as we'd have to load the nodes afterwards to get the field data. db_query()
-  // is much faster as we can get away with only one DB query overall.
-  $query = db_select('node', 'n');
-  $query->join('hosting_site', 's', 's.nid = n.nid');
-  $results = $query->fields('n', array('nid', 'title'))
-    ->condition('n.type', 'site')
-    ->condition('n.title', '%' . db_like($string) . '%', 'LIKE')
+  // Fetch the list of matching active sites using hosting_site entities.
+  $query = \Drupal::database()->select('hosting_site', 's');
+  $results = $query->fields('s', array('id', 'label'))
+    ->condition('s.label', '%' . \Drupal::database()->escapeLike($string) . '%', 'LIKE')
     ->condition('s.status', HOSTING_SITE_DELETED, '!=')
     ->execute();
 
   // Save each result to the list.
   $matches = array();
   foreach ($results as $row) {
-    $matches[$row->title] = check_plain($row->title);
+    $matches[$row->label] = \Drupal\Component\Utility\Html::escape($row->label);
   }
 
   // Return the results as a JSON list.
-  drupal_json_output($matches);
+  return new \Symfony\Component\HttpFoundation\JsonResponse($matches);
 }
 
 /**
  * Menu wildcard loader callback.
  *
- * Loads a hosting_site node.
+ * Loads a hosting_site entity.
  * @see hosting_task_menu().
  *
  * @param arg
- *    Node's numeric nid
+ *    Site entity ID
  *
  * @return object|bool
  */
@@ -168,12 +111,7 @@ function hosting_site_wildcard_load($arg) {
   if (!is_numeric($arg)) {
     return FALSE;
   }
-  if ($node = node_load($arg)) {
-    if ($node->type == 'site') {
-      return $node;
-    }
-  }
-  return FALSE;
+  return \Drupal::entityTypeManager()->getStorage('hosting_site')->load($arg) ?: FALSE;
 }
 
 /**
@@ -181,15 +119,16 @@ function hosting_site_wildcard_load($arg) {
  * go to the site front page if the link has expired.
  */
 function _hosting_site_goto_link($node) {
-  $cache = cache_get("hosting:site:" . $node->nid . ":login_link");
-  if (user_access('create login-reset task') && $cache && (REQUEST_TIME < $cache->data['expire'])) {
+  $site_id = hosting_entity_id($node);
+  $cache = \Drupal::cache()->get('hosting:site:' . $site_id . ':login_link');
+  if (\Drupal::currentUser()->hasPermission('create login-reset task') && $cache && (REQUEST_TIME < $cache->data['expire'])) {
     $title = t("Log in to !url", array('!url' => hosting_site_canonical_url($node)));
   }
   else {
     $title = t("Go to !url", array('!url' => hosting_site_canonical_url($node)));
   }
-  $url = "node/" . $node->nid . "/goto_site";
-  return theme('hosting_site_goto_link', array('title' => $title, 'url' => $url));
+  $url = "hosting/site/" . $site_id . "/goto_site";
+  return \Drupal::service('theme.manager')->render('hosting_site_goto_link', array('title' => $title, 'url' => $url));
 }
 
 /**
@@ -198,7 +137,7 @@ function _hosting_site_goto_link($node) {
 function theme_hosting_site_goto_link($variables) {
   $options['attributes']['class'] = 'hosting-goto-site-link';
   $options['attributes']['target'] = '_blank';
-  return l($variables['title'], $variables['url'], $options);
+  return \Drupal\Core\Link::fromTextAndUrl($variables['title'], \Drupal\Core\Url::fromUserInput('/' . ltrim($variables['url'], '/'), $options))->toString();
 }
 
 /**
@@ -209,27 +148,36 @@ function theme_hosting_site_goto_link($variables) {
  * not the login page.
  */
 function hosting_site_goto($node) {
-  $cid = "hosting:site:" . $node->nid . ":login_link";
-  $cache = cache_get($cid);
-  if (user_access('create login-reset task') && is_object($cache) && (REQUEST_TIME < $cache->data['expire'])) {
+  $site_id = hosting_entity_id($node);
+  $cid = "hosting:site:" . $site_id . ":login_link";
+  $cache = \Drupal::cache()->get($cid);
+  if (\Drupal::currentUser()->hasPermission('create login-reset task') && is_object($cache) && (REQUEST_TIME < $cache->data['expire'])) {
     $theurl = $cache->data['link'];
-    cache_clear_all($cid, 'cache');
+    \Drupal::cache()->delete($cid);
   }
   else {
     $theurl = _hosting_site_url($node);
   }
 
-  drupal_goto($theurl);
-  exit();
+  $redirect_url = preg_match('/^https?:/i', $theurl)
+    ? \Drupal\Core\Url::fromUri($theurl)
+    : \Drupal\Core\Url::fromUserInput('/' . ltrim($theurl, '/'));
+  return new \Symfony\Component\HttpFoundation\RedirectResponse($redirect_url->toString());
 }
 
 /**
  * Retrieve the port the site will be available on, so we can redirect.
  */
 function hosting_site_get_port($node) {
-  $platform = node_load($node->platform);
-  $server = node_load($platform->web_server);
-  return $server->services['http']->port;
+  $platform_id = is_object($node) && method_exists($node, 'get') ? $node->get('platform')->target_id : $node->platform;
+  $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+  $server_id = $platform && $platform->get('web_server') ? $platform->get('web_server')->target_id : NULL;
+  $server = $server_id ? \Drupal::entityTypeManager()->getStorage('hosting_server')->load($server_id) : NULL;
+  if (!$server) {
+    return NULL;
+  }
+  $http_service = hosting_server_service($server, 'http');
+  return $http_service ? $http_service->port : NULL;
 }
 
 /**
@@ -241,12 +189,14 @@ function _hosting_site_url($node) {
 
   $url = hosting_site_canonical_url($node);
 
-  $platform = node_load($node->platform);
-  $server = node_load($platform->web_server);
+  $platform_id = is_object($node) && method_exists($node, 'get') ? $node->get('platform')->target_id : $node->platform;
+  $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+  $server_id = $platform && $platform->get('web_server') ? $platform->get('web_server')->target_id : NULL;
+  $server = $server_id ? \Drupal::entityTypeManager()->getStorage('hosting_server')->load($server_id) : NULL;
 
-
-  if ($server->services['http']->has_port()) {
-    $port = $server->services['http']->port;
+  $http_service = $server ? hosting_server_service($server, 'http') : NULL;
+  if ($http_service && $http_service->has_port()) {
+    $port = $http_service->port;
     if ($port == 80) {
       $port = NULL;
     }
@@ -261,8 +211,8 @@ function _hosting_site_url($node) {
   if ($hosting_ssl_required || $hosting_https_required) {
     $schema = 'https';
 
-    if ($server->services['http']->has_port()) {
-      $port = $server->services['http']->ssl_port;
+    if ($http_service && $http_service->has_port()) {
+      $port = $http_service->ssl_port;
       if ($port == 443) {
         $port = NULL;
       }
@@ -280,9 +230,25 @@ function _hosting_site_url($node) {
  * Get a site's canonical URL.
  */
 function hosting_site_canonical_url($node) {
-  # Use the redirection target, if it's available.
-  # Default to the site title, otherwise.
-  $url = isset($node->redirection) && $node->redirection ? $node->redirection : $node->title;
+  // Use the redirection target, if it's available.
+  // Default to the site label/title otherwise.
+  $url = '';
+  if (is_object($node)) {
+    if (isset($node->redirection) && $node->redirection) {
+      $url = $node->redirection;
+    }
+    elseif ($node instanceof \Drupal\Core\Entity\EntityInterface) {
+      if ($node->hasField('redirection') && !$node->get('redirection')->isEmpty()) {
+        $url = $node->get('redirection')->value;
+      }
+      else {
+        $url = $node->label();
+      }
+    }
+  }
+  if ($url === '') {
+    $url = (string) $node;
+  }
 
   return hosting_site_clean_domain($url);
 }
@@ -381,40 +347,13 @@ function hosting_site_permission() {
 }
 
 /**
- * Implements hook_node_access().
- */
-function hosting_site_node_access($node, $op, $account) {
-  if (hosting_feature('client') && $op != 'create') {
-    // We rely on hosting_client_node_grants() instead of global configuration.
-    return NODE_ACCESS_IGNORE;
-  }
-
-  $type = is_string($node) ? $node : $node->type;
-  if ($type != 'site' ) {
-    return NODE_ACCESS_IGNORE;
-  }
-
-  if ($op == 'create' && user_access('create site', $account)) {
-    return NODE_ACCESS_ALLOW;
-  }
-  if ($op == 'update' && user_access('edit site', $account)) {
-    return NODE_ACCESS_ALLOW;
-  }
-  if ($op == 'delete' && user_access('delete site', $account)) {
-    return NODE_ACCESS_ALLOW;
-  }
-  if ($op == 'view' && user_access('view site', $account)) {
-    return NODE_ACCESS_ALLOW;
-  }
-}
-
-/**
  * Callback for site backup action.
  *
  * @see: hosting_task_action_info().
  */
 function hosting_site_backup_action($node) {
-  hosting_add_task($node->nid, 'backup');
+  $site_id = hosting_entity_id($node);
+  hosting_add_task($site_id, 'backup');
 }
 
 /**
@@ -423,7 +362,8 @@ function hosting_site_backup_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_site_verify_action($node) {
-  hosting_add_task($node->nid, 'verify');
+  $site_id = hosting_entity_id($node);
+  hosting_add_task($site_id, 'verify');
 }
 
 /**
@@ -432,7 +372,8 @@ function hosting_site_verify_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_site_disable_action($node) {
-  hosting_add_task($node->nid, 'disable');
+  $site_id = hosting_entity_id($node);
+  hosting_add_task($site_id, 'disable');
 }
 
 /**
@@ -441,7 +382,8 @@ function hosting_site_disable_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_site_enable_action($node) {
-  hosting_add_task($node->nid, 'enable');
+  $site_id = hosting_entity_id($node);
+  hosting_add_task($site_id, 'enable');
 }
 /**
  * Callback for site delete action.
@@ -449,7 +391,8 @@ function hosting_site_enable_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_site_delete_action($node) {
-  hosting_add_task($node->nid, 'delete');
+  $site_id = hosting_entity_id($node);
+  hosting_add_task($site_id, 'delete');
 }
 
 /**
@@ -458,21 +401,29 @@ function hosting_site_delete_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_site_op_login_reset($node) {
-  hosting_add_task($node->nid, 'login-reset');
+  $site_id = hosting_entity_id($node);
+  hosting_add_task($site_id, 'login-reset');
 }
 
 /**
  * Access callback for Site add by platform.
  */
 function hosting_site_add_by_platform_access($node) {
-  return $node->type == 'platform' && $node->platform_status == HOSTING_PLATFORM_ENABLED && node_access('create', 'site');
+  if ($node instanceof \Drupal\hosting_platform\Entity\HostingPlatform) {
+    return ($node->status == HOSTING_PLATFORM_ENABLED) && \Drupal::entityTypeManager()->getAccessControlHandler('hosting_site')->createAccess(NULL, \Drupal::currentUser())->isAllowed();
+  }
+  return FALSE;
 }
 
 /**
  * Page callback for Site add by platform.
  */
 function hosting_site_add_by_platform($node) {
-  drupal_goto('node/add/site', array('query' => array('platform' => $node->nid)));
+  $platform_id = is_object($node) && method_exists($node, 'id') ? $node->id() : NULL;
+  $url = \Drupal\Core\Url::fromRoute('entity.hosting_site.add_form', [], [
+    'query' => ['platform' => $platform_id],
+  ]);
+  return new \Symfony\Component\HttpFoundation\RedirectResponse($url->toString());
 }
 
 /**
@@ -488,7 +439,7 @@ function hosting_site_add_by_platform($node) {
  * count.
  *
  * @param $platform
- *   (optional) A platform nid to only count sites on that specific platform.
+ *   (optional) A platform id to only count sites on that specific platform.
  * @param $statuses
  *   (optional) An array of site statuses (defined by their constants) by which
  *   to include such sites in the site count.
@@ -501,9 +452,9 @@ function hosting_site_count($platform = NULL, $statuses = NULL) {
     $statuses = array(HOSTING_SITE_ENABLED);
   }
 
-  $query = db_select('hosting_site')
+  $query = \Drupal::database()->select('hosting_site')
     ->addTag('hosting_site_count')
-    ->fields('hosting_site', array('nid'));
+    ->fields('hosting_site', array('id'));
 
   if (count($statuses)) {
     $query->condition('status', $statuses);
@@ -520,96 +471,83 @@ function hosting_site_count($platform = NULL, $statuses = NULL) {
  * Retrieve sites on a specific platform, with a specific status
  */
 function hosting_get_sites_by_status($platform, $status) {
-  $nodes = array();
-  $result = db_query("SELECT nid FROM {hosting_site} WHERE platform = :platform AND status = :status", array(':platform' => $platform, ':status' => $status));
-  while ($nid = $result->fetch()) {
-    $nodes[$nid->nid] = node_load($nid->nid);
+  $sites = [];
+  $result = \Drupal::database()->query(
+    "SELECT id FROM {hosting_site} WHERE platform = :platform AND status = :status",
+    array(':platform' => $platform, ':status' => $status)
+  );
+  foreach ($result as $row) {
+    $sites[$row->id] = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($row->id);
   }
 
-  return $nodes;
+  return $sites;
 }
 
 /**
- * Retrieves a site node based on the URL.
+ * Retrieves a site entity based on the URL.
  *
  * @param string $url
  *   The URL of the site.
  * @param boolean $loaded_object
- *   Determines if a loaded site should be returned, or just the node ID.
+ *   Determines if a loaded site should be returned, or just the entity ID.
  *   Defaults to TRUE.
+ *
  * @return
- *   If $loaded_object is TRUE, a fully loaded site node object.
- *   If $loaded_object is FALSE, the node ID of the site.
+ *   If $loaded_object is TRUE, a fully loaded site entity.
+ *   If $loaded_object is FALSE, the entity ID of the site.
  *   In either case, if the site can't be found, FALSE is returned.
- * @todo
- *   Remove the db_query() and have only one EntityFieldQuery. The two
- *   different cases will be handled by adding different conditions/tags to it.
- *   A new tag will have to be added to match the title for aliases. These tags
- *   won't be necessary in Drupal 8 as JOINs are natively supported. See
- *   https://www.drupal.org/node/1882418 for details.
  */
 function hosting_get_site_by_url($url, $loaded_object = TRUE) {
-  // If the Aliases feature is enabled, try and get the site by its alias too
+  $site_id = FALSE;
+
+  // If the Aliases feature is enabled, try and get the site by its alias too.
   if (hosting_feature('alias')) {
-    $nid = db_query("SELECT n.nid
-                       FROM {node} n
-                       JOIN {hosting_site} h
-                         ON n.nid = h.nid
-                  LEFT JOIN {hosting_site_alias} ha
-                         ON h.vid = ha.vid
-                      WHERE (n.title = :title OR ha.alias = :alias)
-                        AND n.type = :type
-                        AND NOT (h.status = :status)",
-                    array(
-                      ':title' => $url,
-                      ':alias' => $url,
-                      ':type' => 'site',
-                      ':status' => HOSTING_SITE_DELETED,
-                    ))->fetchField();
+    $site_id = \Drupal::database()->query("SELECT h.id
+                           FROM {hosting_site} h
+                      LEFT JOIN {hosting_site_alias} ha
+                             ON h.id = ha.site_id
+                          WHERE (h.label = :label OR ha.alias = :alias)
+                            AND h.status <> :status",
+                        array(
+                          ':label' => $url,
+                          ':alias' => $url,
+                          ':status' => HOSTING_SITE_DELETED,
+                        ))->fetchField();
   }
   else {
-    // Get the list of node IDs whose title matches the name.
-    $query = new EntityFieldQuery();
-    $entities = $query->entityCondition('entity_type', 'node')
-      ->propertyCondition('type', 'site')
-      ->propertyCondition('title', $url)
-      ->addTag('site_not_deleted')
+    $ids = \Drupal::entityQuery('hosting_site')
+      ->accessCheck(FALSE)
+      ->condition('label', $url)
+      ->condition('status', HOSTING_SITE_DELETED, '<>')
       ->range(0, 1)
       ->execute();
-
-    // Get the ID of the single node, if there is one.
-    if (!empty($entities['node'])) {
-      // Fetch the node ID from the list and return it.
-      $nids = array_keys($entities['node']);
-      $nid = array_shift($nids);
-    }
-    else {
-      $nid = FALSE;
+    if ($ids) {
+      $site_id = (int) reset($ids);
     }
   }
-  if ($nid) {
-    return $loaded_object ? node_load($nid) : $nid;
+
+  if ($site_id) {
+    return $loaded_object ? \Drupal::entityTypeManager()->getStorage('hosting_site')->load($site_id) : $site_id;
   }
   return FALSE;
-}
-
-/**
- * Implements hook_query_TAG_alter() for the 'site_not_deleted' tag.
- *
- * Ensures that only non-deleted sites are returned in the query.
- *
- * @see hosting_get_site_by_url()
- */
-function hosting_site_query_site_not_deleted_alter(QueryAlterableInterface $query) {
-  $query->join('hosting_site', 'site', 'site.nid = node.nid');
-  $query->condition('site.status', HOSTING_SITE_DELETED, '!=');
 }
 
 /**
  * Define the status types of a site
  */
 function _hosting_site_status($node) {
-  $status = (is_numeric($node)) ? $node : $node->site_status;
+  if (is_numeric($node)) {
+    $status = $node;
+  }
+  elseif (isset($node->site_status)) {
+    $status = $node->site_status;
+  }
+  elseif (isset($node->status)) {
+    $status = $node->status;
+  }
+  else {
+    $status = HOSTING_SITE_QUEUED;
+  }
   $labels = hosting_site_status_codes('label');
   return $labels[$status];
 }
@@ -673,17 +611,16 @@ function hosting_site_status_codes($type = NULL) {
  * @see hosting_domain_allowed()
  */
 function hosting_site_allow_domain($url, $params = array()) {
-  $query = "SELECT COUNT(n.nid) FROM {node} n
-    JOIN {hosting_site} h ON n.nid = h.nid
-    WHERE type = 'site' AND n.title = :title AND h.status <> :status";
+  $query = "SELECT COUNT(s.id) FROM {hosting_site} s
+    WHERE s.label = :title AND s.status <> :status";
   $args[':title'] = $url;
   $args[':status'] = HOSTING_SITE_DELETED;
 
-  if (isset($params['nid'])) {
-    $query .= " AND n.nid <> :nid";
-    $args[':nid'] = $params['nid'];
+  if (isset($params['id'])) {
+    $query .= " AND s.id <> :id";
+    $args[':id'] = $params['id'];
   }
-  $result = !db_query($query, $args)->fetchField();
+  $result = !\Drupal::database()->query($query, $args)->fetchField();
   return $result;
 }
 
@@ -691,8 +628,8 @@ function hosting_site_allow_domain($url, $params = array()) {
  * @todo Please document this function.
  * @see http://drupal.org/node/1354
  */
-function hosting_site_task_status($nid) {
-  return hosting_task_status_output('nid', $nid, 'install');
+function hosting_site_task_status($site_id) {
+  return hosting_task_status_output('rid', $site_id, 'install');
 }
 
 /**
@@ -700,7 +637,18 @@ function hosting_site_task_status($nid) {
  * @see _hosting_site_status()
  */
 function _hosting_site_list_class($node, $verified = NULL) {
-  $status = (is_numeric($node)) ? $node : $node->site_status;
+  if (is_numeric($node)) {
+    $status = $node;
+  }
+  elseif (isset($node->site_status)) {
+    $status = $node->site_status;
+  }
+  elseif (isset($node->status)) {
+    $status = $node->status;
+  }
+  else {
+    $status = HOSTING_SITE_QUEUED;
+  }
   $classes = hosting_site_status_codes('class');
   if (($status == HOSTING_SITE_ENABLED) && ($verified <= 1)) {
     return 'hosting-warning';
@@ -710,13 +658,310 @@ function _hosting_site_list_class($node, $verified = NULL) {
 }
 
 /**
- * Views integration.
+ * Implements hook_views_data().
  */
-function hosting_site_views_api() {
-  return array(
-    'api' => 3,
-    'path' => drupal_get_path('module', 'hosting_site') . '/includes/views',
-  );
+function hosting_site_views_data() {
+  $data = [];
+
+  $data['hosting_site']['table'] = [
+    'group' => t('Hosting Site'),
+    'title' => t('Site'),
+    'entity type' => 'hosting_site',
+  ];
+
+  $data['hosting_site']['client'] = [
+    'title' => t('Client'),
+    'help' => t('The client entity ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_client',
+      'base field' => 'id',
+      'label' => t('Client'),
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_site']['db_server'] = [
+    'title' => t('Database Server'),
+    'help' => t('Database where the site is installed.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_server',
+      'base field' => 'id',
+      'label' => t('Database server'),
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_site']['profile'] = [
+    'title' => t('Install Profile'),
+    'help' => t('Type of Drupal site.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+    'argument' => [
+      'id' => 'string',
+    ],
+  ];
+
+  $data['hosting_site']['platform'] = [
+    'title' => t('Platform'),
+    'help' => t('Platform.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_platform',
+      'base field' => 'id',
+      'label' => t('Platform'),
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_site']['verified'] = [
+    'title' => t('Verified'),
+    'help' => t('The last date verified task run on this site.'),
+    'field' => [
+      'id' => 'hosting_interval',
+    ],
+  ];
+
+  $data['hosting_site']['last_cron'] = [
+    'title' => t('Last Cron Run'),
+    'help' => t('The time the last cron run was executed on this site.'),
+    'field' => [
+      'id' => 'hosting_interval',
+    ],
+  ];
+
+  $data['hosting_site']['language'] = [
+    'title' => t('Language'),
+    'help' => t('The default language of this site.'),
+    'field' => [
+      'id' => 'hosting_site_language',
+    ],
+  ];
+
+  $data['hosting_site']['status'] = [
+    'title' => t('Status'),
+    'help' => t('The current state of this site.'),
+    'field' => [
+      'id' => 'hosting_site_status',
+    ],
+    'filter' => [
+      'id' => 'numeric',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_site']['canonical'] = [
+    'title' => t('Canonical URL'),
+    'help' => t('The canonical URL for this site.'),
+    'real field' => 'id',
+    'field' => [
+      'id' => 'hosting_site_canonical',
+    ],
+  ];
+
+  $data['hosting_site_backups']['table'] = [
+    'title' => t('Backups'),
+    'group' => t('Hosting Site Backups'),
+    'base' => [
+      'title' => t('Hosting site backups'),
+      'help' => t('Hosting site backups'),
+      'field' => 'bid',
+    ],
+    'join' => [
+      'hosting_site' => [
+        'left_field' => 'id',
+        'field' => 'site',
+      ],
+    ],
+  ];
+
+  $data['hosting_site_backups']['bid'] = [
+    'title' => t('Backup ID'),
+    'help' => t('The site backup ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+    'filter' => [
+      'id' => 'numeric',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_site_backups']['site'] = [
+    'title' => t('Site ID'),
+    'help' => t('The backups site ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_site',
+      'base field' => 'id',
+      'label' => t('Site'),
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_site_backups']['web_server'] = [
+    'title' => t('Web Server'),
+    'help' => t('The web server the backup is hosted on.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_server',
+      'base field' => 'id',
+      'label' => t('Web server'),
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_site_backups']['description'] = [
+    'title' => t('Description'),
+    'help' => t('The description of the backup.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_site_backups']['timestamp'] = [
+    'title' => t('Timestamp'),
+    'help' => t('The backup timestamp.'),
+    'field' => [
+      'id' => 'date',
+    ],
+    'sort' => [
+      'id' => 'date',
+    ],
+    'filter' => [
+      'id' => 'date',
+    ],
+    'argument' => [
+      'id' => 'date',
+    ],
+  ];
+
+  return $data;
+}
+
+/**
+ * Implements hook_views_pre_build().
+ */
+function hosting_site_views_pre_build(&$view) {
+  if ($view->name == 'hosting_site_list') {
+    if ($view->current_display !== 'page_sites') {
+      unset($view->field['bulk_form']);
+      unset($view->display_handler->handlers['field']['bulk_form']);
+    }
+    switch ($view->current_display) {
+      case 'page_sites':
+        if (!\Drupal::currentUser()->hasPermission('administer sites')) {
+          unset($view->field['bulk_form']);
+          unset($view->display_handler->handlers['field']['bulk_form']);
+        }
+        break;
+      case 'block_sites':
+        $route_types = array(
+          'hosting_platform' => 'platform',
+          'hosting_server' => 'server',
+          'hosting_client' => 'client',
+          'hosting_package' => 'package',
+        );
+        $current_type = NULL;
+        foreach ($route_types as $param => $type) {
+          $entity = \Drupal::routeMatch()->getParameter($param);
+          if ($entity instanceof \Drupal\Core\Entity\EntityInterface && $entity->getEntityTypeId() === $param) {
+            $current_type = $type;
+            break;
+          }
+        }
+        if ($current_type) {
+          foreach ($view->argument as $name => $arg) {
+            if (!in_array($current_type, $arg->options['validate_options']['types'])) {
+              unset($view->argument[$name]);
+              unset($view->display_handler->handlers['argument'][$name]);
+              unset($view->display_handler->display->display_options['arguments'][$name]);
+              unset($view->display_handler->options['arguments'][$name]);
+            }
+          }
+        }
+        break;
+    }
+  }
+
+}
+
+/**
+ * Implements hook_preprocess_views_view().
+ */
+function hosting_site_preprocess_views_view(&$vars) {
+  if ($vars['view']->name == 'hosting_site_list') {
+    if ($vars['exposed']) {
+      $vars['#attached']['library'][] = 'core/drupal.form';
+      $vars['#attached']['library'][] = 'core/drupal.collapse';
+
+      $class = array('collapsible', 'collapsed');
+      if (count($_GET) > 1) {
+        $class = array('collapsible');
+      }
+
+      $fieldset['element'] = array(
+        '#title' => t('Filters'),
+        '#attributes' => array('class' => $class),
+        '#value' => $vars['exposed'],
+        '#children' => '',
+      );
+
+      $vars['exposed'] = \Drupal::service('theme.manager')->render('fieldset', $fieldset);
+    }
+  }
+}
+
+/**
+ * Callback to collapse the bulk form fieldset.
+ *
+ * @see: hosting_site_form_alter().
+ */
+function _hosting_site_collapse_views_fieldset($form, &$form_state) {
+  $form['#attached']['library'][] = 'core/drupal.form';
+  $form['#attached']['library'][] = 'core/drupal.collapse';
+
+  if (isset($form['actions']['#attributes']['class'])) {
+    $form['actions']['#attributes']['class'][] = 'collapsible collapsed';
+  }
+  elseif (isset($form['select']['#attributes']['class'])) {
+    $form['select']['#attributes']['class'][] = 'collapsible collapsed';
+  }
+  return $form;
 }
 
 /**
@@ -733,8 +978,8 @@ function theme_hosting_site_profile($variables) {
  * Theme function for site titles.
  */
 function hosting_site_preprocess(&$variables) {
-  if (isset($variables['node'])) {
-    $variables['title'] = hosting_site_canonical_url($variables['node']);
+  if (isset($variables['hosting_site'])) {
+    $variables['title'] = hosting_site_canonical_url($variables['hosting_site']);
   }
 }
 
@@ -742,39 +987,37 @@ function hosting_site_preprocess(&$variables) {
  * Control block visibility.
  */
 function hosting_site_client_list_block_visibility() {
-  global $user;
-  $node = menu_get_object();
-  $menu_item = menu_get_item();
-  if (!empty($node) && $menu_item['number_parts'] == 2) {
-    return $node->type == 'client' && !user_access('administer clients', $user);
+  $client = \Drupal::routeMatch()->getParameter('hosting_client');
+  if ($client instanceof \Drupal\Core\Entity\EntityInterface && $client->getEntityTypeId() === 'hosting_client') {
+    return !\Drupal::currentUser()->hasPermission('administer clients');
   }
   return FALSE;
 }
+
 
 /**
  * Control block visibility.
  */
 function hosting_site_client_admin_block_visibility() {
-  global $user;
-  $node = menu_get_object();
-  $menu_item = menu_get_item();
-  if (!empty($node) && $menu_item['number_parts'] == 2) {
-    return $node->type == 'client' && user_access('administer clients', $user);
+  $client = \Drupal::routeMatch()->getParameter('hosting_client');
+  if ($client instanceof \Drupal\Core\Entity\EntityInterface && $client->getEntityTypeId() === 'hosting_client') {
+    return \Drupal::currentUser()->hasPermission('administer clients');
   }
   return FALSE;
 }
+
 
 /**
  * Control block visibility.
  */
 function hosting_site_profile_block_visibility() {
-  $node = menu_get_object();
-  $menu_item = menu_get_item();
-  if (!empty($node) && $menu_item['number_parts'] == 2) {
-    return $node->type == 'package' && $node->package_type == 'profile';
+  $package = \Drupal::routeMatch()->getParameter('hosting_package');
+  if ($package instanceof \Drupal\Core\Entity\EntityInterface && $package->getEntityTypeId() === 'hosting_package') {
+    return $package->get('package_type')->value === 'profile';
   }
   return FALSE;
 }
+
 
 /**
  * Implements hook_block_view_alter().
@@ -783,23 +1026,29 @@ function hosting_site_profile_block_visibility() {
  */
 function hosting_site_block_view_alter(&$data, $block) {
   if ($block->delta =='hosting_site_list-block_sites') {
-    if ($node = menu_get_object()) {
-      // We only want to show a list of sites on a server with a database,
-      // or on install profile package pages.
-      if (($node->type == 'server' && !array_key_exists('db', $node->services))
-       || ($node->type == 'package' && $node->package_type != 'profile')) {
-        unset($data['subject']);
-        unset($data['content']);
+    $server = \Drupal::routeMatch()->getParameter('hosting_server');
+    if ($server instanceof \Drupal\Core\Entity\EntityInterface && $server->getEntityTypeId() === 'hosting_server') {
+      if (!hosting_server_service($server, 'db')) {
+        $data = array();
+      }
+      return;
+    }
+    $package = \Drupal::routeMatch()->getParameter('hosting_package');
+    if ($package instanceof \Drupal\Core\Entity\EntityInterface && $package->getEntityTypeId() === 'hosting_package') {
+      // Only show a list of sites on install profile package pages.
+      if ($package->get('package_type')->value !== 'profile') {
+        $data = array();
       }
     }
   }
 }
 
+
 /**
  * Implements hook_action_info_alter().
  */
 function hosting_site_action_info_alter(&$actions) {
-  if (variable_get('hosting_require_disable_before_delete', TRUE)) {
+  if (\Drupal::config('hosting.settings')->get('hosting_require_disable_before_delete') ?? TRUE) {
     unset($actions['hosting_site_delete_action']);
   }
 }
@@ -809,7 +1058,7 @@ function hosting_site_action_info_alter(&$actions) {
  */
 function hosting_site_hosting_task_guarded_nodes() {
   return array(
-    hosting_get_hostmaster_site_nid()
+    hosting_get_hostmaster_site_id()
   );
 }
 
@@ -817,7 +1066,7 @@ function hosting_site_hosting_task_guarded_nodes() {
  * Allow other modules to alter the domain.
  */
 function hosting_site_get_domain($domain) {
-  drupal_alter('hosting_site_domain', $domain);
+  \Drupal::moduleHandler()->alter('hosting_site_domain', $domain);
   return $domain;
 }
 
@@ -829,6 +1078,45 @@ function hosting_site_hosting_site_domain_alter(&$domain) {
 }
 
 /**
+ * Allowed values callback for hosting_site profile field.
+ */
+function hosting_site_profile_allowed_values(\Drupal\Core\Field\FieldDefinitionInterface $field_definition, \Drupal\Core\Entity\ContentEntityInterface $entity = NULL) {
+  $profiles = hosting_get_profiles();
+  $options = array();
+  foreach ($profiles as $id => $label) {
+    $options[(string) $id] = $label;
+  }
+  $ids = \Drupal::entityQuery('hosting_package')
+    ->accessCheck(FALSE)
+    ->condition('package_type', 'profile')
+    ->execute();
+  if ($ids) {
+    $packages = \Drupal::entityTypeManager()->getStorage('hosting_package')->loadMultiple($ids);
+    foreach ($packages as $package) {
+      $short_name = $package->get('short_name')->value;
+      if ($short_name) {
+        $options[$short_name] = $package->label();
+      }
+    }
+  }
+  return $options;
+}
+
+/**
+ * Allowed values callback for hosting_site language field.
+ */
+function hosting_site_language_allowed_values(\Drupal\Core\Field\FieldDefinitionInterface $field_definition, \Drupal\Core\Entity\ContentEntityInterface $entity = NULL) {
+  $profile = $entity && $entity->hasField('profile') ? $entity->get('profile')->value : NULL;
+  $platform = $entity && $entity->hasField('platform') ? $entity->get('platform')->target_id : NULL;
+  $languages = hosting_get_profile_languages($profile, $platform);
+  $options = array();
+  foreach ($languages as $code => $label) {
+    $options[$code] = $label;
+  }
+  return $options;
+}
+
+/**
  * Ensure domains are properly formatted.
  */
 function hosting_site_clean_domain($domain) {
@@ -836,3 +1124,766 @@ function hosting_site_clean_domain($domain) {
   return strtolower(trim($domain));
 }
 
+/**
+ * Determine whether a site entity represents the hostmaster site.
+ */
+function hosting_site_is_hostmaster_entity(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return FALSE;
+  }
+
+  $hosting_name = NULL;
+  if ($entity->hasField('hosting_name')) {
+    $hosting_name = $entity->get('hosting_name')->value;
+  }
+  elseif (isset($entity->hosting_name)) {
+    $hosting_name = $entity->hosting_name;
+  }
+  if ($hosting_name === 'hostmaster') {
+    return TRUE;
+  }
+
+  $profile = NULL;
+  if ($entity->hasField('profile')) {
+    $profile = $entity->get('profile')->value;
+  }
+  elseif (isset($entity->profile)) {
+    $profile = $entity->profile;
+  }
+  return $profile === 'hostmaster';
+}
+
+/**
+ * Implements hook_entity_extra_field_info().
+ */
+function hosting_site_entity_extra_field_info() {
+  $extra = array();
+  $extra['hosting_site']['hosting_site']['display'] = array(
+    'info' => array(
+      'label' => t('Aegir Site Information'),
+      'description' => t('Detailed information about this site.'),
+      'weight' => 0,
+    ),
+    'tasks_view' => array(
+      'label' => t('Aegir Site Tasks'),
+      'description' => t('List of available tasks.'),
+      'weight' => 1,
+    ),
+  );
+  return $extra;
+}
+
+/**
+ * Implements hook_hosting_site_presave().
+ */
+function hosting_site_hosting_site_presave(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+
+  $label = $entity->label();
+  if ($label !== NULL && $label !== '') {
+    $entity->set('label', hosting_site_get_domain($label));
+  }
+
+  if ($entity->hasField('language') && $entity->get('language')->isEmpty()) {
+    $entity->set('language', 'en');
+  }
+
+  if (isset($entity->site_status)) {
+    $entity->set('status', $entity->site_status);
+  }
+  if ($entity->hasField('status') && (int) $entity->get('status')->value === HOSTING_SITE_DELETED) {
+    $entity->no_verify = TRUE;
+  }
+
+  if ($entity->hasField('cron_key') && $entity->get('cron_key')->isEmpty()) {
+    $entity->set('cron_key', '');
+  }
+  if ($entity->hasField('last_cron') && $entity->get('last_cron')->isEmpty()) {
+    $entity->set('last_cron', 0);
+  }
+  if ($entity->hasField('profile') && $entity->get('profile')->isEmpty()) {
+    $entity->set('profile', 0);
+  }
+  if ($entity->hasField('verified') && $entity->get('verified')->isEmpty()) {
+    $entity->set('verified', 0);
+  }
+
+  if (hosting_site_is_hostmaster_entity($entity)) {
+    $hostmaster_id = \Drupal::state()->get('aegir_hostmaster_site_id');
+    if (!$hostmaster_id) {
+      $hostmaster_id = hosting_context_entity_id('hostmaster');
+    }
+    if (!$hostmaster_id && \Drupal::entityTypeManager()->hasDefinition('hosting_site')) {
+      $ids = \Drupal::entityTypeManager()->getStorage('hosting_site')
+        ->getQuery()
+        ->accessCheck(FALSE)
+        ->condition('hosting_name', 'hostmaster')
+        ->range(0, 1)
+        ->execute();
+      if ($ids) {
+        $hostmaster_id = (int) reset($ids);
+      }
+    }
+    if (!empty($hostmaster_id) && (int) $hostmaster_id !== (int) $entity->id()) {
+      throw new \Drupal\Core\Entity\EntityStorageException(t('A hostmaster site already exists (site ID @id).', array('@id' => $hostmaster_id)));
+    }
+  }
+
+  if ($entity->hasField('client')) {
+    $client_id = $entity->get('client')->target_id;
+    if (!$client_id && isset($entity->client)) {
+      $legacy_client = $entity->client;
+      if ($legacy_client instanceof \Drupal\Core\Entity\EntityInterface) {
+        $client_id = $legacy_client->id();
+      }
+      elseif (is_numeric($legacy_client)) {
+        $client_id = (int) $legacy_client;
+      }
+      elseif (is_string($legacy_client)) {
+        $client_entity = hosting_get_client($legacy_client);
+        if ($client_entity instanceof \Drupal\Core\Entity\EntityInterface) {
+          $client_id = $client_entity->id();
+        }
+      }
+    }
+    if ($client_id) {
+      $entity->set('client', $client_id);
+    }
+  }
+
+  $platform_id = $entity->hasField('platform') ? $entity->get('platform')->target_id : NULL;
+  if (!$platform_id && isset($entity->platform)) {
+    $platform_id = hosting_entity_id($entity->platform);
+  }
+
+  if (!$platform_id && isset($entity->platform_node) && is_object($entity->platform_node) && !empty($entity->platform_node->publish_path)) {
+    $query = \Drupal::entityQuery('hosting_platform')
+      ->accessCheck(FALSE)
+      ->condition('publish_path', $entity->platform_node->publish_path)
+      ->condition('status', HOSTING_PLATFORM_ENABLED)
+      ->range(0, 1);
+    $existing_ids = $query->execute();
+    if ($existing_ids) {
+      $platform_id = (int) reset($existing_ids);
+      $entity->set('platform', $platform_id);
+    }
+    else {
+      if (!isset($entity->platform_node->platform_status) && $entity->hasField('status')) {
+        $entity->platform_node->platform_status = (int) $entity->get('status')->value;
+      }
+
+      if (!isset($entity->platform_node->web_server)) {
+        $hostmaster = hosting_context_load('hostmaster');
+        $hostmaster_platform_id = NULL;
+        if ($hostmaster instanceof \Drupal\Core\Entity\ContentEntityInterface && $hostmaster->hasField('platform')) {
+          $hostmaster_platform_id = $hostmaster->get('platform')->target_id;
+        }
+        elseif (is_object($hostmaster) && isset($hostmaster->platform)) {
+          $hostmaster_platform_id = $hostmaster->platform;
+        }
+        $hostmaster_platform = $hostmaster_platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($hostmaster_platform_id) : NULL;
+        if ($hostmaster_platform instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+          $entity->platform_node->web_server = $hostmaster_platform->get('web_server')->target_id;
+        }
+        elseif (is_object($hostmaster_platform) && isset($hostmaster_platform->web_server)) {
+          $entity->platform_node->web_server = $hostmaster_platform->web_server;
+        }
+      }
+
+      if (empty($entity->platform_node->label)) {
+        $entity->platform_node->label = 'platform_' . preg_replace("/[!\\W]/", "", $entity->label());
+      }
+
+      if (empty($entity->platform_node->uid) && $entity->hasField('uid')) {
+        $entity->platform_node->uid = $entity->get('uid')->target_id;
+      }
+
+      $platform_values = array(
+        'label' => $entity->platform_node->label,
+        'publish_path' => $entity->platform_node->publish_path,
+        'status' => isset($entity->platform_node->platform_status) ? $entity->platform_node->platform_status : HOSTING_PLATFORM_QUEUED,
+        'verified' => isset($entity->platform_node->verified) ? $entity->platform_node->verified : 0,
+        'web_server' => isset($entity->platform_node->web_server) ? $entity->platform_node->web_server : NULL,
+      );
+      $platform_entity = \Drupal::entityTypeManager()->getStorage('hosting_platform')->create($platform_values);
+      $platform_entity->save();
+      $entity->platform_node = $platform_entity;
+      $entity->set('platform', $platform_entity->id());
+    }
+
+    if (!$entity->get('db_server')->target_id) {
+      $hostmaster = hosting_context_load('hostmaster');
+      if ($hostmaster instanceof \Drupal\Core\Entity\ContentEntityInterface && $hostmaster->hasField('db_server')) {
+        $entity->set('db_server', $hostmaster->get('db_server')->target_id);
+      }
+      elseif (is_object($hostmaster) && isset($hostmaster->db_server)) {
+        $entity->set('db_server', $hostmaster->db_server);
+      }
+    }
+  }
+
+  if (!$entity->get('platform')->target_id && (empty($entity->platform_node) || empty($entity->platform_node->publish_path))) {
+    throw new Exception('Site nodes require either platform or platform_node->publish_path property');
+  }
+}
+
+/**
+ * Implements hook_hosting_site_insert().
+ */
+function hosting_site_hosting_site_insert(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  hosting_context_register($entity->id(), isset($entity->hosting_name) ? $entity->hosting_name : $entity->label());
+  if (hosting_site_is_hostmaster_entity($entity)) {
+    $state = \Drupal::state();
+    if (!$state->get('aegir_hostmaster_site_id')) {
+      $state->set('aegir_hostmaster_site_id', (int) $entity->id());
+    }
+  }
+  if (isset($entity->import)) {
+    hosting_add_task($entity->id(), 'import');
+  }
+  else {
+    hosting_add_task($entity->id(), 'install');
+  }
+}
+
+/**
+ * Implements hook_hosting_site_update().
+ */
+function hosting_site_hosting_site_update(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+
+  if (!(isset($entity->no_verify) && $entity->no_verify)) {
+    hosting_add_task($entity->id(), 'verify');
+  }
+
+  if (isset($entity->platform_node)) {
+    $platform_entity = NULL;
+    if ($entity->platform_node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      $platform_entity = $entity->platform_node;
+    }
+    elseif (is_object($entity->platform_node) && hosting_entity_id($entity->platform_node)) {
+      $platform_entity = \Drupal::entityTypeManager()->getStorage('hosting_platform')->load(hosting_entity_id($entity->platform_node));
+    }
+    if ($platform_entity) {
+      $platform_entity->save();
+    }
+  }
+
+  if (hosting_site_is_hostmaster_entity($entity)) {
+    $state = \Drupal::state();
+    if (!$state->get('aegir_hostmaster_site_id')) {
+      $state->set('aegir_hostmaster_site_id', (int) $entity->id());
+    }
+  }
+}
+
+/**
+ * Implements hook_hosting_site_delete().
+ */
+function hosting_site_hosting_site_delete(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  \Drupal::database()->delete('hosting_package_instance')
+    ->condition('rid', $entity->id())
+    ->execute();
+  hosting_context_delete($entity->id());
+  hosting_task_delete_related_tasks($entity->id());
+  $state = \Drupal::state();
+  if ((int) $state->get('aegir_hostmaster_site_id') === (int) $entity->id()) {
+    $state->delete('aegir_hostmaster_site_id');
+  }
+}
+
+/**
+ * Implements hook_hosting_site_load().
+ */
+function hosting_site_hosting_site_load(array $entities) {
+  foreach ($entities as $entity) {
+    if (!$entity instanceof \Drupal\Core\Entity\EntityInterface || $entity->getEntityTypeId() !== 'hosting_site') {
+      continue;
+    }
+
+    if ($entity->hasField('status')) {
+      $entity->site_status = (int) $entity->get('status')->value;
+    }
+    if ($entity->hasField('client')) {
+      $entity->client = $entity->get('client')->target_id;
+    }
+    if ($entity->hasField('db_server')) {
+      $entity->db_server = $entity->get('db_server')->target_id;
+    }
+    if ($entity->hasField('db_name')) {
+      $entity->db_name = $entity->get('db_name')->value;
+    }
+    if ($entity->hasField('platform')) {
+      $entity->platform = $entity->get('platform')->target_id;
+    }
+    if ($entity->hasField('profile')) {
+      $entity->profile = $entity->get('profile')->value;
+    }
+    if ($entity->hasField('last_cron')) {
+      $entity->last_cron = (int) $entity->get('last_cron')->value;
+    }
+    if ($entity->hasField('cron_key')) {
+      $entity->cron_key = $entity->get('cron_key')->value;
+    }
+    if ($entity->hasField('verified')) {
+      $entity->verified = (int) $entity->get('verified')->value;
+    }
+
+    $platform_entity = $entity->platform ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($entity->platform) : NULL;
+    if ($platform_entity instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      $entity->platform_status = $platform_entity->hasField('status') ? (int) $platform_entity->get('status')->value : NULL;
+      $entity->platform_verified = $platform_entity->hasField('verified') ? (int) $platform_entity->get('verified')->value : NULL;
+      $entity->publish_path = $platform_entity->hasField('publish_path') ? $platform_entity->get('publish_path')->value : NULL;
+      $entity->web_server = $platform_entity->hasField('web_server') ? $platform_entity->get('web_server')->target_id : NULL;
+    }
+
+    $entity->servers = array();
+    if (isset($entity->web_server)) {
+      $entity->servers['web'] = \Drupal::entityTypeManager()->getStorage('hosting_server')->load($entity->web_server);
+    }
+    if (isset($entity->db_server)) {
+      $entity->servers['db'] = \Drupal::entityTypeManager()->getStorage('hosting_server')->load($entity->db_server);
+    }
+  }
+}
+
+/**
+ * Implements hook_hosting_site_view().
+ */
+function hosting_site_hosting_site_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+
+  hosting_set_breadcrumb($entity);
+  $build['#title'] = hosting_site_canonical_url($entity);
+
+  $build['info'] = array(
+    '#type' => 'container',
+    '#attributes' => array(
+      'id' => 'hosting-site-info',
+      'class' => array('hosting-info-list'),
+    ),
+    '#weight' => 0,
+  );
+
+  if (hosting_entity_status($entity, 'site') == HOSTING_SITE_ENABLED) {
+    $build['info']['link'] = array(
+      '#markup' => _hosting_site_goto_link($entity),
+      '#weight' => -10,
+    );
+  }
+
+  $client_id = $entity->hasField('client') ? $entity->get('client')->target_id : NULL;
+  if ($client_id) {
+    $build['info']['client'] = array(
+      '#type' => 'item',
+      '#title' => t('Client'),
+      '#markup' => _hosting_node_link($client_id),
+      '#weight' => 5,
+    );
+  }
+
+  $build['info']['verified'] = array(
+    '#type' => 'item',
+    '#title' => t('Verified'),
+    '#markup' => hosting_format_interval($entity->hasField('verified') ? (int) $entity->get('verified')->value : 0),
+  );
+
+  $platform_id = $entity->hasField('platform') ? $entity->get('platform')->target_id : NULL;
+  if ($platform_id) {
+    $build['info']['platform'] = array(
+      '#type' => 'item',
+      '#title' => t('Platform'),
+      '#markup' => _hosting_node_link($platform_id),
+    );
+  }
+
+  $profile = $entity->hasField('profile') ? $entity->get('profile')->value : NULL;
+  if ($profile) {
+    $profile_markup = is_numeric($profile) ? _hosting_node_link((int) $profile) : \Drupal\Component\Utility\Html::escape($profile);
+    $build['info']['profile'] = array(
+      '#type' => 'item',
+      '#title' => t('Install profile'),
+      '#markup' => $profile_markup,
+    );
+  }
+
+  $site_language = $entity->hasField('language') ? $entity->get('language')->value : NULL;
+  if ($site_language) {
+    $build['info']['site_language'] = array(
+      '#type' => 'item',
+      '#title' => t('Language'),
+      '#markup' => _hosting_language_name($site_language),
+    );
+  }
+
+  $build['info']['status'] = array(
+    '#type' => 'item',
+    '#title' => t('Status'),
+    '#markup' => _hosting_site_status($entity),
+  );
+
+  $db_server_id = $entity->hasField('db_server') ? $entity->get('db_server')->target_id : NULL;
+  if ($db_server_id) {
+    $build['info']['db_server'] = array(
+      '#type' => 'item',
+      '#title' => t('Database server'),
+      '#markup' => _hosting_node_link($db_server_id),
+    );
+  }
+
+  $db_name = $entity->hasField('db_name') ? $entity->get('db_name')->value : NULL;
+  if ($db_name) {
+    $build['info']['db_name'] = array(
+      '#type' => 'item',
+      '#title' => t('Database name'),
+      '#markup' => \Drupal\Component\Utility\Html::escape($db_name),
+    );
+  }
+
+  $tasks_view = hosting_task_table($entity);
+  $tasks_view['#prefix'] = '<div id="hosting-task-list">';
+  $tasks_view['#suffix'] = '</div>';
+  $tasks_view['#weight'] = 10;
+  $build['tasks_view'] = $tasks_view;
+  $build['#attached']['library'][] = 'hosting_task/task';
+}
+
+/**
+ * Implements hook_hosting_TASK_OBJECT_context_options().
+ */
+function hosting_hosting_site_context_options(&$task) {
+  $db_server_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('db_server') ? $task->ref->get('db_server')->target_id : NULL;
+  $platform_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('platform') ? $task->ref->get('platform')->target_id : NULL;
+  $task->context_options['db_server'] = $db_server_id ? hosting_context_name($db_server_id) : NULL;
+  $task->context_options['platform'] = $platform_id ? hosting_context_name($platform_id) : NULL;
+
+  $task->context_options['uri'] = hosting_site_get_domain($task->ref->label());
+  $task->context_options['language'] = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('language') ? $task->ref->get('language')->value : NULL;
+
+  $profile_value = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('profile') ? $task->ref->get('profile')->value : NULL;
+  $profile = is_numeric($profile_value) ? \Drupal::entityTypeManager()->getStorage('hosting_package')->load($profile_value) : NULL;
+  $task->context_options['profile'] = $profile ? $profile->get('short_name')->value : $profile_value;
+
+  $client_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('client') ? $task->ref->get('client')->target_id : NULL;
+  $client = $client_id ? \Drupal::entityTypeManager()->getStorage('hosting_client')->load($client_id) : NULL;
+  $user_id = $task->get('uid')->target_id ?? NULL;
+  $user = $user_id ? \Drupal::entityTypeManager()->getStorage('user')->load($user_id) : NULL;
+  if ($task->get('task_type')->value != 'import' && $task->get('task_type')->value != 'delete' && $task->get('task_type')->value != 'verify') {
+    $task->options['client_email'] = $user ? $user->getEmail() : NULL;
+  }
+  $task->context_options['client_name'] = $client ? $client->get('uname')->value : NULL;
+
+  // Set "install_method" property, only if there is one present on the site node.
+  // "profile" is used by default, we don't have to set it here.
+  if (isset($task->ref->install_method) && !empty($task->ref->install_method)) {
+    $task->context_options['install_method'] = $task->ref->install_method;
+  }
+}
+
+/**
+ * Implements hook_drush_context_import().
+ */
+function hosting_site_drush_context_import($context, &$node) {
+  if ($context->type == 'site') {
+    $label = hosting_site_get_domain($context->uri);
+    if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      if (!$node->label()) {
+        $node->set('label', $label);
+      }
+      $node->set('language', $context->language);
+      $node->set('cron_key', $context->cron_key);
+      $node->set('db_server', hosting_context_entity_id($context->db_server->name));
+      $node->set('platform', hosting_context_entity_id($context->platform->name));
+    }
+    else {
+      if (!isset($node->label)) {
+        $node->label = $label;
+      }
+      $node->language = $context->language;
+      $node->cron_key = $context->cron_key;
+      $node->db_server = hosting_context_entity_id($context->db_server->name);
+      $node->platform = hosting_context_entity_id($context->platform->name);
+    }
+
+    // TODO: abstract this to remove duplication with import post hooks.
+    $platform_id = $node instanceof \Drupal\Core\Entity\ContentEntityInterface ? $node->get('platform')->target_id : $node->platform;
+    $profile = hosting_package_instance_load(array(
+      'i.rid' => $platform_id,
+      'p.short_name' => $context->profile,
+    ));
+
+    // Log an error if there is still no profile.
+    if (!$profile) {
+      drush_set_error("HOSTING_SITE_IMPORT_ERROR", dt("Could not find the Profile !profile for Platfrom ID !platform", array('!profile' => $context->profile, '!platform' => $node->platform)));
+    }
+    $profile_name = $profile ? $profile->short_name : NULL;
+    if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      $node->set('profile', $profile_name);
+    }
+    else {
+      $node->profile = $profile->package_id;
+    }
+
+    $client = \Drupal::entityTypeManager()->getStorage('hosting_client')->load(HOSTING_DEFAULT_CLIENT);
+    if ($context->client_name) {
+      $client = hosting_import_client($context->client_name);
+    }
+    $client_id = $client instanceof \Drupal\Core\Entity\ContentEntityInterface ? $client->id() : hosting_entity_id($client);
+    if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      $node->set('client', $client_id);
+    }
+    else {
+      $node->client = $client_id;
+    }
+  }
+}
+
+/**
+ * Implements hook_post_hosting_install_task().
+ */
+function hosting_site_post_hosting_install_task($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    $context = $data['context'];
+    $packages = $context['packages'];
+    hosting_package_sync($packages);
+    hosting_package_instance_sync($task->ref->id(), hosting_entity_task_scope($task->ref), $packages);
+    hosting_site_set_status($task->ref, HOSTING_SITE_ENABLED);
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    hosting_site_set_property($task->ref, 'verified', REQUEST_TIME);
+    hosting_site_set_property($task->ref, 'db_name', $data['self']['db_name']);
+    if ($context['cron_key']) {
+      hosting_site_set_property($task->ref, 'cron_key', $context['cron_key']);
+    }
+    $task->ref->save();
+
+    if ($context['login_link']) {
+      drush_log($context['login_link']);
+      // we need to store the timestamp too because expire only means it can be deleted
+      // after an amount of time, not will be deleted.
+      $cache = array(
+        'expire' => strtotime("+24 hours"),
+        'link' => $context['login_link'],
+      );
+      \Drupal::cache()->set('hosting:site:' . $task->ref->id() . ':login_link', $cache, $cache['expire']);
+    }
+  }
+}
+
+/**
+ * Implements hook_hosting_install_task_rollback().
+ */
+function hosting_site_hosting_install_task_rollback($task, $data) {
+  // @TODO : we need to check the returned list of errors, not the code.
+  if (drush_cmp_error('PROVISION_DRUPAL_SITE_INSTALLED')) {
+    // Site has already been installed. Try to import instead.
+    drush_log(dt("This site appears to be installed already. Generating an import task."));
+    hosting_add_task($task->get('rid')->value, 'import');
+  }
+  else {
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    hosting_site_set_status($task->ref, HOSTING_SITE_DISABLED);
+    $task->ref->save();
+  }
+}
+
+/**
+ * Implements hook_hosting_post_disable_task().
+ */
+function hosting_site_post_hosting_disable_task($task, $data) {
+  if (!empty($data['context']['backup_file']) && hosting_entity_task_scope($task->ref) == 'site') {
+    $platform_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('platform') ? $task->ref->get('platform')->target_id : NULL;
+    $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+    $web_server_id = $platform instanceof \Drupal\Core\Entity\ContentEntityInterface && $platform->hasField('web_server') ? $platform->get('web_server')->target_id : NULL;
+    hosting_site_add_backup($task->ref->id(), $web_server_id, $data['context']['backup_file'], t('Generated before being disabled'), $data['context']['backup_file_size']);
+  }
+  hosting_site_set_status($task->ref, HOSTING_SITE_DISABLED);
+  hosting_site_set_property($task->ref, 'no_verify', TRUE);
+  $task->ref->save();
+
+  // Record the backup created during disable.
+  $task->task_args['description'] = t('Pre-disable backup');
+  hosting_site_post_hosting_backup_task($task, $data);
+}
+
+/**
+ * Implements hook_hosting_post_restore_task().
+ */
+function hosting_site_post_hosting_restore_task($task, $data) {
+  if (!empty($data['context']['backup_file']) && hosting_entity_task_scope($task->ref) == 'site') {
+    $platform_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('platform') ? $task->ref->get('platform')->target_id : NULL;
+    $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+    $web_server_id = $platform instanceof \Drupal\Core\Entity\ContentEntityInterface && $platform->hasField('web_server') ? $platform->get('web_server')->target_id : NULL;
+    hosting_site_add_backup($task->ref->id(), $web_server_id, $data['context']['backup_file'], t('Generated before being restored to a previous version'), $data['context']['backup_file_size']);
+  }
+}
+
+/**
+ * Implements hook_hosting_post_enable_task().
+ */
+function hosting_site_post_hosting_enable_task($task, $data) {
+  hosting_site_set_status($task->ref, HOSTING_SITE_ENABLED);
+  hosting_site_set_property($task->ref, 'no_verify', TRUE);
+  $task->ref->save();
+}
+
+/**
+ * Implements hook_hosting_post_delete_task().
+ */
+function hosting_site_post_hosting_delete_task($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    hosting_site_set_status($task->ref, HOSTING_SITE_DELETED);
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    hosting_context_delete($task->ref->id());
+    $task->ref->save();
+
+    // Record the backup created during delete.
+    $task->task_args['description'] = t('Pre-delete backup');
+    hosting_site_post_hosting_backup_task($task, $data);
+
+    // Clean up package instances
+    hosting_package_instance_sync($task->ref->id(), 'site');
+  }
+}
+
+/**
+ * Implements hook_hosting_post_backup_task().
+ *
+ * Adds the data file that was saved to the site backup history.
+ * This is needed to be able to restore.
+ */
+function hosting_site_post_hosting_backup_task($task, $data) {
+  if (!empty($data['context']['backup_file']) && hosting_entity_task_scope($task->ref) == 'site') {
+    $platform_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('platform') ? $task->ref->get('platform')->target_id : NULL;
+    $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+
+    $desc = $task->task_args['description'];
+    $desc = ($desc) ? $desc : t('Generated on request');
+    $web_server_id = $platform instanceof \Drupal\Core\Entity\ContentEntityInterface && $platform->hasField('web_server') ? $platform->get('web_server')->target_id : NULL;
+    hosting_site_add_backup($task->ref->id(), $web_server_id, $data['context']['backup_file'], $desc, $data['context']['backup_file_size']);
+  }
+}
+
+/**
+ * Implements hook_post_hosting_import_task().
+ */
+function hosting_site_post_hosting_import_task($task, $data) {
+  $site_nid = hosting_drush_import($task->ref->hosting_name);
+
+  // Update the site node with the database name.
+  $node = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($site_nid);
+  hosting_site_set_property($node, 'db_name', $data['self']['db_name']);
+  $node->save();
+
+  $packages = $data['context']['packages'];
+  hosting_package_sync($packages);
+  hosting_package_instance_sync($task->ref->id(), hosting_entity_task_scope($task->ref), $packages);
+}
+
+/**
+ * Implements hook_post_hosting_verify_task().
+ */
+function hosting_site_post_hosting_verify_task($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    hosting_site_set_property($task->ref, 'verified', REQUEST_TIME);
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    hosting_site_set_property($task->ref, 'db_name', $data['self']['db_name']);
+    if ($data['context']['cron_key']) {
+      hosting_site_set_property($task->ref, 'cron_key', $data['context']['cron_key']);
+    }
+    $task->ref->save();
+
+    $context = $data['context'];
+    $packages = $context['packages'];
+    hosting_package_sync($packages);
+    hosting_package_instance_sync($task->ref->id(), hosting_entity_task_scope($task->ref), $packages);
+  }
+}
+
+/**
+ * Implements hook_hosting_verify_task_rollback().
+ */
+function hosting_site_hosting_verify_task_rollback($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    hosting_site_set_property($task->ref, 'verified', 0);
+    $task->ref->save();
+  }
+}
+
+/**
+ * Implements hook_hosting_import_task_rollback().
+ */
+function hosting_site_hosting_import_task_rollback($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    hosting_site_set_property($task->ref, 'verified', 0);
+    hosting_site_set_status($task->ref, HOSTING_SITE_DISABLED);
+    $task->ref->save();
+  }
+}
+
+/**
+ * Implements hook_post_hosting_login_reset_task().
+ */
+function hosting_site_post_hosting_login_reset_task($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    hosting_site_set_property($task->ref, 'no_verify', TRUE);
+    $task->ref->save();
+
+    $context = $data['context'];
+    if ($context['login_link']) {
+      // we need to store the timestamp too because expire only means it can be deleted
+      // after an amount of time, not will be deleted.
+      $cache = array(
+        'expire' => strtotime("+24 hours"),
+        'link' => $context['login_link'],
+      );
+      \Drupal::cache()->set('hosting:site:' . $task->ref->id() . ':login_link', $cache, $cache['expire']);
+    }
+  }
+}
+
+/**
+ * Implements hook_post_hosting_backup_delete_task().
+ */
+function hosting_site_post_hosting_backup_delete_task($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    foreach ($task->task_args as $bid => $filename) {
+      if ($filename !== '0') {
+        hosting_site_delete_backup($bid);
+      }
+    }
+  }
+}
+
+/**
+ * Set a property or field value on a hosting site entity.
+ */
+function hosting_site_set_property($site, $field, $value) {
+  if ($site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField($field)) {
+    $site->set($field, $value);
+  }
+  else {
+    $site->{$field} = $value;
+  }
+}
+
+/**
+ * Set the site status on a hosting site entity.
+ */
+function hosting_site_set_status($site, $status) {
+  hosting_site_set_property($site, 'status', $status);
+  $site->site_status = $status;
+}

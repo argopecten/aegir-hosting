@@ -1,0 +1,7 @@
+name: 'Hosting Cron'
+type: module
+description: 'Allow the hosting system to cron all the installed sites on a schedule.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_site'

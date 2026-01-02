@@ -1,0 +1,20 @@
+uuid: 74cfdfa6-215e-415d-9f7f-8f764496dc92
+langcode: en
+status: true
+dependencies:
+  module:
+    - user
+  theme:
+    - eldir
+id: user_login
+theme: eldir
+region: sidebar_first
+weight: 0
+provider: user
+plugin: user_login_block
+settings:
+  id: user_login_block
+  label: 'User login'
+  label_display: visible
+  provider: user
+visibility: {  }

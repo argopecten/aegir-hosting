@@ -1,0 +1,7 @@
+name: 'Hosting task garbage collection'
+type: module
+description: 'Removes old tasks and task logs.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_site'

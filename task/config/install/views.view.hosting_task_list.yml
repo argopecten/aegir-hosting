@@ -1,0 +1,157 @@
+uuid: 4987379a-fb3c-4253-b5c5-7a9901e56225
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_task
+id: hosting_task_list
+label: 'Hosting Task List'
+module: views
+description: 'Display a list of tasks in Aegir.'
+tag: hosting_task
+base_table: hosting_task
+base_field: id
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      title: 'Task queue'
+      access:
+        type: perm
+        options:
+          perm: 'access task logs'
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: some
+        options:
+          items_per_page: 5
+          offset: 0
+      style:
+        type: table
+        options:
+          row_class: '[task_status]'
+          default: '-1'
+          columns:
+            task_status: task_status
+            label: label
+            task_type: task_type
+            id: id
+            executed: executed
+      row:
+        type: fields
+      fields:
+        task_status:
+          id: task_status
+          table: hosting_task
+          field: task_status
+          label: ''
+          exclude: true
+          plugin_id: hosting_task_status
+          status_mode: class
+        label:
+          id: label
+          table: hosting_task
+          field: label
+          label: 'Title'
+          plugin_id: field
+          entity_type: hosting_task
+          entity_field: label
+          settings:
+            link_to_entity: true
+        task_type:
+          id: task_type
+          table: hosting_task
+          field: task_type
+          label: 'Task'
+          plugin_id: standard
+        id:
+          id: id
+          table: hosting_task
+          field: id
+          label: 'Actions'
+          plugin_id: field
+          entity_type: hosting_task
+          entity_field: id
+          alter:
+            alter_text: true
+            text: 'View'
+            make_link: true
+            path: 'hosting/task/[id]'
+            link_class: 'hosting-button-enabled hosting-button-log hosting-button-dialog'
+          element_class: 'hosting-actions'
+        executed:
+          id: executed
+          table: hosting_task
+          field: executed
+          label: ''
+          exclude: true
+          plugin_id: date
+          date_format: long
+      sorts:
+        executed:
+          id: executed
+          table: hosting_task
+          field: executed
+          order: DESC
+          plugin_id: date
+  block:
+    display_plugin: block
+    id: block
+    display_title: Block
+    position: 1
+    display_options:
+      defaults:
+        title: false
+      title: 'Task queue'
+  page_global:
+    display_plugin: page
+    id: page_global
+    display_title: 'Page: Global'
+    position: 2
+    display_options:
+      path: hosting/tasks
+      pager:
+        type: full
+        options:
+          items_per_page: 25
+          offset: 0
+      menu:
+        type: normal
+        title: Tasks
+        description: 'A list of all queued and run tasks.'
+        menu_name: main
+        weight: 3
+  page_contextual:
+    display_plugin: page
+    id: page_contextual
+    display_title: 'Page: Contextual'
+    position: 3
+    display_options:
+      path: 'hosting/%/tasks'
+      pager:
+        type: full
+        options:
+          items_per_page: 25
+          offset: 0
+      arguments:
+        rid:
+          id: rid
+          table: hosting_task
+          field: rid
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }
+      menu:
+        type: tab
+        title: Tasks
+        description: 'A list of all tasks run on this item.'
+        menu_name: main
+        weight: 3

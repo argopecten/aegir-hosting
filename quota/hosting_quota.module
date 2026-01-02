@@ -33,42 +33,6 @@ function hosting_quota_permission() {
 }
 
 /**
- * Implements hook_menu().
- */
-function hosting_quota_menu() {
-  $items = array();
-
-  $items['admin/hosting/quotas'] = array(
-    'title' => 'Quotas',
-    'description' => 'Aegir client quotas',
-    'page callback' => 'hosting_quota_admin_client_list',
-    'access arguments' => array('view all quotas'),
-    'type' => MENU_LOCAL_TASK,
-    'file' => 'hosting_quota.admin.inc',
-  );
-
-  $items['admin/hosting/quotas/list'] = array(
-    'title' => 'List Client Quotas',
-    'description' => 'Listing of all client quotas',
-    'access arguments' => array('view all quotas'),
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-    'file' => 'hosting_quota.admin.inc',
-  );
-
-  $items['admin/hosting/quotas/defaults'] = array(
-    'title' => 'Default Client Quotas',
-    'description' => 'Set defaults for client quotas',
-    'access arguments' => array('edit all quotas'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('hosting_quota_admin_defaults_form'),
-    'type' => MENU_LOCAL_TASK,
-    'file' => 'hosting_quota.admin.inc',
-  );
-
-  return $items;
-}
-
-/**
  * Get info about hosting quotas
  *
  * We call here every declaration of hook_hosting_quota_resource
@@ -86,7 +50,7 @@ function hosting_quota_get($resource) {
   }
   else {
     // $resource is not valid, so generate an error
-    watchdog('hosting_quota', 'Invalid resource called', array(), WATCHDOG_ERROR);
+    \Drupal::logger('hosting_quota')->error('Invalid resource called');
     return FALSE;
   }
 }
@@ -100,7 +64,7 @@ function hosting_quota_get($resource) {
  * be readable.
  *
  * @param $client int
- *   The nid of the client node
+ *   The id of the client entity
  * @param $resource string
  *   The machine name of the resource, or a resource as returned by hosting_quota_get
  * @param $start string
@@ -166,15 +130,15 @@ function hosting_quota_resource_render($resource, $usage) {
  * Set the hosting quota for a given resource.
  *
  * @param $client
- *   The nid of the client node.
+ *   The id of the client entity.
  * @param $resource
  *   The machine name of the resource.
  * @param $value
  *   The new value for the resource.
  */
 function hosting_quota_set_limit($client, $resource, $value) {
-  if (db_query("SELECT COUNT(*) FROM {hosting_client_quota} WHERE client = :client AND resource = :resource", array(':client' => $client, ':resource' => $resource))->fetchField()) {
-    $id = db_update('hosting_client_quota')
+  if (\Drupal::database()->query("SELECT COUNT(*) FROM {hosting_client_quota} WHERE client = :client AND resource = :resource", array(':client' => $client, ':resource' => $resource))->fetchField()) {
+    $id = \Drupal::database()->update('hosting_client_quota')
       ->fields(array(
         'value' => $value,
       ))
@@ -183,7 +147,7 @@ function hosting_quota_set_limit($client, $resource, $value) {
       ->execute();
   }
   else {
-    $id = db_insert('hosting_client_quota')
+    $id = \Drupal::database()->insert('hosting_client_quota')
       ->fields(array(
         'client' => $client,
         'resource' => $resource,
@@ -197,7 +161,7 @@ function hosting_quota_set_limit($client, $resource, $value) {
  * Quickly check if a given quota has been exceeded
  *
  * @param $client int
- *   The nid of the client node
+ *   The id of the client entity
  * @param $resource string
  *   The machine name of the resource, or a resource as returned by hosting_quota_get
  * @param $start string
@@ -221,14 +185,14 @@ function hosting_quota_check($client, $resource, $start = NULL, $end = NULL) {
   }
   // Get usage and limit for the selected resource
   if ($resource['module']) {
-    if (user_access("bypass all quotas")) {
+    if (\Drupal::currentUser()->hasPermission("bypass all quotas")) {
       return TRUE;
     }
-    if (user_access("bypass resource $resource_name limit")) {
+    if (\Drupal::currentUser()->hasPermission("bypass resource $resource_name limit")) {
       return TRUE;
     }
     $resource_usage = module_invoke($resource['module'], 'hosting_quota_get_usage', $client, $resource_name, $start, $end);
-    $resource_limit = db_query('SELECT value FROM {hosting_client_quota} WHERE client = :client AND resource = :resource', array(':client' => $client, ':resource' => $resource_name))->fetchField();
+    $resource_limit = \Drupal::database()->query('SELECT value FROM {hosting_client_quota} WHERE client = :client AND resource = :resource', array(':client' => $client, ':resource' => $resource_name))->fetchField();
     // Return the appropriate values
     if ($resource_limit > $resource_usage) {
       return TRUE;
@@ -245,7 +209,7 @@ function hosting_quota_check($client, $resource, $start = NULL, $end = NULL) {
  * Get the rendered usage and info for all resources
  *
  * @param $client int
- *   The nid of the client node
+ *   The id of the client entity
  * @param $start string
  *   Optional start date of the checking perios, defaults to 1st of last month
  * @param $end string
@@ -284,7 +248,7 @@ function hosting_quota_get_all_info($client, $start = NULL, $end = NULL) {
       $quota_info[$resource_name]['usage'] = hosting_quota_get_usage($client, $resource, $start, $end);
 
       // Fetch info about the quota limit directly from the db
-      $quota_info[$resource_name]['limit'] = db_query('SELECT value FROM {hosting_client_quota} WHERE client = :client AND resource = :resource', array(':client' => $client, ':resource' => $resource_name))->fetchField();
+      $quota_info[$resource_name]['limit'] = \Drupal::database()->query('SELECT value FROM {hosting_client_quota} WHERE client = :client AND resource = :resource', array(':client' => $client, ':resource' => $resource_name))->fetchField();
 
       // Render both limits and usage
       $quota_info[$resource_name]['rendered usage'] = hosting_quota_resource_render($resource, $quota_info[$resource_name]['usage']);
@@ -297,92 +261,103 @@ function hosting_quota_get_all_info($client, $start = NULL, $end = NULL) {
 }
 
 /**
- *  Implements hook_node_update().
+ * Implements hook_hosting_client_update().
  */
-function hosting_quota_node_update($node) {
-  if ($node->type == 'client') {
-    if (user_access('edit all quotas')) {
-      foreach ($node as $field => $value) {
-        if (substr($field, 0, 6) == 'quota-') {
-          $quota = substr($field, 6);
-          // If no value was entered use the default value for this resource
-          if (!$value) {
-            $value = variable_get("hosting_quota_default_{$quota}", 0);
-          }
-          hosting_quota_set_limit($node->nid, $quota, $value);
-        }
+function hosting_quota_hosting_client_update(\Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_client' || !\Drupal::currentUser()->hasPermission('edit all quotas')) {
+    return;
+  }
+
+  $values = array();
+  if (isset($entity->quota_limits) && is_array($entity->quota_limits)) {
+    $values = $entity->quota_limits;
+  }
+  elseif (isset($entity->quota) && is_array($entity->quota)) {
+    foreach ($entity->quota as $resource => $info) {
+      if (isset($info['limit'])) {
+        $values['quota-' . $resource] = $info['limit'];
       }
+    }
+  }
+
+  if ($values) {
+    hosting_quota_save_limits_from_values($values, $entity->id());
+  }
+}
+
+/**
+ * Implements hook_hosting_client_insert().
+ */
+function hosting_quota_hosting_client_insert(\Drupal\Core\Entity\EntityInterface $entity) {
+  hosting_quota_hosting_client_update($entity);
+}
+
+/**
+ * Implements hook_hosting_client_load().
+ */
+function hosting_quota_hosting_client_load(array $entities) {
+  foreach ($entities as $entity) {
+    if ($entity instanceof \Drupal\Core\Entity\EntityInterface && $entity->getEntityTypeId() === 'hosting_client') {
+      $entity->quota = hosting_quota_get_all_info($entity->id());
     }
   }
 }
 
 /**
- *  Implements hook_node_insert().
+ * Implements hook_hosting_client_view().
  */
-function hosting_quota_node_insert($node) {
-  hosting_quota_node_update($node);
-}
-
-/**
- *  Implements hook_node_load().
- */
-function hosting_quota_node_load($nodes, $types) {
-  if (in_array('client', $types)) {
-    foreach ($nodes as $nid => $node) {
-      if ($node->type == 'client') {
-        $nodes[$nid]->quota = hosting_quota_get_all_info($node->nid);
-      }
-    }
+function hosting_quota_hosting_client_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  if ($entity->getEntityTypeId() !== 'hosting_client') {
+    return;
   }
-}
-
-/**
- *  Implements hook_node_view().
- */
-function hosting_quota_node_view($node, $view_mode, $langcode) {
-  global $user;
-  if ($node->type == 'client') {
-    $allowed_clients = array_keys(hosting_get_client_from_user($user->uid));
-    if (user_access('view all quotas') || (in_array($node->nid, $allowed_clients) && user_access('view own quota'))) {
-      $node->content['info']['quota'] = array(
-        '#type' => 'item',
-        '#title' => 'Quota',
-        '#markup' => theme('hosting_quota_client', array('node' => $node)),
-        '#weight' => 5,
-      );
-    }
+  $allowed_clients = array_keys(hosting_get_client_from_user(\Drupal::currentUser()->id()));
+  if (\Drupal::currentUser()->hasPermission('view all quotas') || (in_array($entity->id(), $allowed_clients) && \Drupal::currentUser()->hasPermission('view own quota'))) {
+    $build['info']['quota'] = array(
+      '#type' => 'item',
+      '#title' => t('Quota'),
+      '#markup' => \Drupal::service('theme.manager')->render('hosting_quota_client', array('node' => $entity)),
+      '#weight' => 5,
+    );
   }
 }
 
 /**
  * Insert edit controls for the hosting quotas into the client edit form
  */
-function hosting_quota_form_alter(&$form, &$form_state, $form_id) {
-  if (user_access('edit all quotas') && isset($form['type']) && isset($form['#node']) && 'client_node_form' == $form_id) {
-    $node = $form['#node'];
+function hosting_quota_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  $entity = NULL;
+  if ($form_id === 'client_node_form' && isset($form['#node'])) {
+    $entity = $form['#node'];
+  }
+  elseif ($form_id === 'hosting_client_form' && isset($form['#entity'])) {
+    $entity = $form['#entity'];
+  }
 
-    if(!isset($node->quota)){
+  if (\Drupal::currentUser()->hasPermission('edit all quotas') && $entity) {
+    $config = \Drupal::config('hosting_quota.settings');
+
+    if (!isset($entity->quota)) {
       $quota_info = module_invoke_all('hosting_quota_resource');
     }
     else{
-      $quota_info = $node->quota;
+      $quota_info = $entity->quota;
     }
 
     $form['quota'] = array(
       '#type' => 'fieldset',
       '#title' => t('Client quota settings'),
-      '#access' => user_access('edit all quotas'),
+      '#access' => \Drupal::currentUser()->hasPermission('edit all quotas'),
       '#collapsible' => TRUE,
       '#collapsed' => TRUE,
     );
 
     foreach ($quota_info as $resource => $quota) {
       if (!isset($quota['limit'])) {
-        $quota['limit'] = variable_get("hosting_quota_default_$resource", 0);
+        $quota['limit'] = $config->get('default_limits.' . $resource) ?? 0;
       }
       $form['quota']['quota-' . $resource] = array(
-        '#title' => check_plain($quota['title']),
-        '#description' => check_plain($quota['description']),
+        '#title' => \Drupal\Component\Utility\Html::escape($quota['title']),
+        '#description' => \Drupal\Component\Utility\Html::escape($quota['description']),
         '#type' => 'textfield',
         '#default_value' => $quota ? $quota['limit'] : 0,
       );
@@ -391,24 +366,82 @@ function hosting_quota_form_alter(&$form, &$form_state, $form_id) {
       $form['#validate'][] = 'hosting_quota_numeric_value';
 
     }
+    if (isset($form['actions']['submit'])) {
+      $form['actions']['submit']['#submit'][] = 'hosting_quota_client_form_submit';
+    }
   }
 }
 
 /**
  * Validate that quota values are numeric
  */
-function hosting_quota_numeric_value($form, $form_state) {
-  foreach ($form_state['values'] as $key => $value) {
-    if ((substr($key, 0, 5) == 'quota') && !(is_numeric($value))) {
-      form_set_error($key, 'You must set a number as a quota value!');
+function hosting_quota_numeric_value($form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  $values = $form_state->getValues();
+  $candidate_sets = array($values);
+  if (isset($values['quota']) && is_array($values['quota'])) {
+    $candidate_sets[] = $values['quota'];
+  }
+  foreach ($candidate_sets as $set) {
+    foreach ($set as $key => $value) {
+      if ((substr($key, 0, 5) == 'quota') && !(is_numeric($value))) {
+        $form_state->setErrorByName($key, 'You must set a number as a quota value!');
+      }
     }
   }
 }
 
 /**
- * Implements hook_theme().
+ * Submit handler for hosting client quota updates.
  */
-function hosting_quota_theme($existing, $resource, $theme, $path) {
+function hosting_quota_client_form_submit(array &$form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  if (!\Drupal::currentUser()->hasPermission('edit all quotas')) {
+    return;
+  }
+
+  $client_id = NULL;
+  if (isset($form['#entity']) && $form['#entity'] instanceof \Drupal\Core\Entity\EntityInterface) {
+    $client_id = $form['#entity']->getEntityTypeId() === 'hosting_client' ? $form['#entity']->id() : NULL;
+  }
+  if (!$client_id && isset($form['#node']) && is_object($form['#node']) && hosting_entity_id($form['#node'])) {
+    $client_id = hosting_entity_id($form['#node']);
+  }
+  if (!$client_id && $form_state->getFormObject() && method_exists($form_state->getFormObject(), 'getEntity')) {
+    $entity = $form_state->getFormObject()->getEntity();
+    if ($entity instanceof \Drupal\Core\Entity\EntityInterface && $entity->getEntityTypeId() === 'hosting_client') {
+      $client_id = $entity->id();
+    }
+  }
+  if (!$client_id) {
+    return;
+  }
+
+  hosting_quota_save_limits_from_values($form_state->getValues(), $client_id);
+}
+
+/**
+ * Save quota limits from form or entity values.
+ */
+function hosting_quota_save_limits_from_values(array $values, $client_id) {
+  $config = \Drupal::config('hosting_quota.settings');
+  if (isset($values['quota']) && is_array($values['quota'])) {
+    $values = $values['quota'] + $values;
+  }
+  foreach ($values as $field => $value) {
+    if (substr($field, 0, 6) !== 'quota-') {
+      continue;
+    }
+    $quota = substr($field, 6);
+    if ($value === '' || $value === NULL) {
+      $value = $config->get('default_limits.' . $quota) ?? 0;
+    }
+    hosting_quota_set_limit($client_id, $quota, $value);
+  }
+}
+
+/**
+ * Implements hook_\Drupal::service('theme.manager')->render().
+ */
+function hosting_quota_\Drupal::service('theme.manager')->render($existing, $resource, $theme, $path) {
   return array(
     'hosting_quota_client' => array(
       'variables' => array(
@@ -442,9 +475,9 @@ function theme_hosting_quota_admin_list($variables) {
   foreach ($resources as $resource) {
     $header[] = t('@resource (Used / Limit)', array('@resource' => $resource['title']));
   }
-  foreach ($client_quotas as $client_nid => $quotas) {
+  foreach ($client_quotas as $client_id => $quotas) {
     $row = array();
-    $row[] = l($quotas['name'], "node/{$client_nid}");
+    $row[] = \Drupal\Core\Link::fromTextAndUrl($quotas['name'], \Drupal\Core\Url::fromUserInput('/hosting/client/' . $client_id))->toString();
 
     foreach ($resources as $resource => $resource_info) {
       // Provide a visual indication if the usage is over the limit
@@ -460,7 +493,7 @@ function theme_hosting_quota_admin_list($variables) {
     }
     $rows[] = $row;
   }
-  return '<p>' . t('Usage information for the last month.') . '</p>' . theme('table', array('header' => $header, 'rows' => $rows)) . theme('pager', array('tags' => array()));
+  return '<p>' . t('Usage information for the last month.') . '</p>' . \Drupal::service('theme.manager')->render('table', array('header' => $header, 'rows' => $rows)) . \Drupal::service('theme.manager')->render('pager', array('tags' => array()));
 }
 
 /**
@@ -481,7 +514,7 @@ function theme_hosting_quota_client($variables) {
       $row[] = $value['rendered limit'];
       $rows[] = $row;
     }
-    return theme('table', array('header' => $header, 'rows' => $rows));
+    return \Drupal::service('theme.manager')->render('table', array('header' => $header, 'rows' => $rows));
   }
   return '';
 }

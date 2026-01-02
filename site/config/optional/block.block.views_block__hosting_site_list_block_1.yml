@@ -1,0 +1,30 @@
+uuid: 3be700bc-e5cc-4e0e-8447-bca349e9b12d
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+    - views
+  config:
+    - views.view.hosting_site_list
+  theme:
+    - eldir
+id: views_block__hosting_site_list_block_1
+theme: eldir
+region: content_bottom
+weight: 0
+provider: null
+plugin: 'views_block:hosting_site_list-block_1'
+settings:
+  id: 'views_block:hosting_site_list-block_1'
+  label: ''
+  label_display: '0'
+  provider: views
+  views_label: ''
+  items_per_page: none
+visibility:
+  request_path:
+    id: request_path
+    pages: '/hosting/c/platform_*'
+    negate: false
+    context_mapping: {  }

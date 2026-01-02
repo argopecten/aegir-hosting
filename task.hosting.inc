@@ -10,8 +10,9 @@
  */
 function _hosting_task_log($entry) {
   $task = drush_get_context('HOSTING_TASK');
-  if ($task->vid) {
-    hosting_task_log($task->vid, $entry['type'], $entry['message'], isset($entry['error']) ? $entry['error'] : '', $entry['timestamp']);
+  $task_id = $task instanceof \Drupal\Core\Entity\EntityInterface ? $task->id() : NULL;
+  if ($task_id) {
+    hosting_task_log($task_id, $entry['type'], $entry['message'], isset($entry['error']) ? $entry['error'] : '', $entry['timestamp']);
   }
   else {
     _hosting_task_log_print($entry);
@@ -48,11 +49,12 @@ function drush_hosting_task_validate($id, $type = NULL) {
   drush_set_option('user', 1);
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_LOGIN);
   if (is_numeric($id)) {
-    $task = node_load($id);
+    $task = hosting_task_load_entity($id);
   }
   elseif (is_string($id) && isset($type)) {
     $ref = hosting_context_load($id);
-    if ($ref->nid) {
+    $ref_id = hosting_entity_id($ref);
+    if ($ref_id) {
 
       // Get additional arguments to the drush command and convert them to "task_args" as expected by the task node.
       $task_args = array();
@@ -65,44 +67,44 @@ function drush_hosting_task_validate($id, $type = NULL) {
         list($name, $value) = explode('=', $arg);
         $task_args[$name] = $value;
       }
-      $task = hosting_add_task($ref->nid, $type, $task_args);
+      $task = hosting_add_task($ref, $type, $task_args);
     }
   }
 
-  if ($task->type == 'task') {
-    $task->ref = node_load($task->rid);
+  if ($task instanceof \Drupal\Core\Entity\EntityInterface && $task->getEntityTypeId() === 'hosting_task') {
+    $task = hosting_task_load_arguments($task);
+    $task->ref = hosting_entity_load_from_context_id($task->get('rid')->value);
     $task->options = array();
+    $ref_type = hosting_entity_task_scope($task->ref);
     $task->context_options = array(
-      'context_type' => $task->ref->type,
-      'master_url' => url('', array('absolute' => TRUE)),
+      'context_type' => $ref_type,
+      'master_url' => \Drupal\Core\Url::fromRoute('<front>', array('absolute' => TRUE))->toString(),
       'root' => NULL,
       'uri' => NULL,
     );
     $task->args = array();
-    $task->changed = REQUEST_TIME;
-    $task->executed = REQUEST_TIME;
+    $task->set('changed', REQUEST_TIME);
+    $task->set('executed', REQUEST_TIME);
     /* if not already running, remove the task from the queue
      * this is to avoid concurrent task runs */
-    if ($task->task_status == HOSTING_TASK_PROCESSING && !drush_get_option('force', FALSE)) {
+    if ((int) $task->get('task_status')->value == HOSTING_TASK_PROCESSING && !drush_get_option('force', FALSE)) {
       return drush_set_error('HOSTING_TASK_RUNNING', dt("This task is already running, use --force"));
     }
-    if ($task->task_status != HOSTING_TASK_QUEUED && !drush_get_option('force', FALSE)) {
+    if ((int) $task->get('task_status')->value != HOSTING_TASK_QUEUED && !drush_get_option('force', FALSE)) {
       return drush_set_error('HOSTING_TASK_NOT_QUEUED', dt("This task is not queued, use --force"));
     }
-    $task->task_status = HOSTING_TASK_PROCESSING;
-    $task->revision = TRUE;
-
-    node_save($task);
+    $task->set('task_status', HOSTING_TASK_PROCESSING);
+    $task->save();
     drush_set_context('HOSTING_TASK', $task);
     drush_set_context('DRUSH_LOG_CALLBACK', '_hosting_task_log');
-    drush_log(dt("Task starts processing") . ': ' . $task->title, 'queue');
+    drush_log(dt("Task starts processing") . ': ' . $task->label(), 'queue');
 
     // Load Task Info.
-    $tasks_info = hosting_available_tasks($task->ref->type);
+    $tasks_info = hosting_available_tasks($ref_type);
 
     // Find task type and pass through if it needs provision_save.
-    if (isset($tasks_info[$task->task_type])) {
-      $task->task_info = $tasks_info[$task->task_type];
+    if (isset($tasks_info[$task->get('task_type')->value])) {
+      $task->task_info = $tasks_info[$task->get('task_type')->value];
     }
   }
   else {
@@ -128,6 +130,8 @@ function drush_hosting_task() {
   $task = &drush_get_context('HOSTING_TASK');
   $output = array();
   $mode = drush_get_option('debug', FALSE) ? 'GET' : 'POST';
+  $ref_type = hosting_entity_task_scope($task->ref);
+  $ref_status = hosting_entity_status($task->ref, $ref_type);
 
   // Make sure argument order is correct.
   ksort($task->args);
@@ -137,7 +141,7 @@ function drush_hosting_task() {
     // Invoke hook_hosting_TASK_OBJECT_context_options()
     // We copy module_invoke_all() here because it doesn't pass by
     // reference and it breaks under PHP 5.3
-    $hook = 'hosting_' . $task->ref->type . '_context_options';
+    $hook = 'hosting_' . hosting_entity_task_scope($task->ref) . '_context_options';
     foreach (module_implements($hook) as $module) {
       $function = $module . '_' . $hook;
       call_user_func_array($function, array(&$task));
@@ -146,8 +150,8 @@ function drush_hosting_task() {
     drush_invoke_process('@none', 'provision-save', array('@' . $task->ref->hosting_name), $task->context_options, array('method' => $mode, 'integrate' => TRUE));
   }
 
-  if (($task->ref->type == 'site' && $task->ref->site_status == HOSTING_SITE_DELETED)
-    || ($task->ref->type == 'platform' && $task->ref->platform_status == HOSTING_PLATFORM_DELETED)) {
+  if (($ref_type == 'site' && $ref_status == HOSTING_SITE_DELETED)
+    || ($ref_type == 'platform' && $ref_status == HOSTING_PLATFORM_DELETED)) {
 
     // We're performing a task on a site that has been deleted...
     // d() will not be returning a site object.
@@ -158,7 +162,7 @@ function drush_hosting_task() {
   }
 
   if (!isset($task->task_command)) {
-    $task->task_command = 'provision-' . $task->task_type;
+    $task->task_command = 'provision-' . $task->get('task_type')->value;
   }
   // Run the actual command. Adding alias here to work around Drush API.
   $output = provision_backend_invoke($alias, $task->task_command, $task->args, $task->options, $mode);
@@ -167,14 +171,12 @@ function drush_hosting_task() {
   drush_set_context('HOSTING_DRUSH_OUTPUT', $output);
 
   // On succesful delete, remove the named context.
-  if ($task->task_type === 'delete' && !drush_get_error()) {
+  if ($task->get('task_type')->value === 'delete' && !drush_get_error()) {
     drush_invoke_process('@none', 'provision-save', array('@' . $task->ref->hosting_name), array('delete' => TRUE), array('method' => $mode, 'integrate' => TRUE));
   }
 
-  // New revision is created at the beginning of function.
-  $task->revision = FALSE;
-  $task->delta = microtime(TRUE) - $task->executed;
-  node_save($task);
+  $task->set('delta', microtime(TRUE) - $task->get('executed')->value);
+  $task->save();
 }
 
 /**
@@ -184,7 +186,7 @@ function drush_hosting_task() {
  */
 function drush_hosting_task_rollback() {
   $task = &drush_get_context('HOSTING_TASK');
-  $hook = sprintf("hosting_%s_task_rollback", str_replace('-', '_', $task->task_type));
+  $hook = sprintf("hosting_%s_task_rollback", str_replace('-', '_', $task->get('task_type')->value));
   drush_log(dt('Invoking :hook hooks.', array(':hook' => $hook)));
   module_invoke_all($hook, $task, drush_get_context('HOSTING_DRUSH_OUTPUT'));
 }
@@ -197,7 +199,7 @@ function drush_hosting_task_rollback() {
 function drush_hosting_post_hosting_task($task) {
   $task = &drush_get_context('HOSTING_TASK');
 
-  $hook = sprintf("post_hosting_%s_task", str_replace('-', '_', $task->task_type));
+  $hook = sprintf("post_hosting_%s_task", str_replace('-', '_', $task->get('task_type')->value));
   drush_log(dt('Invoking :hook hooks.', array(':hook' => $hook)));
   module_invoke_all($hook, $task, drush_get_context('HOSTING_DRUSH_OUTPUT'));
 }

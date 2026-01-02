@@ -1,0 +1,7 @@
+name: 'Database Server'
+type: module
+description: 'Allow Hostmaster to configure database servers.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'

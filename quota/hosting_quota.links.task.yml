@@ -1,0 +1,14 @@
+hosting_quota.admin:
+  route_name: hosting_quota.admin
+  title: 'Quotas'
+  base_route: hosting.admin
+
+hosting_quota.list:
+  route_name: hosting_quota.list
+  title: 'List Client Quotas'
+  base_route: hosting_quota.admin
+
+hosting_quota.defaults:
+  route_name: hosting_quota.defaults
+  title: 'Default Client Quotas'
+  base_route: hosting_quota.admin

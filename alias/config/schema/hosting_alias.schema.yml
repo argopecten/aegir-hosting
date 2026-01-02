@@ -1,0 +1,22 @@
+hosting_alias.settings:
+  type: config_object
+  label: 'Hosting alias settings'
+  mapping:
+    hosting_alias_subdomain:
+      type: string
+      label: 'Automatic subdomain base'
+    hosting_alias_subdomain_replace_dash:
+      type: boolean
+      label: 'Replace dashes in subdomain aliases'
+    hosting_alias_subdomain_dash_substitute:
+      type: string
+      label: 'Dash substitute'
+    hosting_alias_automatic_www:
+      type: boolean
+      label: 'Automatic www alias'
+    hosting_alias_automatic_no_www:
+      type: boolean
+      label: 'Automatic non-www alias'
+    hosting_alias_redirection:
+      type: boolean
+      label: 'Default alias redirection'

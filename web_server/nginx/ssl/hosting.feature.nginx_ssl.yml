@@ -1,0 +1,6 @@
+nginx_ssl:
+  title: 'Nginx SSL support'
+  description: 'Provide support for the NGINX web server with SSL functionality. (LEGACY, see hosting_https)'
+  status: disabled
+  module: hosting_nginx_ssl
+  group: optional

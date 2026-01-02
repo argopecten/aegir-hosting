@@ -47,10 +47,11 @@ function hosting_ssl_permission() {
 function hosting_ssl_get_servers() {
   $servers = hosting_get_servers('http');
   $ssl_servers = array();
-  foreach ($servers as $nid => $title) {
-    $node = node_load($nid);
-    if ($node->services['http']->ssl_enabled) {
-      $ssl_servers[] = $nid;
+  foreach ($servers as $server_id => $title) {
+    $server = \Drupal::entityTypeManager()->getStorage('hosting_server')->load($server_id);
+    $http_service = $server ? hosting_server_service($server, 'http') : NULL;
+    if ($http_service && $http_service->ssl_enabled) {
+      $ssl_servers[] = $server_id;
     }
   }
   return $ssl_servers;
@@ -64,10 +65,14 @@ function hosting_ssl_get_platforms() {
   $ssl_platforms = array();
 
   $platforms = _hosting_get_platforms();
-  foreach ($platforms as $nid => $title) {
-    $platform = node_load($nid);
-    if (in_array($platform->web_server, $servers)) {
-      $ssl_platforms[] = $nid;
+  foreach ($platforms as $platform_id => $title) {
+    $platform = \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id);
+    if (!$platform) {
+      continue;
+    }
+    $web_server_id = $platform instanceof \Drupal\Core\Entity\ContentEntityInterface ? $platform->get('web_server')->target_id : (isset($platform->web_server) ? $platform->web_server : NULL);
+    if ($web_server_id && in_array($web_server_id, $servers)) {
+      $ssl_platforms[] = $platform_id;
     }
   }
 
@@ -81,9 +86,9 @@ function hosting_ssl_get_profiles() {
   $platforms = hosting_ssl_get_platforms();
 
   $ssl_profiles = array();
-  foreach ($platforms as $nid) {
-    $platform = node_load($nid);
-    $ssl_profiles = array_merge($ssl_profiles, array_keys($platform->profiles));
+  foreach ($platforms as $platform_id) {
+    $profiles = hosting_get_profiles($platform_id, 'short_name');
+    $ssl_profiles = array_merge($ssl_profiles, array_keys($profiles));
   }
 
   return array_unique($ssl_profiles);
@@ -93,52 +98,61 @@ function hosting_ssl_get_profiles() {
  * Implements hook_form_alter().
  */
 function hosting_ssl_form_alter(&$form, &$form_state, $form_id) {
-  if ($form_id == 'site_node_form') {
+  if (in_array($form_id, array('hosting_site_form', 'hosting_site_add_form', 'hosting_site_edit_form'), TRUE)) {
     hosting_ssl_site_form($form, $form_state, $form_id);
   }
 }
 
 /**
- * Per-server, per-ip certificate listing.
+ * Implements hook_entity_load().
  */
-function hosting_ssl_menu() {
-  $items = array();
-  $items['node/%hosting_ssl_cert_node/ssl'] = array(
-    'title' => 'Certificates',
-    'description' => 'SSL certificates deployed on this server',
-    'page callback' => 'hosting_ssl_server_cert_list',
-    'page arguments' => array(1),
-    'type' => MENU_LOCAL_TASK,
-    'access arguments' => array('view server'),
-  );
-  return $items;
+function hosting_ssl_entity_load(array $entities) {
+  hosting_ssl_site_load($entities);
 }
 
 /**
- * Implements hook_load() from hook_menu().
- *
- * This is a weird hook that is not well documented but allows loads from the
- * menu system. This is *not* the regular hook_load().
- *
- * @see hosting_ssl_menu()
+ * Implements hook_entity_presave().
  */
-function hosting_ssl_cert_node_load($arg) {
-  if (!is_numeric($arg)) {
-    return FALSE;
-  }
-  if ($node = node_load($arg)) {
-    if ($node->type == 'server') {
-      return $node;
-    }
-  }
-  return FALSE;
+function hosting_ssl_entity_presave(\Drupal\Core\Entity\EntityInterface $entity) {
+  hosting_ssl_site_presave($entity);
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function hosting_ssl_entity_insert(\Drupal\Core\Entity\EntityInterface $entity) {
+  hosting_ssl_site_insert($entity);
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function hosting_ssl_entity_update(\Drupal\Core\Entity\EntityInterface $entity) {
+  hosting_ssl_site_update($entity);
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function hosting_ssl_entity_delete(\Drupal\Core\Entity\EntityInterface $entity) {
+  hosting_ssl_site_delete($entity);
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function hosting_ssl_entity_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  hosting_ssl_site_view($build, $entity);
 }
 
 /**
  * List SSL certificates associated with the given server.
  */
 function hosting_ssl_server_cert_list($node) {
-  drupal_set_title(t('Certificates installed on server @server', array('@server' => $node->title)), PASS_THROUGH);
+  $build = array(
+    '#title' => t('Certificates installed on server @server', array('@server' => $node->label())),
+  );
+  $server_id = hosting_entity_id($node);
   $header = array(
     array(
       'data' => t('Domain'),
@@ -153,21 +167,20 @@ function hosting_ssl_server_cert_list($node) {
       'field' => 'client',
     ),
   );
-  $query = db_select('hosting_ip_addresses', 'ips');
+  $query = \Drupal::database()->select('hosting_ip_addresses', 'ips');
   $query = $query->extend('PagerDefault');
   $query = $query->extend('TableSort');
   $query->join('hosting_ssl_cert_ips', 'cert_ip', 'cert_ip.ip_address = ips.id');
   $query->join('hosting_ssl_cert', 'cert', 'cert.cid = cert_ip.cid');
-  $query->join('node', 'client', 'client.nid = cert.client');
+  $query->join('hosting_client', 'client', 'client.id = cert.client');
   $query->element(2);
   $query->addField('ips', 'ip_address');
   $query->addField('cert', 'ssl_key', 'domain');
   $query->addField('cert', 'status');
-  $query->addField('client', 'title', 'client');
-  $query->condition('ips.nid', $node->nid)
+  $query->addField('client', 'label', 'client');
+  $query->condition('ips.server_id', $server_id)
     ->limit(25)
-    ->orderByHeader($header)
-    ->addTag('node_access');
+    ->orderByHeader($header);
   $result = $query->execute();
 
   $rows = array();
@@ -178,13 +191,18 @@ function hosting_ssl_server_cert_list($node) {
     $row[] = filter_xss($cert->client);
     $rows[] = $row;
   }
-  return theme('table',
-    array(
-      'header' => $header,
-      'rows' => $rows,
-      'attributes' => array('class' => array('hosting-table')),
-    ))
-    . theme('pager', array('tags' => NULL, 'element' => 2));
+  $build['table'] = array(
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => $rows,
+    '#attributes' => array('class' => array('hosting-table')),
+  );
+  $build['pager'] = array(
+    '#type' => 'pager',
+    '#tags' => NULL,
+    '#element' => 2,
+  );
+  return $build;
 }
 
 /**
@@ -193,6 +211,26 @@ function hosting_ssl_server_cert_list($node) {
  * @see: hosting_example_hosting_feature().
  */
 function hosting_ssl_feature_enable_callback() {
-  drupal_set_message(t("Please make sure you have enabled SSL support in your webserver, e.g. by enabling mod_ssl in Apache."));
-  drupal_set_message(t("To start using SSL please edit the desired server node within Aegir to set in from e.g. 'apache' to 'apache_ssl'."));
+  \Drupal::messenger()->addMessage(t("Please make sure you have enabled SSL support in your webserver, e.g. by enabling mod_ssl in Apache."));
+  \Drupal::messenger()->addMessage(t("To start using SSL please edit the desired server node within Aegir to set in from e.g. 'apache' to 'apache_ssl'."));
+}
+
+/**
+ * Implements hook_hosting_site_context_options().
+ */
+function hosting_ssl_hosting_site_context_options(&$task) {
+  $node = $task->ref;
+
+  if (isset($node->ssl_enabled)) {
+    // we pass null to disable the option.
+    $task->context_options['ssl_enabled'] = ($node->ssl_enabled) ? $node->ssl_enabled : 'null';
+
+    if ($node->ssl_enabled) {
+      $task->context_options['ssl_key'] = hosting_ssl_get_key($node->ssl_key);
+    }
+    else {
+      $task->context_options['ssl_key'] = 'null';
+    }
+    $task->context_options['ip_addresses'] = hosting_ssl_get_ip($node->ssl_key);
+  }
 }

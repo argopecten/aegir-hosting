@@ -1,0 +1,20 @@
+uuid: 53f51386-92e9-4b21-8ef4-fa9449763def
+langcode: en
+status: false
+dependencies:
+  module:
+    - hosting
+  theme:
+    - eldir
+id: hosting_summary
+theme: eldir
+region: sidebar_second
+weight: 10
+provider: hosting
+plugin: hosting_summary
+settings:
+  id: hosting_summary
+  label: 'Hosting summary'
+  label_display: visible
+  provider: hosting
+visibility: {  }

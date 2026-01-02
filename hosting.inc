@@ -94,25 +94,24 @@ function hosting_path_normalize($path) {
 }
 
 /**
- * Shim to preserve API stability. Deprecated. Use hosting_get_hostmaster_site_nid().
- *
- * @deprecated
+ * Helper function to get the entity ID of the Aegir front-end site.
  */
-function hosting_get_hostmaster_nid() {
-  return hosting_get_hostmaster_site_nid();
+function hosting_get_hostmaster_site_id() {
+  $state = \Drupal::state();
+  $hostmaster_id = $state->get('aegir_hostmaster_site_id');
+  if (!$hostmaster_id) {
+    $hostmaster_id = hosting_context_entity_id('hostmaster');
+    if ($hostmaster_id) {
+      $state->set('aegir_hostmaster_site_id', $hostmaster_id);
+    }
+  }
+  return $hostmaster_id;
 }
 
 /**
- * Helper function to get the node ID of the Aegir front-end site.
+ * Helper function to get the entity ID of the Aegir platform.
  */
-function hosting_get_hostmaster_site_nid() {
-  return variable_get('aegir_hostmaster_site_nid', NULL);
-}
-
-/**
- * Helper function to get the node ID of the Aegir platform.
- */
-function hosting_get_hostmaster_platform_nid() {
-  $hostmaster_site = node_load(hosting_get_hostmaster_site_nid());
-  return $hostmaster_site->platform;
+function hosting_get_hostmaster_platform_id() {
+  $hostmaster_site = \Drupal::entityTypeManager()->getStorage('hosting_site')->load(hosting_get_hostmaster_site_id());
+  return $hostmaster_site ? $hostmaster_site->get('platform')->target_id : NULL;
 }

@@ -8,16 +8,17 @@ class hostingService_http_ssl extends hostingService_http_public {
 
   function load() {
     parent::load();
-    $this->mergeData("SELECT ssl_port FROM {hosting_ssl_server} WHERE vid=:vid", array(':vid' => $this->server->vid));
+    $server_id = $this->getServerId();
+    $this->mergeData("SELECT ssl_port FROM {hosting_ssl_server} WHERE server_id = :server_id", array(':server_id' => $server_id));
     $this->ssl_enabled = TRUE;
   }
 
   function insert() {
     parent::insert();
-    $id = db_insert('hosting_ssl_server')
+    $server_id = $this->getServerId();
+    $id = \Drupal::database()->insert('hosting_ssl_server')
       ->fields(array(
-        'vid' => $this->server->vid,
-        'nid' => $this->server->nid,
+        'server_id' => $server_id,
         'ssl_port' => $this->ssl_port,
       ))
       ->execute();
@@ -25,15 +26,17 @@ class hostingService_http_ssl extends hostingService_http_public {
 
   function delete() {
     parent::delete();
-    db_delete('hosting_ssl_server')
-      ->condition('nid', $this->server->nid)
+    $server_id = $this->getServerId();
+    \Drupal::database()->delete('hosting_ssl_server')
+      ->condition('server_id', $server_id)
       ->execute();
   }
 
   function delete_revision() {
     parent::delete_revision();
-    db_delete('hosting_ssl_server')
-      ->condition('vid', $this->server->vid)
+    $server_id = $this->getServerId();
+    \Drupal::database()->delete('hosting_ssl_server')
+      ->condition('server_id', $server_id)
       ->execute();
   }
 
@@ -64,7 +67,12 @@ class hostingService_http_ssl extends hostingService_http_public {
   public function validate(&$node, &$form, &$form_state) {
     parent::validate($node, $form, $form_state);
     if ((int) $this->ssl_port <= 0) {
-      form_set_error('ssl_port', t("The port you specify must be a number."));
+      if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+        $form_state->setErrorByName('ssl_port', t("The port you specify must be a number."));
+      }
+      else {
+        \Drupal::messenger()->addError(t("The port you specify must be a number."));
+      }
     }
   }
 
@@ -88,26 +96,18 @@ class hostingService_http_apache_ssl extends hostingService_http_ssl {
   protected $has_restart_cmd = TRUE;
 
   function default_restart_cmd() {
-    $command = '/usr/sbin/apachectl'; # a proper default for most of the world
-    foreach (explode(':', $_SERVER['PATH']) as $path) {
-      $options[] = "$path/apache2ctl";
-      $options[] = "$path/apachectl";
+    $systemctl = NULL;
+    if (is_executable('/usr/bin/systemctl')) {
+      $systemctl = '/usr/bin/systemctl';
     }
-    # try to detect the apache restart command
-    $options[] = '/usr/local/sbin/apachectl'; # freebsd
-    $options[] = '/usr/sbin/apache2ctl'; # debian + apache2
-    $options[] = $command;
-
-    foreach ($options as $test) {
-      if (is_executable($test)) {
-        $command = $test;
-        break;
-      }
+    elseif (is_executable('/bin/systemctl')) {
+      $systemctl = '/bin/systemctl';
+    }
+    if ($systemctl) {
+      return "sudo $systemctl reload apache2";
     }
 
-    return "sudo $command graceful";
+    return "sudo $systemctl reload apache2";
   }
 
 }
-
-

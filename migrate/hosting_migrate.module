@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Migrate sites between platforms, performing upgrades when necessary.
+ * Migrate sites between platforms (Drupal 8+ only).
  */
 
 include_once 'hosting_migrate.batch.inc';
@@ -15,31 +15,6 @@ function hosting_migrate_permission() {
       'title' => t('create migrate task'),
     ),
   );
-}
-
-/**
- * Implements hook_menu().
- */
-function hosting_migrate_menu() {
-  // TODO: add some security here
-  $items['hosting/migrate/compare'] = array(
-    'title' => 'Compare packages',
-    'page callback' => 'hosting_migrate_comparison',
-    'access arguments' => array('create migrate task'),
-    'type' => MENU_CALLBACK,
-  );
-  /*
-   $items['node/%hosting_platform_node/task_migrate'] = array(
-   'title' => t('Migrate'),
-   'description' => t('Migrate sites to a new platform'),
-   'page callback' => 'drupal_get_form',
-   'page arguments' => array('hosting_migrate_platform', 1),
-   'access arguments' => array('create migrate task'),
-   'type' => MENU_LOCAL_TASK,
-   'weight' => ($info['weight']) ? $info['weight'] : 0,
-   );
-   */
-  return $items;
 }
 
 /**
@@ -69,46 +44,48 @@ function hosting_migrate_hosting_tasks() {
  * A site may be migrated if it's URL, Platform or DB server has changed.
  * Only one of these needs to change for a valid migration to be possible.
  */
-function hosting_task_migrate_form_validate($form, &$form_state) {
+function hosting_task_migrate_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
   $migrate_possible = FALSE;
 
   $site = $form['parameters']['#node'];
 
-  $url = hosting_site_get_domain($form_state['values']['parameters']['new_uri']);
-  if ($url != hosting_site_get_domain($site->title)) {
+  $url = hosting_site_get_domain($form_state->getValue(['parameters', 'new_uri']));
+  if ($url != hosting_site_get_domain(hosting_entity_label($site))) {
     $migrate_possible = TRUE;
     if (!_hosting_valid_fqdn($url)) {
-      form_set_error('title', t("You have not specified a valid url for this site."));
+      $form_state->setErrorByName('title', t("You have not specified a valid url for this site."));
     }
     if (!hosting_domain_allowed($url)) {
-      form_set_error('title', t("The domain name you have specified is not unique or not allowed."));
+      $form_state->setErrorByName('title', t("The domain name you have specified is not unique or not allowed."));
     }
   }
 
-  if (!isset($form_state['values']['parameters']['target_platform'])) {
-    form_set_error('parameters][target_platform', t("You have no target platform specified."));
+  if (!$form_state->getValue(['parameters', 'target_platform'])) {
+    $form_state->setErrorByName('parameters][target_platform', t("You have no target platform specified."));
   }
 
-  if ($form_state['values']['parameters']['target_platform'] != $site->platform) {
+  $site_platform_id = $site instanceof \Drupal\Core\Entity\ContentEntityInterface ? $site->get('platform')->target_id : (isset($site->platform) ? $site->platform : NULL);
+  if ($form_state->getValue(['parameters', 'target_platform']) != $site_platform_id) {
     $migrate_possible = TRUE;
   }
 
 
-  if ($form_state['values']['parameters']['new_db_server'] != $site->db_server) {
+  $site_db_server_id = $site instanceof \Drupal\Core\Entity\ContentEntityInterface ? $site->get('db_server')->target_id : (isset($site->db_server) ? $site->db_server : NULL);
+  if ($form_state->getValue(['parameters', 'new_db_server']) != $site_db_server_id) {
     $migrate_possible = TRUE;
   }
 
 
 
   if (!$migrate_possible) {
-    form_set_error('parameters][target_platform', t("To migrate a site you need to modify at least one of the following fields: Domain name, Platform or Database server"));
+    $form_state->setErrorByName('parameters][target_platform', t("To migrate a site you need to modify at least one of the following fields: Domain name, Platform or Database server"));
   }
 }
 
 /**
- * Implements hook_theme().
+ * Implements hook_\Drupal::service('theme.manager')->render().
  */
-function hosting_migrate_theme($existing, $type, $theme, $path) {
+function hosting_migrate_\Drupal::service('theme.manager')->render($existing, $type, $theme, $path) {
   return array(
     'hosting_migrate_comparison' => array(
       'variables' => array('packages' => NULL),
@@ -140,75 +117,71 @@ function hosting_task_migrate_form($node) {
       '#required' => TRUE,
       '#description' => t('The database server the site will use to host its content.'),
       '#options' => $db_servers,
-      '#default_value' => $node->db_server,
+      '#default_value' => $node instanceof \Drupal\Core\Entity\ContentEntityInterface ? $node->get('db_server')->target_id : $node->db_server,
     );
   }
   else {
     $form['new_db_server'] = array(
       '#type' => 'hidden',
-      '#value' => $node->db_server,
+      '#value' => $node instanceof \Drupal\Core\Entity\ContentEntityInterface ? $node->get('db_server')->target_id : $node->db_server,
     );
   }
 
-
-  drupal_add_js(drupal_get_path('module', 'hosting_migrate') . '/hosting_migrate.js');
+  $form['#attached']['library'][] = 'hosting_migrate/admin';
   $packages = array();
 
-  $site_profile = node_load($node->profile);
+  $profile_value = $node instanceof \Drupal\Core\Entity\ContentEntityInterface && $node->hasField('profile') ? $node->get('profile')->value : NULL;
+  $site_profile = is_numeric($profile_value) ? \Drupal::entityTypeManager()->getStorage('hosting_package')->load($profile_value) : NULL;
+  $profile_name = $site_profile ? $site_profile->get('short_name')->value : $profile_value;
 
   $profile_platform_instances = hosting_package_instances_load(
-    array('r.type' => 'platform', 'n.nid' => $node->profile, 'h.status' => HOSTING_PLATFORM_ENABLED));
+    array('p.short_name' => $profile_name, 'h.status' => HOSTING_PLATFORM_ENABLED));
 
-  // In the list of possible targets, we also include install profiles on platforms that
-  // USED to be named the same as our current install profile. Such as the d6 -> d7 rename
-  // of the default profile to standard.
-  $profile_platform_instances = array_merge($profile_platform_instances, hosting_package_instances_load(
-    array('r.type' => 'platform', 'p.old_short_name' => $site_profile->short_name)));
-
-  $site_platform = node_load($node->platform);
+  $site_platform_id = $node instanceof \Drupal\Core\Entity\ContentEntityInterface ? $node->get('platform')->target_id : NULL;
+  $site_platform = $site_platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($site_platform_id) : NULL;
   $has_platform_available = FALSE;
 
   // Don't show the current platform if it's locked
-  if (!_hosting_platform_is_locked($node->platform)) {
-    $form[$node->platform]['target_platform'] = array(
+  if (!_hosting_platform_is_locked($site_platform_id)) {
+    $form[$site_platform_id]['target_platform'] = array(
       '#type' => 'radio',
-      '#title' => check_plain($site_platform->title),
-      "#return_value" => $node->platform,
-      "#default_value" => $node->platform,
+      '#title' => $site_platform ? \Drupal\Component\Utility\Html::escape($site_platform->label()) : '',
+      "#return_value" => $site_platform_id,
+      "#default_value" => $site_platform_id,
       '#description' => t("Current platform"),
       '#parents' => array('parameters', 'target_platform'),
     );
     $has_platform_available = TRUE;
   }
   foreach ($profile_platform_instances as $profile_instance) {
-    if (($profile_instance->rid != $node->platform) && (in_array($profile_instance->rid, $valid_options['platform']))) {
-      $status = hosting_package_comparison($node->nid, $profile_instance->iid);
+    if (($profile_instance->rid != $site_platform_id) && (in_array($profile_instance->rid, $valid_options['platform']))) {
+      $status = hosting_package_comparison($node->id(), $profile_instance->iid);
 
       $description = t("Upgrades: !upgrades, Warnings: !missing, Errors: !errors | <a href='!url' class='hosting-package-comparison-link'>Compare platforms</a>",
         array(
         '!upgrades' => $status['upgrade'],
         '!missing' => $status['missing'] + $status['downgrade'],
         '!errors' => $status['error'],
-        '!url' => url('hosting/migrate/compare/' . $node->nid . '/' . $profile_instance->iid),
+        '!url' => \Drupal\Core\Url::fromUserInput('/hosting/migrate/compare/' . $node->id() . '/' . $profile_instance->iid)->toString(),
       )
         );
-      $platform = node_load($profile_instance->rid);
+      $platform = \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($profile_instance->rid);
 
-      $form[$platform->nid]['target_platform'] = array(
+      $form[$platform->id()]['target_platform'] = array(
         '#type' => 'radio',
-        '#title' => check_plain($platform->title),
+        '#title' => \Drupal\Component\Utility\Html::escape($platform->label()),
         '#parents' => array('parameters', 'target_platform'),
-        "#return_value" => $platform->nid,
+        "#return_value" => $platform->id(),
         '#description' => $description,
       );
       if ($status['error']) {
-        $form[$platform->nid]['target_platform']['#disabled'] = TRUE;
+        $form[$platform->id()]['target_platform']['#disabled'] = TRUE;
       }
       $has_platform_available = TRUE;
     }
   }
   if (!$has_platform_available) {
-    form_set_error('parameters][target_platform', t("You have no platform available as target. Are they locked?"));
+    \Drupal::messenger()->addError(t("You have no platform available as target. Are they locked?"));
   }
   $form['#node'] = $node;
   return $form;
@@ -224,11 +197,11 @@ function hosting_migrate_comparison($current, $target) {
 
   $packages = array();
 
-  $result = db_query("SELECT c.nid, c.short_name,
+  $result = \Drupal::database()->query("SELECT c.id, c.short_name,
     c.version as current_version, t.version as target_version,
     c.version_code as current_version_code, t.version_code as target_version_code,
     c.schema_version as current_schema, t.schema_version as target_schema, c.status AS enabled
-    FROM $current_tbl c LEFT JOIN $target_tbl t ON c.nid = t.nid ORDER BY c.status DESC, short_name");
+    FROM $current_tbl c LEFT JOIN $target_tbl t ON c.id = t.id ORDER BY c.status DESC, short_name");
 
   while ($obj = $result->fetch()) {
     if (isset($obj->current_schema) && ((int) $obj->target_schema > 0) && ((int) $obj->current_schema > (int) $obj->target_schema)) {
@@ -244,10 +217,10 @@ function hosting_migrate_comparison($current, $target) {
     else {
       $obj->status = 'same';
     }
-    $packages[$obj->nid] = $obj;
+    $packages[$obj->id] = $obj;
   }
 
-  return theme("hosting_migrate_comparison", array('packages' => $packages));
+  return \Drupal::service('theme.manager')->render("hosting_migrate_comparison", array('packages' => $packages));
 }
 
 function _hosting_migrate_version_display($version, $schema = NULL, $status = NULL) {
@@ -288,6 +261,75 @@ function theme_hosting_migrate_comparison($variables) {
     );
   }
   $options['attributes']['class'] = 'hosting-migrate-comparison-return';
-  $link = l(t('Go back'), 'node/' . arg(3) . '/site_migrate', $options);
-  return "<div id='hosting-package-comparison'>" . $link . theme('table', array('header' => $headers, 'rows' => $rows)) . $link . "</div>";
+  $current_platform = \Drupal::routeMatch()->getRawParameter('current');
+  $link = \Drupal\Core\Link::fromTextAndUrl(t('Go back'), \Drupal\Core\Url::fromUserInput('/hosting_confirm/platform/' . $current_platform . '/platform_migrate', $options))->toString();
+  return "<div id='hosting-package-comparison'>" . $link . \Drupal::service('theme.manager')->render('table', array('header' => $headers, 'rows' => $rows)) . $link . "</div>";
+}
+
+function _hosting_migrate_get_target_profile_name($task) {
+  $profile_value = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('profile') ? $task->ref->get('profile')->value : NULL;
+  $profile = is_numeric($profile_value) ? \Drupal::entityTypeManager()->getStorage('hosting_package')->load($profile_value) : NULL;
+  $profile_name = $profile ? $profile->get('short_name')->value : $profile_value;
+
+  // get the profile instance we are migrating to.
+  $profile_instance = hosting_package_instance_load(array(
+    'i.rid' => $task->task_args['target_platform'],
+    'p.short_name' => $profile_name,
+  ));
+
+  return $profile_instance;
+}
+
+/**
+ * Implements hook_post_hosting_migrate_task().
+ */
+function hosting_migrate_post_hosting_migrate_task($task, $data) {
+  if (hosting_entity_task_scope($task->ref) == 'site') {
+    $target = $task->task_args['target_platform'];
+    $site = $task->ref;
+
+    if (hosting_site_get_domain($site->label()) != hosting_site_get_domain($task->task_args['new_uri'])) {
+      $site->set('label', hosting_site_clean_domain($task->task_args['new_uri']));
+      hosting_context_register($site->id(), hosting_site_get_domain($site->label()));
+    }
+
+    $db_server_id = $site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('db_server') ? $site->get('db_server')->target_id : NULL;
+    if ($db_server_id != $task->task_args['new_db_server']) {
+      $site->set('db_server', $task->task_args['new_db_server']);
+    }
+    if ($site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('db_name')) {
+      $site->set('db_name', $data['context']['db_name']);
+    }
+
+    $profile = hosting_package_instance_load(array(
+      'i.rid' => $target,
+      'p.short_name' => $data['context']['profile'],
+    ));
+    if ($profile) {
+      if ($site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('profile')) {
+        $site->set('profile', $profile->short_name);
+      }
+    }
+
+    if ($site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('verified')) {
+      $site->set('verified', REQUEST_TIME);
+    }
+    $site->no_verify = TRUE;
+    if ($site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('platform')) {
+      $site->set('platform', $target);
+    }
+    $site->save();
+
+    $task->ref = $site;
+
+    //do the package synching
+    $context = $data['context'];
+    $packages = $context['packages'];
+    hosting_package_sync($packages);
+    hosting_package_instance_sync($task->ref->id(), hosting_entity_task_scope($task->ref), $packages);
+
+    // Record the backup created during migrate.
+    $task->task_args['description'] = t('Pre-migration backup');
+    hosting_site_post_hosting_backup_task($task, $data);
+  }
 }

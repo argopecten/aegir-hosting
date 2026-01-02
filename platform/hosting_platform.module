@@ -26,78 +26,66 @@ define('HOSTING_PLATFORM_QUEUED', 0);
 define('HOSTING_PLATFORM_ENABLED', 1);
 
 /**
- * Implements hook_menu().
+ * Minimum supported Drupal major version for platforms.
  */
-function hosting_platform_menu() {
-  $items = array();
-
-  $items['hosting/platforms/list'] = array(
-    'title' => 'List',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => -10,
-  );
-
-  $items['hosting/platforms/add'] = array(
-    'title' => 'Add platform',
-    'type' => MENU_LOCAL_TASK,
-    'page callback' => 'drupal_goto',
-    'page arguments' => array('node/add/platform'),
-    'access callback' => 'node_access',
-    'access arguments' => array('create', 'platform'),
-  );
-
-  $items['node/%node/platform-edit'] = array(
-    'title' => 'Edit Platform',
-    'page callback' => 'hosting_platform_edit_form_on_site_page',
-    'page arguments' => array(1),
-    'access callback' => 'hosting_platform_edit_form_on_site_page_access',
-    'access arguments' => array('update', 1),
-    'weight' => 0,
-    'type' => MENU_LOCAL_TASK,
-    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
-    'file' => 'node.pages.inc',
-    'file path' => drupal_get_path('module', 'node'),
-  );
-
-  return $items;
-}
+define('HOSTING_PLATFORM_MINIMUM_DRUPAL_MAJOR', 8);
 
 /**
- * Implements hook_node_info().
- */
-function hosting_platform_node_info() {
-  $types["platform"] = array(
-    "type" => 'platform',
-    "name" => 'Platform',
-    'base' => 'hosting_platform',
-    "has_title" => TRUE,
-    "title_label" => t('Name'),
-    "description" => hosting_node_help("platform"),
-    "has_body" => 0,
-    "body_label" => '',
-    "min_word_count" => 0,
-  );
-
-  return $types;
-}
-
-/**
- * Page callback for node/%node/platform-edit
+ * Parse the major version number from a Drupal version string.
  *
- * Wrapper for node_page_edit, for the "Edit Platform" tab.
+ * @param string $version
+ *   Version string like "11.0.0" or "8.x-1.2".
+ *
+ * @return int|null
+ *   Major version, or NULL when unknown.
+ */
+function hosting_platform_major_version($version) {
+  if (!is_string($version) || $version === '') {
+    return NULL;
+  }
+  if (preg_match('/^(\\d+)/', $version, $matches)) {
+    return (int) $matches[1];
+  }
+  return NULL;
+}
+
+/**
+ * Determine if a platform release version is supported.
+ *
+ * @param string $version
+ *   Version string for the platform.
+ *
+ * @return bool
+ *   TRUE when supported or unknown, FALSE when below minimum.
+ */
+function hosting_platform_version_supported($version) {
+  $major = hosting_platform_major_version($version);
+  if ($major === NULL) {
+    return TRUE;
+  }
+  return $major >= HOSTING_PLATFORM_MINIMUM_DRUPAL_MAJOR;
+}
+
+/**
+ * Page callback for the "Edit Platform" tab on a site.
  */
 function hosting_platform_edit_form_on_site_page($site) {
-  $platform = node_load($site->platform);
-  return node_page_edit($platform);
+  $platform_id = $site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('platform') ? $site->get('platform')->target_id : NULL;
+  $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+  if (!$platform) {
+    return array('#markup' => t('Platform not found.'));
+  }
+  return \Drupal::service('entity.form_builder')->getForm($platform, 'edit');
 }
 
 /**
- * Wrapper for node_page_edit, for the "Edit Platform" tab.
+ * Access callback for the "Edit Platform" tab on a site.
  */
 function hosting_platform_edit_form_on_site_page_access($op, $site) {
-  if ($site->type == 'site') {
-    $platform = node_load($site->platform);
-    return node_access($op, $platform);
+  if (hosting_entity_task_scope($site) == 'site') {
+    $platform_id = $site instanceof \Drupal\Core\Entity\ContentEntityInterface && $site->hasField('platform') ? $site->get('platform')->target_id : NULL;
+    $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+    return $platform ? $platform->access($op) : FALSE;
   }
 }
 
@@ -171,41 +159,13 @@ function hosting_platform_permission() {
 }
 
 /**
- * Implements hook_node_access().
- */
-function hosting_platform_node_access($node, $op, $account) {
-  if (hosting_feature('client') && $op != 'create') {
-    // We rely on hosting_client_node_grants() instead of global configuration.
-    return NODE_ACCESS_IGNORE;
-  }
-
-  $type = is_string($node) ? $node : $node->type;
-  if ($type != 'platform' ) {
-    return NODE_ACCESS_IGNORE;
-  }
-
-  switch ($op) {
-    case 'create':
-      return user_access('create platform', $account);
-
-    case 'update':
-      return user_access('edit platform', $account);
-
-    case 'delete':
-      return user_access('delete platform', $account);
-
-    case 'view':
-      return user_access('view platform', $account);
-  }
-}
-
-/**
  * Callback for platform verify action.
  *
  * @see: hosting_task_action_info().
  */
 function hosting_platform_verify_action($node) {
-  hosting_add_task($node->nid, 'verify');
+  $platform_id = hosting_entity_id($node);
+  hosting_add_task($platform_id, 'verify');
 }
 
 /**
@@ -214,7 +174,8 @@ function hosting_platform_verify_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_platform_lock_action($node) {
-  hosting_add_task($node->nid, 'lock');
+  $platform_id = hosting_entity_id($node);
+  hosting_add_task($platform_id, 'lock');
 }
 
 /**
@@ -223,7 +184,8 @@ function hosting_platform_lock_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_platform_unlock_action($node) {
-  hosting_add_task($node->nid, 'unlock');
+  $platform_id = hosting_entity_id($node);
+  hosting_add_task($platform_id, 'unlock');
 }
 
 /**
@@ -232,7 +194,8 @@ function hosting_platform_unlock_action($node) {
  * @see: hosting_task_action_info().
  */
 function hosting_platform_delete_action($node) {
-  hosting_add_task($node->nid, 'delete');
+  $platform_id = hosting_entity_id($node);
+  hosting_add_task($platform_id, 'delete');
 }
 
 /**
@@ -255,32 +218,26 @@ function _hosting_get_platforms($web_server = 0, $enabled_only = FALSE) {
 
   // Set the query parameters.
   $parameters = array(
-    ':type' => 'platform',
-    ':nstatus' => 1, //@todo: remove magic number?
     ':hstatus' => HOSTING_PLATFORM_DELETED,
     ':web_server' => $web_server,
   );
 
   // Add another filter to return only enabled sites is requested.
-  $enabled_text = $enabled_only ? "AND h.status <> :disabled" : '';
+  $enabled_text = $enabled_only ? "AND status <> :disabled" : '';
   if ($enabled_only) {
     $parameters[':disabled'] = HOSTING_PLATFORM_LOCKED;
   }
 
-  $result = db_query("SELECT n.nid, n.title
-                      FROM {node} n
-                      LEFT JOIN {hosting_platform} h
-                      ON n.nid = h.nid
-                      WHERE n.type = :type
-                      AND n.status = :nstatus
-                      AND h.status <> :hstatus
-                      AND (h.web_server = :web_server OR :web_server = 0)
+  $result = \Drupal::database()->query("SELECT id, label
+                      FROM {hosting_platform}
+                      WHERE status <> :hstatus
+                      AND (web_server = :web_server OR :web_server = 0)
                       $enabled_text
-                      ORDER BY n.title
-                     ", $parameters
+                      ORDER BY label",
+                      $parameters
                    );
   while ($platform = $result->fetch()) {
-    $return[$platform->nid] = $platform->title;
+    $return[$platform->id] = $platform->label;
   }
   return $return;
 }
@@ -292,25 +249,7 @@ function _hosting_get_platforms($web_server = 0, $enabled_only = FALSE) {
  *   _hosting_get_platforms() now has an $enabled_only parameter.
  */
 function _hosting_get_enabled_platforms() {
-  $return = array();
-  $result = db_query("SELECT n.nid, n.title
-                      FROM {node} n
-                      LEFT JOIN {hosting_platform} h
-                      ON n.nid = h.nid
-                      WHERE n.type = :n.type
-                      AND n.status = :n.status
-                      AND h.status <> :h.status
-                      ORDER BY n.title
-                     ", array(
-                       ':n.type' => 'platform',
-                       ':n.status' => 1, //@todo: remove magic number?
-                       ':h.status' => HOSTING_PLATFORM_LOCKED,
-                     )
-                   );
-  while ($platform = $result->fetch()) {
-    $return[$platform->nid] = $platform->title;
-  }
-  return $return;
+  return _hosting_get_platforms(0, TRUE);
 }
 
 /**
@@ -318,22 +257,16 @@ function _hosting_get_enabled_platforms() {
  */
 function _hosting_get_locked_platforms() {
   $return = array();
-  $result = db_query("SELECT n.nid, n.title
-                      FROM {node} n
-                      LEFT JOIN {hosting_platform} h
-                      ON n.nid = h.nid
-                      WHERE n.type = :type
-                      AND n.status = :nstatus
-                      AND h.status = :hstatus
-                      ORDER BY n.title
-                     ", array(
-                       ':type' => 'platform',
-                       ':nstatus' => NODE_PUBLISHED,
-                       ':hstatus' => HOSTING_PLATFORM_LOCKED,
-                     )
+  $result = \Drupal::database()->query("SELECT id, label
+                      FROM {hosting_platform}
+                      WHERE status = :hstatus
+                      ORDER BY label",
+                      array(
+                        ':hstatus' => HOSTING_PLATFORM_LOCKED,
+                      )
                    );
   while ($platform = $result->fetch()) {
-    $return[$platform->nid] = $platform->title;
+    $return[$platform->id] = $platform->label;
   }
   return $return;
 }
@@ -351,149 +284,136 @@ function _hosting_platform_is_locked($node) {
 }
 
 /**
- * Implements hook_form().
+ * Legacy wrapper to build a hosting_platform form section.
  */
-function hosting_platform_form(&$node) {
-  $type = node_type_get_type($node);
-  $form['title'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Name'),
-    '#required' => TRUE,
-    '#description' => t('Choose a unique descriptive name for your platform. You very likely want this to be something like "Drupal 7.21".'),
-    '#size' => 40,
-    '#default_value' => $node->title,
-    '#maxlength' => 255,
-  );
-
-  // Allow editing if the node is in creation, or if wasn't verified correctly
-  // *and* we're not using a makefile. The reason why we don't allow editing
-  // the path if the makefile was specified is that there's the possibility
-  // that the platform path was actually created when the node was saved the
-  // first time and we have cruft lying around to cleanup.
-  if (!isset($node->nid) || (!$node->verified && empty($node->makefile))) {
-    $base_path = variable_get('hosting_platform_base_path', '/var/aegir/platforms/');
-    $default_path = '';
-    $field_prefix = $base_path;
-    if (isset($node->publish_path)) {
-      // Strip the $base_path, since we prepend it in a validation handler.
-      // This enforces platform publishing under the defined base path, even if
-      // an error allows the path to be edited again.
-      if (strpos($node->publish_path, $base_path) === 0) {
-        $default_path = substr($node->publish_path, strlen($base_path));
-      }
-      else {
-        // If publish path is not inside /var/aegir/platforms, use that as the default path and remove the field prefix.
-        $default_path = $node->publish_path;
-        $field_prefix = '';
-      }
-    }
-
-    $form['publish_path'] = array(
-      '#type' => 'machine_name',
-      '#machine_name' =>  array(
-        'exists' => 'hosting_platform_path_exists',
-        'source' => array('title'),
-        'label' => t('Publish path'),
-        'standalone' => TRUE,
-        'replace_pattern' => '[^a-z0-9_\.\-\/]+',
-        'field_prefix' => variable_get('hosting_platform_base_path', '/var/aegir/platforms/'),
-      ),
-      '#title' => t('Publish path'),
-      '#weight' => -5,
-      '#required' => TRUE,
-      '#description' => t('The absolute path on the filesystem where the sites will be hosted. This needs to be created manually and initialized before your platform works properly. It also needs to be a unique path not already in use by a platform on any server.<br />For example, run the following shell commands:<pre>%commands</pre>Your publish path is the absolute path to the directory that gets created.<br />Alternatively, you can specify a makefile below, and the platform will be created automatically if the path specified here does not exist.<br />You are still required to enter the absolute path above, as it will be treated as the target directory by the makefile.', array('%commands' => "cd /var/aegir/platforms\ndrush dl drupal\n")),
-      '#size' => 40,
-      '#default_value' => $default_path,
-      '#maxlength' => 255,
-      '#field_prefix' => $field_prefix,
-      '#element_validate' => array(
-        'hosting_platform_form_publish_path_validate',
-      ),
-    );
+function hosting_platform_form(&$node, &$form_state) {
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_platform') {
+    $node = \Drupal::entityTypeManager()->getStorage('hosting_platform')->create();
+  }
+  $form['#entity'] = $node;
+  $form['#node'] = $node;
+  if (is_object($form_state) && method_exists($form_state, 'set')) {
+    $form_state->set('node', $node);
   }
   else {
-    // Display it.
-    $form['info']['publish_path'] = array(
-      '#type' => 'item',
-      '#title' => t('Publish path'),
-      '#markup' => $node->publish_path,
-    );
-    // Send it on form submission.
-    $form['publish_path'] = array(
-      '#type' => 'hidden',
-      '#value' => hosting_path_normalize($node->publish_path),
-    );
+    $form_state['node'] = $node;
   }
 
-  $form['frommakefile'] = array(
-    '#type' => 'fieldset',
-    '#tree' => TRUE,
-    '#title' => t('Deploy from makefile'),
-    '#collapsible' => TRUE,
-    '#description' => t('You may deploy this platform from a makefile.'),
-    '#weight' => -1,
-  );
-
-  $form['frommakefile']['makefile'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Makefile'),
-    '#description' => t('The absolute path on the filesystem or public URL of a makefile that will be used to create the platform in the directory specified above. If the directory already exists, this file will be ignored.'),
-    '#size' => 40,
-    '#default_value' => isset($node->makefile) ? $node->makefile : NULL,
-    '#maxlength' => 255,
-  );
-
-  $form['frommakefile']['make_working_copy'] = array(
-    '#type' => 'radios',
-    '#title' => t('Drush make option'),
-    '#default_value' => isset($node->make_working_copy) ? $node->make_working_copy : 0,
-    '#options' => array(
-      0 => t('Normal - Discards SCM files'),
-      1 => t('Working copy - preserves SCM files'),
-    ),
-  );
-
-  $form['#after_build'][] = 'hosting_platform_form_platform_after_build';
-
-  $servers = hosting_get_servers('http');
-  if (count($servers) > 1) {
-    $form['web_server'] = array(
-      '#type' => 'radios',
-      '#title' => t('Web server'),
-      '#description' => t('The web server the sites will be hosted on.'),
-      '#options' => $servers,
-      '#default_value' => isset($node->web_server) ? $node->web_server : HOSTING_DEFAULT_WEB_SERVER,
-    );
-  }
-  else {
-    reset($servers);
-    $form['web_server'] = array(
-      '#type' => 'hidden',
-      '#value' => key($servers),
-    );
-  }
-
-  foreach (array('verified', 'platform_status') as $extra_attribute) {
-    $form["$extra_attribute"] = array(
-      '#type' => 'value',
-      '#value' => isset($node->$extra_attribute) ? $node->$extra_attribute : NULL,
-    );
-  }
+  $form_display = \Drupal::service('entity_display.repository')->getFormDisplay('hosting_platform', 'default');
+  $form_display->buildForm($node, $form, $form_state);
+  hosting_platform_apply_form_overrides($form, $form_state, $node);
 
   return $form;
 }
 
 /**
- * After build callback for the hosting_platform_form.
+ * Fetch a form widget element for a field.
  */
-function hosting_platform_form_platform_after_build($form) {
+function &hosting_platform_form_get_widget_element(array &$form, $field_name, array $value_keys) {
+  $null = NULL;
+  if (!isset($form[$field_name]['widget'][0])) {
+    return $null;
+  }
+  foreach ($value_keys as $key) {
+    if (isset($form[$field_name]['widget'][0][$key])) {
+      return $form[$field_name]['widget'][0][$key];
+    }
+  }
+  return $null;
+}
 
-  drupal_add_js(drupal_get_path('module', 'hosting_platform') . '/hosting_platform.js');
+/**
+ * Apply dynamic overrides to the platform form.
+ */
+function hosting_platform_apply_form_overrides(array &$form, &$form_state, $node) {
+  if (!$node instanceof \Drupal\Core\Entity\ContentEntityInterface || $node->getEntityTypeId() !== 'hosting_platform') {
+    return;
+  }
 
-  $form['frommakefile']['makefile']['#attributes']['class'][] = ' hosting-platform-working-copy-source';
-  $form['frommakefile']['make_working_copy']['#attributes']['class'][] = ' hosting-platform-working-copy-target';
+  if (isset($form['actions']['delete']) && hosting_entity_status($node, 'platform') !== HOSTING_PLATFORM_DELETED) {
+    $form['actions']['delete']['#type'] = 'hidden';
+  }
 
-  return $form;
+  $platform_id = hosting_entity_id($node);
+  $verified = $node->hasField('verified') ? (int) $node->get('verified')->value : (isset($node->verified) ? (int) $node->verified : 0);
+  $editable = (!$platform_id || !$verified);
+
+  $base_path = \Drupal::config('hosting_platform.settings')->get('hosting_platform_base_path') ?? '/var/aegir/platforms/';
+  $field_prefix = $base_path;
+  $default_path = '';
+  $publish_value = $node->hasField('publish_path') ? $node->get('publish_path')->value : (isset($node->publish_path) ? $node->publish_path : '');
+  if ($publish_value) {
+    if (strpos($publish_value, $base_path) === 0) {
+      $default_path = substr($publish_value, strlen($base_path));
+    }
+    else {
+      $default_path = $publish_value;
+      $field_prefix = '';
+    }
+  }
+
+  $publish_element = &hosting_platform_form_get_widget_element($form, 'publish_path', array('value'));
+  if ($publish_element !== NULL) {
+    $publish_element['#type'] = 'textfield';
+    $publish_element['#size'] = 40;
+    $publish_element['#maxlength'] = 255;
+    $publish_element['#default_value'] = $default_path;
+    $publish_element['#field_prefix'] = $field_prefix;
+    if ($editable) {
+      $publish_element['#element_validate'][] = 'hosting_platform_form_publish_path_validate';
+    }
+    else {
+      $publish_element['#disabled'] = TRUE;
+    }
+    $form['publish_path']['#weight'] = -5;
+  }
+
+  $servers = hosting_get_servers('http');
+  $web_server_element = &hosting_platform_form_get_widget_element($form, 'web_server', array('target_id'));
+  if ($web_server_element !== NULL) {
+    if (count($servers) > 1) {
+      $default_server = $node->hasField('web_server') ? $node->get('web_server')->target_id : (isset($node->web_server) ? $node->web_server : NULL);
+      if (!$default_server || !isset($servers[$default_server])) {
+        $default_server = HOSTING_DEFAULT_WEB_SERVER;
+        if (!isset($servers[$default_server])) {
+          $default_server = key($servers);
+        }
+      }
+      $web_server_element['#options'] = $servers;
+      $web_server_element['#default_value'] = $default_server;
+      $web_server_element['#type'] = 'radios';
+    }
+    else {
+      reset($servers);
+      $default_server = key($servers);
+      $web_server_element['#type'] = 'hidden';
+      $web_server_element['#value'] = $default_server;
+      $web_server_element['#default_value'] = $default_server;
+    }
+  }
+
+  foreach (array('verified', 'platform_status') as $extra_attribute) {
+    if (!isset($form[$extra_attribute])) {
+      $form[$extra_attribute] = array(
+        '#type' => 'value',
+        '#value' => isset($node->$extra_attribute) ? $node->$extra_attribute : NULL,
+      );
+    }
+  }
+}
+
+/**
+ * Resolve an error name for a platform field widget.
+ */
+function hosting_platform_form_error_name(array $form, $field_name, array $value_keys) {
+  if (isset($form[$field_name]['widget'][0])) {
+    foreach ($value_keys as $key) {
+      if (isset($form[$field_name]['widget'][0][$key]['#parents'])) {
+        return implode('][', $form[$field_name]['widget'][0][$key]['#parents']);
+      }
+    }
+  }
+  return $field_name;
 }
 
 /**
@@ -501,20 +421,23 @@ function hosting_platform_form_platform_after_build($form) {
  */
 function hosting_platform_form_alter(&$form, &$form_state, $form_id) {
   switch ($form_id) {
-    case 'platform_node_form':
+    case 'hosting_platform_form':
+    case 'hosting_platform_add_form':
+    case 'hosting_platform_edit_form':
       // Remove delete button from platform edit form,
       // unless the platform's already been deleted via the Delete task.
-      $node = $form['#node'];
-      if (isset($node->platform_status) && $node->platform_status !== HOSTING_PLATFORM_DELETED) {
+      $node = $form['#entity'] ?? $form['#node'] ?? NULL;
+      if (isset($form['actions']['delete']) && $node && hosting_entity_status($node, 'platform') !== HOSTING_PLATFORM_DELETED) {
         $form['actions']['delete']['#type'] = 'hidden';
       }
       break;
     case 'hosting_settings':
+      $config = \Drupal::config('hosting_platform.settings');
       $form['hosting_platform_base_path'] = array(
         '#type' => 'textfield',
         '#title' => t('Platform base path'),
         '#description' => t('The base path for your platforms, i.e. /var/aegir/platforms/'),
-        '#default_value' => variable_get('hosting_platform_base_path', '/var/aegir/platforms/'),
+        '#default_value' => $config->get('hosting_platform_base_path') ?? '/var/aegir/platforms/',
       );
       break;
   }
@@ -524,23 +447,21 @@ function hosting_platform_form_alter(&$form, &$form_state, $form_id) {
  * Implements hook_insert().
  */
 function hosting_platform_insert($node) {
+  $platform_id = hosting_entity_id($node);
   if (!isset($node->no_verify)) {
-    hosting_add_task($node->nid, 'verify');
+    hosting_add_task($platform_id, 'verify');
   }
-  $id = db_insert('hosting_platform')
+  \Drupal::database()->update('hosting_platform')
     ->fields(array(
-      'vid' => $node->vid,
-      'nid' => $node->nid,
       'publish_path' => hosting_path_normalize($node->publish_path),
-      'makefile' => isset($node->makefile) ? $node->makefile : (isset($node->frommakefile['makefile']) ? $node->frommakefile['makefile'] : ''),
       'verified' => isset($node->verified) ? $node->verified : 0,
       'web_server' => $node->web_server,
-      'status' => isset($node->platform_status) ? $node->platform_status : 0,
-      'make_working_copy' => isset($node->frommakefile['make_working_copy']) ? $node->frommakefile['make_working_copy'] : 0,
+      'status' => isset($node->platform_status) ? $node->platform_status : (isset($node->status) ? $node->status : 0),
     ))
+    ->condition('id', $platform_id)
     ->execute();
   if (!isset($node->old_vid)) {
-    hosting_context_register($node->nid, 'platform_' . preg_replace("/[!\W]/", "", $node->title));
+    hosting_context_register(hosting_entity_id($node), 'platform_' . preg_replace("/[!\W]/", "", hosting_entity_label($node)));
   }
 }
 
@@ -559,88 +480,85 @@ function hosting_platform_update($node) {
     if ($node->platform_status == HOSTING_PLATFORM_DELETED) {
       $node->no_verify = TRUE;
     }
-    db_update('hosting_platform')
+    \Drupal::database()->update('hosting_platform')
       ->fields(array(
         'publish_path' => hosting_path_normalize($node->publish_path),
-        'makefile' => isset($node->makefile) ? $node->makefile : (isset($node->frommakefile['makefile']) ? $node->frommakefile['makefile'] : ''),
         'web_server' => $node->web_server,
         'verified' => $node->verified,
         'status' => $node->platform_status,
-        'make_working_copy' => isset($node->frommakefile['make_working_copy']) ? $node->frommakefile['make_working_copy'] : $node->make_working_copy,
       ))
-      ->condition('nid', $node->nid)
+      ->condition('id', hosting_entity_id($node))
       ->execute();
   }
   if (!isset($node->no_verify)) {
-    hosting_add_task($node->nid, 'verify');
+    hosting_add_task(hosting_entity_id($node), 'verify');
   }
-}
-
-/**
- * Implements hook_nodeapi_TYPE_OP().
- */
-function hosting_nodeapi_platform_delete_revision(&$node) {
-  db_delete('hosting_platform')
-    ->condition('vid', $node->vid)
-    ->execute();
 }
 
 /**
  * Implements hook_delete().
  */
 function hosting_platform_delete($node) {
-  db_delete('hosting_platform')
-    ->condition('nid', $node->nid)
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_platform') {
+    return;
+  }
+  $platform_id = $node->id();
+  \Drupal::database()->delete('hosting_package_instance')
+    ->condition('rid', $platform_id)
     ->execute();
-  db_delete('hosting_package_instance')
-    ->condition('rid', $node->nid)
-    ->execute();
-
-  hosting_context_delete($node->nid);
-  hosting_task_delete_related_tasks($node->nid);
-  $result = db_query("SELECT distinct nid FROM {hosting_site} WHERE platform = :platform", array(':platform' => $node->nid));
-  while ($nid = $result->fetch()) {
-    node_delete($nid->nid);
+  hosting_context_delete($platform_id);
+  hosting_task_delete_related_tasks($platform_id);
+  $site_ids = \Drupal::database()->query("SELECT id FROM {hosting_site} WHERE platform = :platform", array(':platform' => $platform_id))->fetchCol();
+  if ($site_ids) {
+    $storage = \Drupal::entityTypeManager()->getStorage('hosting_site');
+    $storage->delete($storage->loadMultiple($site_ids));
   }
 }
 
 /**
  * Element validator for publish_path. Only run when field is editable.
- * (New node or failed validation and no makefile.)
  */
-function hosting_platform_form_publish_path_validate($element, &$form_state, &$form) {
-  $platform_base_path = variable_get('hosting_platform_base_path', '/var/aegir/platforms/');
+function hosting_platform_form_publish_path_validate($element, \Drupal\Core\Form\FormStateInterface $form_state, &$form) {
+  $platform_base_path = \Drupal::config('hosting_platform.settings')->get('hosting_platform_base_path') ?? '/var/aegir/platforms/';
   
   // If platform path doesn't already begin with the basepath and does not begin with a "/", append default base path.
   if (strpos($element['#value'], $platform_base_path) !== 0 && strpos($element['#value'], '/') !== 0) {
     $full_path = hosting_path_normalize($platform_base_path . '/' . $element['#value']);
-    form_set_value($element, $full_path, $form_state);
+    $form_state->setValueForElement($element, $full_path);
   }
 }
 
 /**
  * Implements hook_validate().
  */
-function hosting_platform_validate($node, &$form) {
+function hosting_platform_validate($node, &$form, $form_state = NULL) {
+  $set_error = function ($name, $message) use ($form_state) {
+    if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+      $form_state->setErrorByName($name, $message);
+    }
+    else {
+      \Drupal::messenger()->addError($message);
+    }
+  };
   if ($node->op != t('Delete')) {
 
     // Make sure the platform name is unique, to avoid context clashes.
-    $sql = "SELECT n.title as name
-              FROM {hosting_platform} h
-        INNER JOIN {node} n ON n.nid = h.nid
-             WHERE n.title = :title
-               AND h.status >= :status";
+    $sql = "SELECT label as name
+              FROM {hosting_platform}
+             WHERE label = :title
+               AND status >= :status";
     $args = array(
-      ':title' => $node->title,
+      ':title' => hosting_entity_label($node),
       ':status' => HOSTING_PLATFORM_QUEUED,
     );
-    if (!is_null($node->nid)) {
-      $sql .= " AND n.nid <> :nid";
-      $args[':nid'] = $node->nid;
+    $platform_id = hosting_entity_id($node);
+    if (!is_null($platform_id)) {
+      $sql .= " AND id <> :id";
+      $args[':id'] = $platform_id;
     }
-    $result = db_query($sql, $args)->fetch();
+    $result = \Drupal::database()->query($sql, $args)->fetch();
     if ($result) {
-      form_set_error('title',
+      $set_error(hosting_platform_form_error_name($form, 'label', array('value')),
         t('Platform name %name is already defined. Platform names must be unique across all servers.',
         array('%name' => $result->name))
       );
@@ -648,23 +566,24 @@ function hosting_platform_validate($node, &$form) {
 
     // Make sure the path is unique. Remote servers can't have the same path to
     // a platform that is in use by another server.
-    $exists = hosting_platform_path_exists($node->publish_path, isset($node->nid) ? $node->nid : NULL);
+    $exists = hosting_platform_path_exists($node->publish_path, hosting_entity_id($node));
     if ($exists) {
       // Ensure that the visitor has access to view the other platform.
-      if (($other_node = node_load($exists->nid)) && node_access('view', $other_node)) {
-        form_set_error('publish_path', t('Publish path is already in use by platform: <a href="@link" target="_blank">%name</a>. Platform paths must be unique across all servers.',
+      $other_platform = \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($exists->id);
+      if ($other_platform && $other_platform->access('view')) {
+        $set_error(hosting_platform_form_error_name($form, 'publish_path', array('value')), t('Publish path is already in use by platform: <a href="@link" target="_blank">%name</a>. Platform paths must be unique across all servers.',
           array(
-            '%name' => $other_node->title,
-            '@link' => url('node/' . $exists->nid),
+            '%name' => $other_platform->label(),
+            '@link' => $other_platform->toUrl('canonical')->toString(),
           )));
       }
       else {
-        form_set_error('publish_path', t('Publish path is already in use by another platform. Platform paths must be unique across all servers.'));
+        $set_error(hosting_platform_form_error_name($form, 'publish_path', array('value')), t('Publish path is already in use by another platform. Platform paths must be unique across all servers.'));
       }
     }
 
     if (is_null($node->web_server)) {
-      form_set_error('web_server', t('Platform needs to be associated with a webserver. Make sure you have a verified webserver on this Aegir install!'));
+      $set_error(hosting_platform_form_error_name($form, 'web_server', array('target_id')), t('Platform needs to be associated with a webserver. Make sure you have a verified webserver on this Aegir install!'));
     }
   }
 }
@@ -679,18 +598,17 @@ function hosting_platform_validate($node, &$form) {
  *
  * @return mixed
  *   Either a result object or FALSE.
- *   The result object will contain the nid and name of the platform that uses
+ *   The result object will contain the id and name of the platform that uses
  *   the path.
  */
 function hosting_platform_path_exists($path, $exclude_nid = NULL) {
-  $query = db_select('hosting_platform', 'h')
+  $query = \Drupal::database()->select('hosting_platform', 'h')
     ->condition('h.publish_path', hosting_path_normalize($path))
     ->condition('h.status', HOSTING_PLATFORM_LOCKED, '>=');
-  $query->innerJoin('node', 'n', 'n.nid = h.nid');
-  $query->addField('n', 'title', 'name');
-  $query->addField('n', 'nid');
+  $query->addField('h', 'label', 'name');
+  $query->addField('h', 'id');
   if (!is_null($exclude_nid)) {
-    $query->condition('h.nid', $exclude_nid, '<>');
+    $query->condition('h.id', $exclude_nid, '<>');
   }
   return $query->execute()->fetch();
 }
@@ -699,43 +617,26 @@ function hosting_platform_path_exists($path, $exclude_nid = NULL) {
  * Implements hook_load().
  */
 function hosting_platform_load($nodes) {
-  foreach ($nodes as $nid => &$node) {
-    $additions = db_query('SELECT publish_path, makefile, verified, web_server, status AS platform_status, make_working_copy FROM {hosting_platform} WHERE vid = :vid', array(':vid' => $node->vid))->fetch();
+  foreach ($nodes as $entity_id => &$node) {
+    $platform_id = hosting_entity_id($node);
+    $additions = \Drupal::database()->query('SELECT publish_path, verified, web_server, status AS platform_status FROM {hosting_platform} WHERE id = :id', array(':id' => $platform_id))->fetch();
     // Avoid PHP 5.4 warning when platform doesn't exist yet.
     // See: https://drupal.org/node/1940378
     $additions = $additions ? $additions : new stdClass();
-    $iid = db_query("SELECT iid
+    $iid = \Drupal::database()->query("SELECT iid
                      FROM {hosting_package_instance} i
                      LEFT JOIN {hosting_package} p
-                     ON p.nid=i.package_id
+                     ON p.id=i.package_id
                      WHERE p.package_type = :package_type
                      AND i.rid = :rid",
                      array(
                        ':package_type' => 'platform',
-                       ':rid' => $node->nid,
+                       ':rid' => $platform_id,
                      )
                    )->fetchField();
 
-    if (empty($node->frommakefile)) {
-      $node->frommakefile = array('makefile' => '', 'make_working_copy' => 0);
-    }
-    if (!empty($additions->makefile)) {
-      $node->frommakefile['makefile'] = $additions->makefile;
-    }
-    if (!empty($additions->make_working_copy)) {
-      $node->frommakefile['make_working_copy'] = $additions->make_working_copy;
-    }
-
     $additions->release = hosting_package_instance_load($iid);
-    $additions->profiles = hosting_get_profiles($node->nid, 'short_name');
-
-    if (hosting_feature('client')) {
-      $result = db_query("SELECT cid FROM {hosting_platform_client_access} WHERE pid = :pid", array(':pid' => $node->nid));
-
-      foreach ($result as $record) {
-        $additions->clients[$record->cid] = $record->cid;
-      }
-    }
+    $additions->profiles = hosting_get_profiles($platform_id, 'short_name');
 
     foreach ($additions as $property => &$value) {
       $node->$property = is_numeric($value) ? (int) $value : $value;
@@ -744,13 +645,47 @@ function hosting_platform_load($nodes) {
 }
 
 /**
+ * Return client IDs with access to a platform.
+ *
+ * @param object $platform
+ *   The platform entity or legacy object.
+ *
+ * @return int[]
+ *   Client entity IDs with access to this platform.
+ */
+function hosting_platform_client_ids($platform) {
+  if ($platform instanceof \Drupal\Core\Entity\EntityInterface && $platform->getEntityTypeId() === 'hosting_platform' && $platform->hasField('clients')) {
+    $values = $platform->get('clients')->getValue();
+    if (!empty($values)) {
+      return array_values(array_map(static function ($item) {
+        return (int) $item['target_id'];
+      }, $values));
+    }
+    return array();
+  }
+
+  $platform_id = hosting_entity_id($platform);
+  if (!$platform_id) {
+    return array();
+  }
+
+  $result = \Drupal::database()->query("SELECT cid FROM {hosting_platform_client_access} WHERE pid = :pid", array(':pid' => $platform_id));
+  $client_ids = array();
+  foreach ($result as $record) {
+    $client_ids[] = (int) $record->cid;
+  }
+
+  return $client_ids;
+}
+
+/**
  * Menu wildcard loader callback.
  *
- * Loads a hosting_platform node.
+ * Loads a hosting_platform entity.
  * @see hosting_task_menu()
  *
  * @param int $arg
- *   Node's numeric nid
+ *   Platform entity ID
  *
  * @return bool|object
  *   A platforn node object or FALSE.
@@ -759,12 +694,7 @@ function hosting_platform_wildcard_load($arg) {
   if (!is_numeric($arg)) {
     return FALSE;
   }
-  if ($node = node_load($arg)) {
-    if ($node->type == 'platform') {
-      return $node;
-    }
-  }
-  return FALSE;
+  return \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($arg) ?: FALSE;
 }
 
 /**
@@ -804,40 +734,24 @@ function hosting_platform_view($node, $view_mode, $langcode = NULL) {
     '#markup' => _hosting_platform_status($node->platform_status),
   );
 
-  if ($node->makefile) {
-    $node->content['info']['makefile'] = array(
-      '#type' => 'item',
-      '#title' => t('Drush makefile'),
-      '#markup' => (preg_match('/^http|^ftp/', $node->makefile)) ? l(t('makefile'), $node->makefile) : filter_xss($node->makefile),
-    );
-  }
-
   if ($node->release) {
     $release = sprintf("%s %s", $node->release->title, $node->release->version);
     $node->content['info']['release'] = array(
       '#type' => 'item',
       '#title' => t('Release'),
-      '#markup' => _hosting_node_link($node->release->nid, $release),
+      '#markup' => _hosting_node_link(hosting_entity_id($node->release), $release),
       '#weight' => -6,
     );
   }
 
   // Task list.
-  if ($view_mode == 'full' && $node->nid) {
-    $node->content['tasks_view'] = array(
-      '#type' => 'item',
-      '#markup' => hosting_task_table($node),
-      '#prefix' => '<div id="hosting-task-list">',
-      '#suffix' => '</div>',
-      '#weight' => 9,
-    );
-    $settings['hostingTaskRefresh'] = array(
-      'nid' => $node->nid,
-      'changed' => $node->changed,
-    );
-    drupal_add_js($settings, array('type' => 'setting', 'scope' => JS_DEFAULT));
-
-    drupal_add_js(drupal_get_path('module', 'hosting_task') . '/hosting_task.js');
+  if ($view_mode == 'full' && hosting_entity_id($node)) {
+    $tasks_view = hosting_task_table($node);
+    $tasks_view['#prefix'] = '<div id="hosting-task-list">';
+    $tasks_view['#suffix'] = '</div>';
+    $tasks_view['#weight'] = 9;
+    $node->content['tasks_view'] = $tasks_view;
+    $node->content['#attached']['library'][] = 'hosting_task/task';
   }
 
   return $node;
@@ -874,11 +788,6 @@ function hosting_platform_entity_property_info() {
       'description' => t('The location on disk of the platform.'),
       'type' => 'text',
     ),
-    'makefile' => array(
-      'label' => t('Makefile'),
-      'description' => t('The makefile used to generate this platform (if any).'),
-      'type' => 'text',
-    ),
     'verified' => array(
       'label' => t('Last verification time'),
       'description' => t('The date and time of the last verification of the platform.'),
@@ -895,11 +804,6 @@ function hosting_platform_entity_property_info() {
       'description' => t('The status of the platform. E.g. enabled, deleted, etc.'),
       'type' => 'integer',
       'options list' => '_hosting_platform_status_codes_labels',
-    ),
-    'make_working_copy' => array(
-      'label' => t('Drush make - Working copy'),
-      'description' => t('Determines if the working-copy option is used when using Drush make to generate the codebase for the platform.'),
-      'type' => 'boolean',
     ),
   );
   if (hosting_feature('client')) {
@@ -963,7 +867,11 @@ function _hosting_platform_status_codes_labels() {
 function _hosting_platform_status($status) {
   static $labels;
   $labels = _hosting_platform_status_codes();
-  return is_object($status) ? $labels[$status->platform_status]['label'] : $labels[$status]['label'];
+  if (is_object($status)) {
+    $value = $status->platform_status ?? $status->status ?? HOSTING_PLATFORM_QUEUED;
+    return $labels[$value]['label'];
+  }
+  return $labels[$status]['label'];
 }
 
 /**
@@ -971,25 +879,86 @@ function _hosting_platform_status($status) {
  */
 function hosting_platform_hosting_summary() {
   $summary = array();
-  if (user_access('view locked platforms')) {
+  if (\Drupal::currentUser()->hasPermission('view locked platforms')) {
     $platforms = _hosting_get_platforms();
-    $summary['platforms'] = theme('item_list', array('items' => array_map('_hosting_node_link', array_keys($platforms)), 'title' => t('Platforms')));
+    $summary['platforms'] = \Drupal::service('theme.manager')->render('item_list', array('items' => array_map('_hosting_node_link', array_keys($platforms)), 'title' => t('Platforms')));
   }
-  elseif (user_access('view platform')) {
+  elseif (\Drupal::currentUser()->hasPermission('view platform')) {
     $platforms = _hosting_get_enabled_platforms();
-    $summary['platforms'] = theme('item_list', array('items' => array_map('_hosting_node_link', array_keys($platforms)), 'title' => t('Platforms')));
+    $summary['platforms'] = \Drupal::service('theme.manager')->render('item_list', array('items' => array_map('_hosting_node_link', array_keys($platforms)), 'title' => t('Platforms')));
   }
   return $summary;
 }
 
 /**
- * Implements hook_views_api().
+ * Implements hook_views_data().
  */
-function hosting_platform_views_api() {
-  return array(
-    'api' => 3,
-    'path' => drupal_get_path('module', 'hosting_platform') . '/includes/views',
-  );
+function hosting_platform_views_data() {
+  $data = [];
+
+  $data['hosting_platform']['table'] = [
+    'group' => t('Hosting Platform'),
+    'title' => t('Platform'),
+    'entity type' => 'hosting_platform',
+  ];
+
+  $data['hosting_platform']['web_server'] = [
+    'title' => t('Web Server'),
+    'help' => t('Relate a platform to the web server it is hosted on.'),
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_server',
+      'base field' => 'id',
+      'label' => t('Web server'),
+    ],
+  ];
+
+  $data['hosting_platform']['publish_path'] = [
+    'title' => t('Publish Path'),
+    'help' => t('The path on the server where this platform is installed.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_platform']['release'] = [
+    'title' => t('Release'),
+    'help' => t('The release name.'),
+    'real field' => 'id',
+    'field' => [
+      'id' => 'hosting_platform_release',
+    ],
+  ];
+
+  $data['hosting_platform']['verified'] = [
+    'title' => t('Verified Date'),
+    'help' => t('The most recent date that this platform was verified.'),
+    'field' => [
+      'id' => 'date',
+    ],
+  ];
+
+  $data['hosting_platform']['status'] = [
+    'title' => t('Status'),
+    'help' => t('The current state of this platform.'),
+    'field' => [
+      'id' => 'hosting_platform_status',
+    ],
+    'filter' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_platform']['sites'] = [
+    'title' => t('Sites'),
+    'help' => t('The number of sites in this platform.'),
+    'real field' => 'id',
+    'field' => [
+      'id' => 'hosting_platform_sites',
+    ],
+  ];
+
+  return $data;
 }
 
 /**
@@ -998,7 +967,11 @@ function hosting_platform_views_api() {
 function _hosting_platform_list_class($status) {
   static $labels;
   $labels = _hosting_platform_status_codes();
-  return is_object($status) ? $labels[$status->platform_status]['class'] : $labels[$status]['class'];
+  if (is_object($status)) {
+    $value = $status->platform_status ?? $status->status ?? HOSTING_PLATFORM_QUEUED;
+    return $labels[$value]['class'];
+  }
+  return $labels[$status]['class'];
 }
 
 /**
@@ -1006,6 +979,177 @@ function _hosting_platform_list_class($status) {
  */
 function hosting_platform_hosting_task_guarded_nodes() {
   return array(
-    hosting_get_hostmaster_platform_nid()
+    hosting_get_hostmaster_platform_id()
   );
+}
+
+/**
+ * Implements hook_hosting_TASK_OBJECT_context_options().
+ */
+function hosting_hosting_platform_context_options(&$task) {
+  $task->context_options['server'] = '@server_master';
+  $web_server_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface ? $task->ref->get('web_server')->target_id : $task->ref->web_server;
+  $task->context_options['web_server'] = hosting_context_name($web_server_id);
+  // Trim the path so we dont pass extra spaces.
+  $publish_path = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface ? $task->ref->get('publish_path')->value : $task->ref->publish_path;
+  $task->context_options['root'] = trim($publish_path ?? '', " ");
+}
+
+/**
+ * Implements hook_drush_context_import().
+ */
+function hosting_platform_drush_context_import($context, &$node) {
+  if ($context->type == 'platform') {
+    $label = str_replace('platform_', '', trim($context->name, '@'));
+    if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      if (!$node->label()) {
+        $node->set('label', $label);
+      }
+      $node->set('web_server', hosting_context_entity_id($context->web_server));
+      $node->set('publish_path', $context->root);
+    }
+    else {
+      if (!isset($node->label)) {
+        $node->label = $label;
+      }
+      $node->web_server = hosting_context_entity_id($context->web_server);
+      $node->publish_path = $context->root;
+    }
+  }
+}
+
+/**
+ * Implements hook_post_hosting_verify_task().
+ *
+ * Sets the platform verified timestamp, to discren when it was verified.
+ * Imports all the profiles and modules into package and package release nodes.
+ */
+function hosting_platform_post_hosting_verify_task($task, $data) {
+  $node = $task->ref;
+  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface && $node->getEntityTypeId() === 'hosting_platform') {
+    $context = $data['context'];
+    $packages = $context['packages'];
+
+    // Lock platforms by default.
+    if ((int) $node->get('verified')->value === 0 && (\Drupal::config('hosting.settings')->get('hosting_lock_platforms_by_default') ?? FALSE)) {
+      $node->set('status', HOSTING_PLATFORM_LOCKED);
+    }
+
+    // Set verified flag on platform, to let it know it has been checked.
+    $node->set('verified', REQUEST_TIME);
+
+    /**
+     * If we are verifying a Locked platform (i.e if the publish_path has changed),
+     * don't reset the status to Enabled. We don't need to check whether a platform
+     * is deleted here for the same reason, because we don't allow a deleted platform
+     * to be reverified.
+     */
+    if (hosting_entity_status($node, 'platform') != HOSTING_PLATFORM_LOCKED) {
+      $node->set('status', HOSTING_PLATFORM_ENABLED);
+    }
+    $node->no_verify = TRUE;
+    // Save the platform being verified.
+    $node->save();
+
+    hosting_package_sync($packages['base']);
+    hosting_package_sync($packages['sites-all']);
+    hosting_package_instance_sync($node->id(), 'platform', $packages['base'], $packages['sites-all']);
+
+    $platform_release = hosting_package_instance_load(array(
+      'i.rid' => $node->id(),
+      'p.package_type' => 'platform',
+    ));
+    if (!empty($platform_release->version) && !hosting_platform_version_supported($platform_release->version)) {
+      $major = hosting_platform_major_version($platform_release->version);
+      drush_log(dt('Platform @name uses Drupal @version, which is below the minimum supported major version (@min).', array(
+        '@name' => $node->label(),
+        '@version' => $platform_release->version,
+        '@min' => HOSTING_PLATFORM_MINIMUM_DRUPAL_MAJOR,
+      )), 'error');
+      $node->set('status', HOSTING_PLATFORM_LOCKED);
+      $node->set('verified', 0);
+      $node->no_verify = TRUE;
+      $node->save();
+      return;
+    }
+
+    foreach ($context['profiles'] as $profile) {
+      hosting_package_sync($packages['profiles'][$profile]);
+      $instance = hosting_package_instance_load(
+        array('p.short_name' => $profile, 'i.rid' => $node->id(), 'p.package_type' => 'profile'));
+      hosting_package_instance_sync($instance->iid, $instance->package_type, $packages['base'], $packages['profiles'][$profile], $packages['sites-all']);
+
+      // @todo : package instances of modules to profiles. <-- huh?
+    }
+
+    // If configured to do so, import all sites found on this platform.
+    if (\Drupal::config('hosting.settings')->get('hosting_platform_automatic_site_import') ?? TRUE) {
+      foreach ($context['sites'] as $url) {
+        if (hosting_domain_allowed($url)) {
+          // Import any sites that have not been created yet.
+          $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->create(array(
+            'label' => $url,
+            'status' => HOSTING_SITE_QUEUED,
+            'platform' => $node->id(),
+            'client' => HOSTING_DEFAULT_CLIENT,
+            'db_server' => HOSTING_DEFAULT_DB_SERVER,
+          ));
+          $site->import = TRUE;
+          $site->save();
+          drush_log(dt("Imported existing site !domain", array('!domain' => _hosting_node_link($site->id()))));
+          hosting_package_instance_sync($site->id(), 'site', $packages['base']);
+        }
+      }
+    }
+  }
+
+  // When a server is verified, queue up a verify task for every platform.
+  if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->getEntityTypeId() === 'hosting_server') {
+    $platform_ids = \Drupal::entityTypeManager()->getStorage('hosting_platform')->getQuery()
+      ->condition('status', HOSTING_PLATFORM_DELETED, '<>')
+      ->condition('web_server', $task->ref->id())
+      ->execute();
+    foreach ($platform_ids as $platform_id) {
+      hosting_add_task($platform_id, 'verify');
+    }
+  }
+}
+
+/**
+ * Implements hook_hosting_post_delete().
+ */
+function hosting_platform_post_hosting_delete_task($task, $data) {
+  if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->getEntityTypeId() === 'hosting_platform') {
+    $task->ref->set('status', HOSTING_PLATFORM_DELETED);
+    $task->ref->no_verify = TRUE;
+    $task->ref->save();
+    hosting_context_delete($task->ref->id());
+  }
+  \Drupal::database()->delete('hosting_platform_client_access')
+    ->condition('pid', hosting_entity_id($task->ref))
+    ->execute();
+  // Clean up package instances.
+  hosting_package_instance_sync($task->ref->id(), 'platform');
+}
+
+/**
+ * Implements hook_post_hosting_lock_task().
+ */
+function hosting_platform_post_hosting_lock_task($task, $data) {
+  if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->getEntityTypeId() === 'hosting_platform') {
+    $task->ref->set('status', HOSTING_PLATFORM_LOCKED);
+    $task->ref->no_verify = TRUE;
+    $task->ref->save();
+  }
+}
+
+/**
+ * Implements hook_post_hosting_unlock_task().
+ */
+function hosting_platform_post_hosting_unlock_task($task, $data) {
+  if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->getEntityTypeId() === 'hosting_platform') {
+    $task->ref->set('status', HOSTING_PLATFORM_ENABLED);
+    $task->ref->no_verify = TRUE;
+    $task->ref->save();
+  }
 }

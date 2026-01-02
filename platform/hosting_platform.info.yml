@@ -1,0 +1,9 @@
+name: 'Platforms'
+type: module
+description: 'Allow Hostmaster to keep track of multiple instances of Drupal.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'
+  - 'hosting_package'
+  - 'hosting_server'

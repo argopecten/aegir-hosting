@@ -1,0 +1,14 @@
+hosting_signup.form:
+  path: '/hosting/signup'
+  defaults:
+    _form: '\Drupal\hosting_signup\Form\HostingSignupForm'
+    _title: 'Sign up for a site'
+  requirements:
+    _permission: 'access hosting signup form'
+
+hosting_signup.thanks:
+  path: '/hosting/signup/thanks'
+  defaults:
+    _controller: '\Drupal\hosting_signup\Controller\HostingSignupController::thanks'
+  requirements:
+    _permission: 'access hosting signup form'

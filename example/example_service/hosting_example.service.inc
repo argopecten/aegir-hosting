@@ -61,18 +61,19 @@ class hostingService_example_basic extends hostingService_example {
 
 
   /**
-   * node operations
+   * Entity operations.
    */
 
   /**
    * Load associated values for the service.
    *
-   * In this example we will use the variable system to retrieve values.
+   * In this example we will use state storage to retrieve values.
    */
   function load() {
     // REMEMBER TO CALL THE PARENT!
     parent::load();
-    $this->example_field = variable_get('hosting_example_field_' . $this->server->nid, 'default value');
+    $key = 'hosting_example_field_' . $this->getServerId();
+    $this->example_field = \Drupal::state()->get($key, 'default value');
 
     /**
      * Although this example does not have it's own tables, we provide some utitilty functions
@@ -82,7 +83,7 @@ class hostingService_example_basic extends hostingService_example {
      * results automatically, instead of iterating through the results ourself.
      */
 
-    // $this->mergeData("SELECT example_field FROM {hosting_example} WHERE vid = :vid", array(':vid' => $this->server->vid));
+    // $this->mergeData("SELECT example_field FROM {hosting_example} WHERE server_id = :server_id", array(':server_id' => $this->server->id()));
   }
 
   /**
@@ -139,7 +140,12 @@ class hostingService_example_basic extends hostingService_example {
     parent::validate($node, $form, $form_state);
 
     if (sizeof($this->example_field) > 30) {
-      form_set_error('example_field', t("The example string must not be longer than 30 characters"));
+      if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+        $form_state->setErrorByName('example_field', t("The example string must not be longer than 30 characters"));
+      }
+      else {
+        \Drupal::messenger()->addError(t("The example string must not be longer than 30 characters"));
+      }
     }
   }
 
@@ -152,14 +158,15 @@ class hostingService_example_basic extends hostingService_example {
    * been set as properties of $this object, so we now need to
    * save them.
    *
-   * For this example we will use the variables table, but you should
+   * For this example we will use state storage, but you should
    * create your own tables with an install file and hook_schema.
    */
   function insert() {
     // REMEMBER TO CALL THE PARENT!
     parent::insert();
 
-    variable_set('hosting_example_field_' . $this->server->nid, $this->example_field);
+    $key = 'hosting_example_field_' . $this->getServerId();
+    \Drupal::state()->set($key, $this->example_field);
   }
 
   /**
@@ -167,14 +174,15 @@ class hostingService_example_basic extends hostingService_example {
    *
    * Called by hosting_server_hook_update().
    *
-   * For this example we will use the variables table, but you should
+   * For this example we will use state storage, but you should
    * create your own tables with an install file and hook_schema.
    */
   function update() {
     // REMEMBER TO CALL THE PARENT!
     parent::update();
 
-    variable_set('hosting_example_field_' . $this->server->nid, $this->example_field);
+    $key = 'hosting_example_field_' . $this->getServerId();
+    \Drupal::state()->set($key, $this->example_field);
   }
 
   /**
@@ -184,7 +192,8 @@ class hostingService_example_basic extends hostingService_example {
     // REMEMBER TO CALL THE PARENT!
     parent::delete();
 
-    variable_del('hosting_example_field_' . $this->server->nid);
+    $key = 'hosting_example_field_' . $this->getServerId();
+    \Drupal::state()->delete($key);
   }
 
   /**

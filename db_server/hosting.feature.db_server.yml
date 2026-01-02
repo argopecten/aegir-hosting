@@ -1,0 +1,6 @@
+db_server:
+  title: 'Database servers'
+  description: 'API to provide support for database servers.'
+  status: required
+  module: hosting_db_server
+  group: required

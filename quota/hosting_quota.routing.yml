@@ -1,0 +1,23 @@
+hosting_quota.admin:
+  path: '/admin/hosting/quotas'
+  defaults:
+    _controller: '\Drupal\hosting_quota\Controller\HostingQuotaController::clientList'
+    _title: 'Quotas'
+  requirements:
+    _permission: 'view all quotas'
+
+hosting_quota.list:
+  path: '/admin/hosting/quotas/list'
+  defaults:
+    _controller: '\Drupal\hosting_quota\Controller\HostingQuotaController::clientList'
+    _title: 'List Client Quotas'
+  requirements:
+    _permission: 'view all quotas'
+
+hosting_quota.defaults:
+  path: '/admin/hosting/quotas/defaults'
+  defaults:
+    _form: '\Drupal\hosting_quota\Form\HostingQuotaDefaultsForm'
+    _title: 'Default Client Quotas'
+  requirements:
+    _permission: 'edit all quotas'

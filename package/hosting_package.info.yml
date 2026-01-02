@@ -1,0 +1,7 @@
+name: 'Package management'
+type: module
+description: 'Allow Hostmaster to keep track which packages have been installed.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'

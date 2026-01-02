@@ -1,0 +1,5 @@
+services:
+  hosting_queued.commands:
+    class: Drupal\hosting_queued\Commands\HostingQueuedCommands
+    tags:
+      - { name: drush.command }

@@ -1,0 +1,29 @@
+uuid: 5c891184-e925-475c-8961-0256dd7ee8bb
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_alias
+    - views
+  config:
+    - views.view.hosting_alias_list
+  theme:
+    - eldir
+id: views_block__hosting_alias_list_block_1
+theme: eldir
+region: content_bottom
+weight: 0
+provider: null
+plugin: 'views_block:hosting_alias_list-block_1'
+settings:
+  id: 'views_block:hosting_alias_list-block_1'
+  label: ''
+  label_display: '0'
+  provider: views
+  views_label: ''
+  items_per_page: none
+visibility:
+  request_path:
+    id: request_path
+    pages: "/hosting/site/*"
+    negate: false

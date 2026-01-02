@@ -50,10 +50,10 @@ class hostingService_db_mysql extends hostingService_db {
 
   function insert() {
     parent::insert();
-    $id = db_insert('hosting_db_server')
+    $server_id = $this->getServerId();
+    $id = \Drupal::database()->insert('hosting_db_server')
       ->fields(array(
-        'vid' => $this->server->vid,
-        'nid' => $this->server->nid,
+        'server_id' => $server_id,
         'db_user' => $this->db_user,
         'db_passwd' => $this->db_passwd,
       ))
@@ -73,22 +73,25 @@ class hostingService_db_mysql extends hostingService_db {
 
   function delete_revision() {
     parent::delete_revision();
-    db_delete('hosting_db_server')
-      ->condition('vid', $this->server->vid)
+    $server_id = $this->getServerId();
+    \Drupal::database()->delete('hosting_db_server')
+      ->condition('server_id', $server_id)
       ->execute();
   }
 
   function delete() {
     parent::delete();
-    db_delete('hosting_db_server')
-      ->condition('nid', $this->server->nid)
+    $server_id = $this->getServerId();
+    \Drupal::database()->delete('hosting_db_server')
+      ->condition('server_id', $server_id)
       ->execute();
   }
 
 
   function load() {
     parent::load();
-    $this->mergeData('SELECT db_user, db_passwd FROM {hosting_db_server} WHERE vid = :vid', array(':vid' => $this->server->vid));
+    $server_id = $this->getServerId();
+    $this->mergeData('SELECT db_user, db_passwd FROM {hosting_db_server} WHERE server_id = :server_id', array(':server_id' => $server_id));
   }
 
   function view(&$render) {
@@ -119,7 +122,7 @@ class hostingService_db_mysql extends hostingService_db {
     parent::context_options($task_type, $ref_type, $task);
 
     // Provide context_options for verification and writing out to an alias
-    $task->context_options['master_db'] = 'mysql' . '://' . urlencode($this->db_user) . ':' . urlencode($this->db_passwd) . '@' . $this->server->title;
+    $task->context_options['master_db'] = 'mysql' . '://' . urlencode($this->db_user) . ':' . urlencode($this->db_passwd) . '@' . $this->server->label;
   }
 
   public function context_import($context) {

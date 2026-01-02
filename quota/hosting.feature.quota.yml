@@ -1,0 +1,15 @@
+quota:
+  title: 'Quotas'
+  description: 'Provides the ability to define and allocate quotas for various resources to clients.'
+  status: disabled
+  module: hosting_quota
+  group: experimental
+  role_permissions:
+    'aegir administrator':
+      - 'bypass all quotas'
+    'aegir account manager':
+      - 'edit all quotas'
+      - 'view all quotas'
+      - 'view own quota'
+    'aegir client':
+      - 'view own quota'

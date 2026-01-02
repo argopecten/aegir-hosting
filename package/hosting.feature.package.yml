@@ -1,0 +1,12 @@
+package:
+  title: 'Package management'
+  description: 'Keep track of which packages have been installed, and their versions.'
+  status: required
+  module: hosting_package
+  entity_type: hosting_package
+  group: required
+  role_permissions:
+    'aegir platform manager':
+      - 'view package'
+    'aegir client':
+      - 'view package'

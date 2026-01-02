@@ -1,0 +1,25 @@
+uuid: 0f5d1a5c-3e18-4c09-89f2-dc9de9476595
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_task
+    - views
+  config:
+    - views.view.hosting_task_list
+  theme:
+    - eldir
+id: views_block__hosting_task_list_block
+theme: eldir
+region: sidebar_first
+weight: 0
+provider: null
+plugin: 'views_block:hosting_task_list-block'
+settings:
+  id: 'views_block:hosting_task_list-block'
+  label: ''
+  label_display: '0'
+  provider: views
+  views_label: ''
+  items_per_page: none
+visibility: {  }

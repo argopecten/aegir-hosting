@@ -11,12 +11,7 @@
 function hosting_server_data_schema() {
   $schema['hosting_server_data'] = array(
     'fields' => array(
-      'vid' => array(
-        'type' => 'int',
-        'not null' => TRUE,
-        'default' => 0,
-      ),
-      'nid' => array(
+      'server_id' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
@@ -29,7 +24,7 @@ function hosting_server_data_schema() {
       ),
     ),
     'indexes' => array(
-      'vid' => array('vid'),
+      'server_id' => array('server_id'),
     ),
   );
 

@@ -1,0 +1,7 @@
+name: 'Server'
+type: module
+description: 'Allow hostmaster to configure servers.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'

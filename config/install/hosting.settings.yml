@@ -1,0 +1,22 @@
+hosting_default_client: 1
+hosting_default_db_server: 4
+hosting_default_web_server: 3
+hosting_admin_client: 1
+hosting_own_db_server: 2
+hosting_own_web_server: 3
+hosting_own_platform: 6
+hosting_default_profile: 'standard'
+hosting_ignore_default_profiles: false
+hosting_lock_platforms_by_default: false
+hosting_platform_automatic_site_import: true
+hosting_require_disable_before_delete: true
+hosting_delete_force: false
+hosting_cron_use_backend: true
+hosting_task_logs_types_display:
+  - error
+  - warning
+  - info
+  - message
+  - ok
+  - status
+  - success

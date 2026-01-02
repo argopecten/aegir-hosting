@@ -1,0 +1,11 @@
+hosting_ssl.certs:
+  path: '/hosting/server/{hosting_server}/ssl'
+  defaults:
+    _controller: '\Drupal\hosting_ssl\Controller\HostingSslController::certList'
+    _title: 'Certificates'
+  requirements:
+    _permission: 'view server'
+  options:
+    parameters:
+      hosting_server:
+        type: entity:hosting_server

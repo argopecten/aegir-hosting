@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_package
+name: 'Package'
+type: 'package'
+description: 'Hosting package.'
+help: ''
+new_revision: false
+preview_mode: 0
+display_submitted: false

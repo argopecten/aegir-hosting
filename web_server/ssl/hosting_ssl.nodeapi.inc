@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * NodeAPI functions for the Hosting SSL module.
+ * SSL helper routines for hosting site entities.
  */
 
 /**
@@ -13,17 +13,22 @@ define('HOSTING_SSL_CUSTOM_KEY', 'null');
  * Form API code to extend the site form with SSL fields.
  */
 function hosting_ssl_site_form(&$form, &$form_state, $form_id) {
-  $node = $form['#node'];
+  $node = $form['#entity'] ?? $form['#node'] ?? NULL;
+  if (!$node) {
+    return;
+  }
 
-  $new_site = TRUE;
   $ssl_available = FALSE;
   // Only allow the user to modify these values when the platform is SSL enabled.
-  if (isset($node->nid)) {
-    $new_site = FALSE;
-    $platform = node_load($node->platform);
-    $server = node_load($platform->web_server);
+  $site_id = hosting_entity_id($node);
+  if ($site_id) {
+    $platform_id = $node instanceof \Drupal\Core\Entity\ContentEntityInterface ? $node->get('platform')->target_id : $node->platform;
+    $platform = $platform_id ? \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($platform_id) : NULL;
+    $server_id = $platform instanceof \Drupal\Core\Entity\ContentEntityInterface ? $platform->get('web_server')->target_id : (isset($platform->web_server) ? $platform->web_server : NULL);
+    $server = $server_id ? \Drupal::entityTypeManager()->getStorage('hosting_server')->load($server_id) : NULL;
 
-    if ($server->services['http']->ssl_enabled) {
+    $http_service = $server ? hosting_server_service($server, 'http') : NULL;
+    if ($http_service && $http_service->ssl_enabled) {
       $ssl_available = TRUE;
     }
   }
@@ -36,50 +41,80 @@ function hosting_ssl_site_form(&$form, &$form_state, $form_id) {
     return;
   }
 
-  _hosting_site_field($form, $node, 'hosting_ssl_wrapper', array(
-    '#type' => 'fieldset',
+  $form['hosting_ssl_wrapper'] = array(
+    '#type' => 'details',
     '#title' => t('SSL Settings'),
-    '#default_value' => NULL,
-  ), 'filter_xss', $ssl_available);
+    '#open' => TRUE,
+    '#weight' => 50,
+  );
 
-  _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_enabled', array(
+  $form['hosting_ssl_wrapper']['ssl_enabled'] = array(
     '#type' => 'radios',
     '#title' => t('Encryption'),
     '#options' => hosting_ssl_status_options(),
     '#description' => t('Enabling encryption will publish your site on both HTTP and HTTPS ports, allowing you to redirect users to the more secure version for certain pages that require the additional security. Requiring encryption will automatically redirect all unencrypted traffic to your HTTPS site.'),
     '#required' => TRUE,
-    '#default_value' => (isset($node->ssl_enabled)) ? $node->ssl_enabled : HOSTING_SSL_DISABLED,
-    '#access' => user_access('create ssl certificate'),
-  ), 'hosting_ssl_status_options', $ssl_available);
+    '#default_value' => isset($node->ssl_enabled) ? $node->ssl_enabled : HOSTING_SSL_DISABLED,
+    '#parents' => array('ssl_enabled'),
+    '#hosting_signup_prefix_skip' => TRUE,
+    '#access' => \Drupal::currentUser()->hasPermission('create ssl certificate'),
+  );
 
-  _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_key', array(
+  $client_id = NULL;
+  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface && $node->hasField('client')) {
+    $client_id = $node->get('client')->target_id;
+  }
+  elseif (isset($node->client)) {
+    $client_id = $node->client;
+  }
+
+  $form['hosting_ssl_wrapper']['ssl_key'] = array(
     '#type' => 'radios',
     '#title' => t('Encryption key'),
-    '#description' => t("Choose an existing SSL certificate. If you do not wish to use any of your existing certificates, you may choose to generate a new one."),
-    '#options' => hosting_ssl_get_keys(NULL, TRUE),
+    '#description' => t('Choose an existing SSL certificate. If you do not wish to use any of your existing certificates, you may choose to generate a new one.'),
+    '#options' => hosting_ssl_get_keys($client_id, TRUE),
     '#required' => TRUE,
     '#default_value' => (isset($node->ssl_key) && $node->ssl_key > 0) ? $node->ssl_key : HOSTING_SSL_CUSTOM_KEY,
-    '#access' => user_access('create ssl certificate'),
+    '#parents' => array('ssl_key'),
+    '#hosting_signup_prefix_skip' => TRUE,
+    '#access' => \Drupal::currentUser()->hasPermission('create ssl certificate'),
     '#states' => array(
       'visible' => array(
         ':input[name="ssl_enabled"]' => array('!value' => 0),
       ),
     ),
-  ), 'hosting_ssl_output_key', $ssl_available, !$new_site);
+  );
 
-  _hosting_site_field($form['hosting_ssl_wrapper'], $node, 'ssl_key_new', array(
+  $form['hosting_ssl_wrapper']['ssl_key_new'] = array(
     '#type' => 'textfield',
     '#title' => t('New encryption key'),
     '#description' => t("A name for the certificate, often relating to the domain name. This field should only contain lower case alpha-numeric and '_', '-' or '.' characters. If the SSL certificate is not found in config/ssl.d, Aegir will automatically generate a self-signed certificate for you. You can replace the generated with a properly signed version later. Any required intermediate certificates can be added in a file called config/ssl.d/&lt;name&gt;/openssl_chain.crt"),
     '#default_value' => '',
-    '#access' => user_access('create ssl certificate'),
+    '#parents' => array('ssl_key_new'),
+    '#hosting_signup_prefix_skip' => TRUE,
+    '#access' => \Drupal::currentUser()->hasPermission('create ssl certificate'),
     '#states' => array(
       'visible' => array(
         ':input[name="ssl_enabled"]' => array('!value' => 0),
         ':input[name="ssl_key"]' => array('value' => HOSTING_SSL_CUSTOM_KEY),
       ),
     ),
-  ), 'filter_xss', $ssl_available, FALSE);
+  );
+
+  $form['#validate'][] = 'hosting_ssl_site_form_validate';
+}
+
+/**
+ * Form validation handler for SSL site fields.
+ */
+function hosting_ssl_site_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  $entity = $form['#entity'] ?? $form['#node'] ?? NULL;
+  if (!$entity instanceof \Drupal\Core\Entity\ContentEntityInterface || $entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+
+  $node = hosting_site_build_validation_stub($form, $form_state, $entity);
+  hosting_ssl_site_validate($node, $form, $form_state);
 }
 
 /**
@@ -110,7 +145,7 @@ function hosting_ssl_hosting_site_options_alter(&$return, $node) {
     // the user has chosen to enter a new key
     if ($node->ssl_key == HOSTING_SSL_CUSTOM_KEY) {
       // default the new key to the site's domain name, after filtering.
-      $default = hosting_ssl_filter_key($node->title);
+      $default = hosting_ssl_filter_key(hosting_entity_label($node));
       $return['ssl_key_new'] = (!empty($default)) ? $default : TRUE;
     }
 
@@ -124,22 +159,29 @@ function hosting_ssl_hosting_site_options_alter(&$return, $node) {
 
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Add SSL info to the site view build.
  */
-function hosting_ssl_nodeapi_site_view(&$node, $teaser = FALSE) {
-  $node->content['info']['ssl_enabled'] = array(
+function hosting_ssl_site_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  $ssl_enabled = isset($entity->ssl_enabled) ? $entity->ssl_enabled : HOSTING_SSL_DISABLED;
+  $build['info']['ssl_enabled'] = array(
     '#type' => 'item',
     '#title' => t('Encryption'),
-    '#markup' => hosting_ssl_status_options((isset($node->ssl_enabled)) ? $node->ssl_enabled : HOSTING_SSL_DISABLED),
+    '#markup' => hosting_ssl_status_options($ssl_enabled),
     '#weight' => 6,
   );
 
-  if (isset($node->ssl_enabled) && $node->ssl_enabled == TRUE) {
-    $node->content['info']['ssl_key'] = array(
+  if (!empty($ssl_enabled)) {
+    $ssl_key = $entity->ssl_key ?? NULL;
+    $build['info']['ssl_key'] = array(
       '#type' => 'item',
       '#title' => t('Encryption key'),
-      '#markup' => hosting_ssl_output_key($node->ssl_key),
-      '#description' => hosting_ssl_get_key($node->ssl_key) ? t("This site is using SSL certificates located at %path.", array('%path' => sprintf("config/ssl.d/%s/", hosting_ssl_output_key($node->ssl_key)))) : t("(key deleted)"),
+      '#markup' => hosting_ssl_output_key($ssl_key),
+      '#description' => $ssl_key && hosting_ssl_get_key($ssl_key)
+        ? t("This site is using SSL certificates located at %path.", array('%path' => sprintf("config/ssl.d/%s/", hosting_ssl_output_key($ssl_key))))
+        : t("(key deleted)"),
       '#weight' => 7,
     );
   }
@@ -153,7 +195,7 @@ function hosting_ssl_get_key($cid) {
   static $cache = array();
 
   if (!isset($cache[$cid])) {
-    $cache[$cid] = db_query("SELECT ssl_key FROM {hosting_ssl_cert} WHERE cid = :cid", array(':cid' => $cid))->fetchField();
+    $cache[$cid] = \Drupal::database()->query("SELECT ssl_key FROM {hosting_ssl_cert} WHERE cid = :cid", array(':cid' => $cid))->fetchField();
   }
   return $cache[$cid];
 }
@@ -162,12 +204,12 @@ function hosting_ssl_get_key($cid) {
  * Get an Array of all IP's associated with an SSL certificate.
  */
 function hosting_ssl_get_ip($cid) {
-  $result = db_query("SELECT h.name AS server_name, ips.ip_address
+  $result = \Drupal::database()->query("SELECT h.name AS server_name, ips.ip_address
                         FROM {hosting_ssl_cert_ips} cert
                   INNER JOIN {hosting_ip_addresses} ips
                           ON cert.ip_address = ips.id
                   INNER JOIN {hosting_context} h
-                          ON h.nid = ips.nid
+                          ON h.entity_id = ips.server_id
                        WHERE cid = :cid",
                       array(':cid' => $cid));
   $ip_addresses = array();
@@ -213,36 +255,44 @@ function hosting_ssl_filter_key($key) {
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Validate SSL settings for a site.
  */
-function hosting_ssl_nodeapi_site_validate($node, &$form) {
+function hosting_ssl_site_validate($node, &$form, $form_state = NULL) {
+  $set_error = function ($name, $message) use ($form_state) {
+    if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+      $form_state->setErrorByName($name, $message);
+    }
+    else {
+      \Drupal::messenger()->addError($message);
+    }
+  };
   if (isset($node->ssl_enabled) && $node->ssl_enabled) {
     // TODO: find a way to avoid calling this function multiple times in hook_validate
     $valid_options = hosting_site_available_options($node);
 
     if ($node->ssl_key == HOSTING_SSL_CUSTOM_KEY) {
       if (!strlen($node->ssl_key_new)) {
-        form_set_error('ssl_key_new', t("The encryption key field is required to enable us to generate a new SSL certificate for your site."));
+        $set_error('ssl_key_new', t("The encryption key field is required to enable us to generate a new SSL certificate for your site."));
       }
       else {
         $key = hosting_ssl_filter_key($node->ssl_key_new);
 
         if (($node->ssl_key_new != $key) || !strlen($key)) {
-          form_set_error('ssl_key_new', t("The encryption key field should only contain lower case alpha-numeric and '_', '-' or '.' characters."));
+          $set_error('ssl_key_new', t("The encryption key field should only contain lower case alpha-numeric and '_', '-' or '.' characters."));
         }
 
         if (!ctype_alnum($key[0])) {
-          form_set_error('ssl_key_new', t("The encryption key field must start with an alpha-numeric character."));
+          $set_error('ssl_key_new', t("The encryption key field must start with an alpha-numeric character."));
         }
 
         if ($key == HOSTING_SSL_CUSTOM_KEY) {
-          form_set_error('ssl_key_new', t("This encryption key value is reserved for internal use, please choose another"));
+          $set_error('ssl_key_new', t("This encryption key value is reserved for internal use, please choose another"));
         }
       }
     }
     else {
       if (!in_array($node->ssl_key, $valid_options['ssl_key'])) {
-        form_set_error('ssl_key', t("You have chosen an invalid SSL key"));
+        $set_error('ssl_key', t("You have chosen an invalid SSL key"));
       }
     }
     // TODO, check that the server to host this site has ssl enabled.
@@ -255,9 +305,12 @@ function hosting_ssl_nodeapi_site_validate($node, &$form) {
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Prepare SSL fields before saving a site.
  */
-function hosting_ssl_nodeapi_site_presave(&$node) {
+function hosting_ssl_site_presave($node) {
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
   if (!isset($node->ssl_key)) {
     $node->ssl_key = HOSTING_SSL_CUSTOM_KEY;
   }
@@ -269,13 +322,16 @@ function hosting_ssl_nodeapi_site_presave(&$node) {
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Persist SSL settings after a site insert.
  */
-function hosting_ssl_nodeapi_site_insert($node) {
-  $id = db_insert('hosting_ssl_site')
+function hosting_ssl_site_insert($node) {
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  $site_id = hosting_entity_id($node);
+  $id = \Drupal::database()->insert('hosting_ssl_site')
     ->fields(array(
-      'vid' => $node->vid,
-      'nid' => $node->nid,
+      'site_id' => $site_id,
       'ssl_enabled' => $node->ssl_enabled,
       'ssl_key' => $node->ssl_key,
     ))
@@ -283,60 +339,76 @@ function hosting_ssl_nodeapi_site_insert($node) {
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Persist SSL settings after a site update.
  */
-function hosting_ssl_nodeapi_site_update($node) {
+function hosting_ssl_site_update($node) {
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  $site_id = hosting_entity_id($node);
   // check if an existing record is there
-  $result = db_query("SELECT ssl_enabled FROM {hosting_ssl_site} WHERE vid = :vid", array(':vid' => $node->vid));
+  $result = \Drupal::database()->query("SELECT ssl_enabled FROM {hosting_ssl_site} WHERE site_id = :site_id", array(':site_id' => $site_id));
   if (!($obj = $result->fetch())) {
-    hosting_ssl_nodeapi_site_insert($node);
+    hosting_ssl_site_insert($node);
   }
   else {
-    if ($node->site_status == HOSTING_SITE_DELETED || (!$node->ssl_enabled && $node->ssl_key != 0))  {
+    if (hosting_entity_status($node, 'site') == HOSTING_SITE_DELETED || (!$node->ssl_enabled && $node->ssl_key != 0))  {
       hosting_ssl_clean_keys($node);
     }
 
-    db_update('hosting_ssl_site')
+    \Drupal::database()->update('hosting_ssl_site')
       ->fields(array(
         'ssl_enabled' => $node->ssl_enabled,
         'ssl_key' => $node->ssl_key,
       ))
-      ->condition('vid', $node->vid)
+      ->condition('site_id', $site_id)
       ->execute();
   }
 }
 
 /**
- * Implements hook_node_load().
+ * Load SSL settings for hosting_site entities.
  */
-function hosting_ssl_node_load($nodes, $types) {
-  foreach ($nodes as $k => $node) {
-    $result = db_query("SELECT ssl_enabled, ssl_key FROM {hosting_ssl_site} WHERE vid = :vid",
-      array(':vid' => $node->vid)
+function hosting_ssl_site_load(array $entities) {
+  foreach ($entities as $entity) {
+    if (!$entity instanceof \Drupal\Core\Entity\EntityInterface || $entity->getEntityTypeId() !== 'hosting_site') {
+      continue;
+    }
+    $site_id = $entity->id();
+    $result = \Drupal::database()->query("SELECT ssl_enabled, ssl_key FROM {hosting_ssl_site} WHERE site_id = :site_id",
+      array(':site_id' => $site_id)
       )->fetchObject();
     if ($result) {
-      $nodes[$k]->ssl_enabled = $result->ssl_enabled;
-      $nodes[$k]->ssl_key = $result->ssl_key;
+      $entity->ssl_enabled = $result->ssl_enabled;
+      $entity->ssl_key = $result->ssl_key;
     }
   }
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Clean up SSL settings after a site delete.
  */
-function hosting_ssl_nodeapi_site_delete($node) {
+function hosting_ssl_site_delete($node) {
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  $site_id = hosting_entity_id($node);
   hosting_ssl_clean_keys($node);
-  db_delete('hosting_ssl_site')
-    ->condition('nid', $node->nid)
+  \Drupal::database()->delete('hosting_ssl_site')
+    ->condition('site_id', $site_id)
     ->execute();
 }
 
 /**
- * Implements hook_nodeapi_TYPE_OP().
+ * Clean up SSL settings for a deleted site revision.
  */
-function hosting_ssl_nodeapi_site_delete_revision($node) {
-  db_delete('hosting_ssl_site')
-    ->condition('vid', $node->vid)
+function hosting_ssl_site_delete_revision($node) {
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+  $site_id = hosting_entity_id($node);
+  \Drupal::database()->delete('hosting_ssl_site')
+    ->condition('site_id', $site_id)
     ->execute();
 }
 
@@ -353,24 +425,38 @@ function hosting_ssl_save_key($node) {
 
   if ($node->ssl_key == HOSTING_SSL_CUSTOM_KEY && !empty($node->ssl_key_new)) {
     $ssl_key = $node->ssl_key_new;
-    $result = db_query("SELECT * FROM {hosting_ssl_cert} WHERE ssl_key = :ssl_key", array(':ssl_key' => $ssl_key));
+    $result = \Drupal::database()->query("SELECT * FROM {hosting_ssl_cert} WHERE ssl_key = :ssl_key", array(':ssl_key' => $ssl_key));
     if ($obj = $result->fetch()) {
       // update
       if ($node->client != NULL) {
-        $obj->client = $client->nid;
+        $obj->client = hosting_entity_id($client);
       }
-      drupal_write_record("hosting_ssl_cert", $obj, 'cid');
-      $node->ssl_key = $obj->cid;
+      $fields = get_object_vars($obj);
+      $cid = $fields['cid'] ?? NULL;
+      unset($fields['cid']);
+      if ($cid !== NULL) {
+        \Drupal::database()->update('hosting_ssl_cert')
+          ->fields($fields)
+          ->condition('cid', $cid)
+          ->execute();
+        $node->ssl_key = $cid;
+      }
     }
     else {
       // insert
       $obj = new stdClass();
       $obj->ssl_key = $ssl_key;
-      $obj->client = $client->nid;
+      $obj->client = hosting_entity_id($client);
       $obj->status = 0;
-      drupal_write_record("hosting_ssl_cert", $obj);
+      $obj->cid = \Drupal::database()->insert('hosting_ssl_cert')
+        ->fields([
+          'ssl_key' => $obj->ssl_key,
+          'client' => $obj->client,
+          'status' => $obj->status,
+        ])
+        ->execute();
       if (!hosting_ip_allocate($obj, $node)) {
-        form_set_error('ssl_key_new', t("Unable to allocate IP address for certificate, assuming SNI (Server Name Indication) will work (incompatible with Safari and IE on Windows XP, Android 2.2, etc)."));
+        \Drupal::messenger()->addError(t("Unable to allocate IP address for certificate, assuming SNI (Server Name Indication) will work (incompatible with Safari and IE on Windows XP, Android 2.2, etc)."));
       }
       $node->ssl_key = $obj->cid;
     }
@@ -403,10 +489,10 @@ function hosting_ssl_get_keys($client = NULL, $ask_custom = FALSE) {
     $client = hosting_get_client($client);
     if ($client) {
       $query .= " WHERE client = :client";
-      $args[':client'] = $client->nid;
+      $args[':client'] = hosting_entity_id($client);
     }
   }
-  $result = db_query($query, $args);
+  $result = \Drupal::database()->query($query, $args);
 
   while ($obj = $result->fetchObject()) {
     if (strlen($obj->ssl_key)) {
@@ -424,33 +510,34 @@ function hosting_ssl_get_keys($client = NULL, $ask_custom = FALSE) {
  */
 function hosting_ssl_clean_keys($node) {
   // Check if there are still sites using this site's certificate.
-  if (!db_query("SELECT * FROM {hosting_ssl_site} siteA
+  if (!\Drupal::database()->query("SELECT * FROM {hosting_ssl_site} siteA
                    INNER JOIN {hosting_ssl_site} siteB ON siteA.ssl_key = siteB.ssl_key
-                   INNER JOIN {hosting_site} s ON s.nid = siteA.nid
-                     WHERE siteA.nid <> siteB.nid
+                   INNER JOIN {hosting_site} s ON s.id = siteA.site_id
+                     WHERE siteA.site_id <> siteB.site_id
                        AND (
                          siteA.ssl_enabled = :ssl_enabled
                          OR
                          siteA.ssl_enabled = :ssl_required
                        )
-                       AND siteB.nid = :siteB_nid;",
+                       AND siteB.site_id = :siteB_id;",
                  array(
                    ':ssl_enabled' => HOSTING_SSL_ENABLED,
                    ':ssl_required' => HOSTING_SSL_REQUIRED,
-                   ':siteB_nid' => $node->nid,
+                   ':siteB_id' => hosting_entity_id($node),
                  ))->fetchField()) {
     // We need to fetch the ssl_key field from the DB because the object comes
     // from the node edit, so it's gone.
-    $ssl_key = db_query('SELECT ssl_key FROM {hosting_ssl_site} WHERE nid = :nid',
+    $site_id = hosting_entity_id($node);
+    $ssl_key = \Drupal::database()->query('SELECT ssl_key FROM {hosting_ssl_site} WHERE site_id = :site_id',
       array(
-        ':nid' => $node->nid,
+        ':site_id' => $site_id,
       )
     )->fetchField();
-    drupal_set_message(t("cleaning up unused certificate %cert associated with site %site", array('%cert' => $ssl_key, '%site' => $node->nid)));
-    db_delete('hosting_ssl_cert')
+    \Drupal::messenger()->addMessage(t("cleaning up unused certificate %cert associated with site %site", array('%cert' => $ssl_key, '%site' => $site_id)));
+    \Drupal::database()->delete('hosting_ssl_cert')
       ->condition('cid', $ssl_key)
       ->execute();
-    db_delete('hosting_ssl_cert_ips')
+    \Drupal::database()->delete('hosting_ssl_cert_ips')
       ->condition('cid', $ssl_key)
       ->execute();
   }

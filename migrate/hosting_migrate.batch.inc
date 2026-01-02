@@ -8,13 +8,14 @@
  * Batch migration of sites between platforms.
  */
 function hosting_migrate_platform($form, $form_state, $node) {
-  drupal_add_js(drupal_get_path('module', 'hosting_migrate') . '/hosting_migrate.js');
+  $form['#attached']['library'][] = 'hosting_migrate/admin';
 
   $step = isset($form_state['storage']['step']) ? $form_state['storage']['step'] : 1;
+  $platform_id = hosting_entity_id($node);
 
   // Step 1 - choose target platform
   if ($step == 1) {
-    $result = db_query("SELECT count(nid) as site_count FROM {hosting_site} WHERE status = :status AND verified > :verified AND platform = :platform", array(':status' => HOSTING_SITE_ENABLED, ':verified' => 0, ':platform' => $node->nid))->fetch();
+    $result = \Drupal::database()->query("SELECT count(id) as site_count FROM {hosting_site} WHERE status = :status AND verified > :verified AND platform = :platform", array(':status' => HOSTING_SITE_ENABLED, ':verified' => 0, ':platform' => $platform_id))->fetch();
 
     if ($result->site_count == 0) {
       $form['no_sites'] = array(
@@ -33,7 +34,7 @@ function hosting_migrate_platform($form, $form_state, $node) {
       $platforms = _hosting_get_enabled_platforms();
     }
     if (sizeof($platforms) > 1) {
-      unset($platforms[$node->nid]);
+      unset($platforms[$platform_id]);
       $form['#current_platform'] = $node;
       $form['description'] = array(
         '#type' => 'item',
@@ -82,7 +83,7 @@ function hosting_migrate_platform($form, $form_state, $node) {
               'class' => array('hosting-status'),
             ), $status['upgrade'], $status['missing'], $status['error']);
           if (isset($form_state['storage']['instance'][$site_id])) {
-            $link = l(t('Compare'), 'hosting/migrate/compare/' . $node->nid . '/' . $form_state['storage']['instance'][$site_id], $options);
+            $link = \Drupal\Core\Link::fromTextAndUrl(t('Compare'), \Drupal\Core\Url::fromUserInput('/hosting/migrate/compare/' . $platform_id . '/' . $form_state['storage']['instance'][$site_id], $options))->toString();
           }
           else {
             $link = t('Profile not found');
@@ -95,7 +96,7 @@ function hosting_migrate_platform($form, $form_state, $node) {
         }
         $form['output'][$type]['table'] = array(
           '#type' => 'markup',
-          '#markup' => theme('table', array('header' => $header, 'rows' => $rows, 'attributes' => array('class' => array('hosting-table')))),
+          '#markup' => \Drupal::service('theme.manager')->render('table', array('header' => $header, 'rows' => $rows, 'attributes' => array('class' => array('hosting-table')))),
         );
 
       }
@@ -112,12 +113,18 @@ function hosting_migrate_platform($form, $form_state, $node) {
   // Step 3 - All migrate tasks have been created, close the modal if needed.
   if ($step == 3) {
     if (!empty($GLOBALS['modalframe_page_template'])) {
-      if (module_exists('overlay')) {
+      if (\Drupal::moduleHandler()->moduleExists('overlay')) {
         overlay_close_dialog();
       }
     }
     else {
-      drupal_goto('node/' . $form_state['storage']['target_platform']);
+      $redirect = \Drupal\Core\Url::fromUserInput('/hosting/platform/' . $form_state['storage']['target_platform']);
+      if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+        $form_state->setRedirectUrl($redirect);
+      }
+      else {
+        return new \Symfony\Component\HttpFoundation\RedirectResponse($redirect->toString());
+      }
     }
   }
   return $form;
@@ -140,15 +147,16 @@ function hosting_migrate_platform_submit($form, &$form_state) {
   $step = isset($form_state['storage']['step']) ? $form_state['storage']['step'] : 1;
   switch ($step) {
     case 1:
-      $form_state['storage']['current_platform'] = $form['#current_platform']->nid;
+      $current_platform_id = hosting_entity_id($form['#current_platform']);
+      $form_state['storage']['current_platform'] = $current_platform_id;
       $form_state['storage']['target_platform'] = $form_state['values']['target_platform'];
       $max_per_batch = 5;
-      $result = db_query("SELECT n.nid, n.title FROM  {hosting_site} s LEFT JOIN {node} n ON n.nid=s.nid WHERE platform = :platform AND s.status = :status and s.verified > :verified ORDER BY n.title", array(':platform' => $form['#current_platform']->nid, ':status' => HOSTING_SITE_ENABLED, ':verified' => 0));
+      $result = \Drupal::database()->query("SELECT id, label FROM {hosting_site} WHERE platform = :platform AND status = :status and verified > :verified ORDER BY label", array(':platform' => $current_platform_id, ':status' => HOSTING_SITE_ENABLED, ':verified' => 0));
       $operations = array();
       while ($site = $result->fetch()) {
         $operations[] = array(
           'hosting_migrate_platform_batch',
-          array($site->nid, $form_state['values']['target_platform'], $form_state),
+          array($site->id, $form_state['values']['target_platform'], $form_state),
         );
       }
       if (sizeof($operations)) {
@@ -159,7 +167,7 @@ function hosting_migrate_platform_submit($form, &$form_state) {
           'init_message' => t('Retrieving list of sites.'),
           'progress_message' => t('Evaluated @current out of @total sites.'),
           'error_message' => t('Bulk migration has encountered an error.'),
-          'file' => drupal_get_path('module', 'hosting_migrate') . '/hosting_migrate.batch.inc',
+          'file' => \Drupal::service('extension.list.module')->getPath('hosting_migrate') . '/hosting_migrate.batch.inc',
         );
         batch_set($batch);
 
@@ -178,10 +186,10 @@ function hosting_migrate_platform_submit($form, &$form_state) {
       $task = hosting_add_task($current, 'migrate', array('target_platform' => $target), HOSTING_TASK_SUCCESS);
 
       $operations = array();
-      foreach ($form_state['storage']['passed'] as $nid => $url) {
+      foreach ($form_state['storage']['passed'] as $site_id => $url) {
         $operations[] = array(
           'hosting_migrate_platform_submit_batch',
-          array($nid, $form_state['storage']['target_platform'], $url, $task->vid),
+          array($site_id, $form_state['storage']['target_platform'], $url, $task->id()),
         );
       }
 
@@ -193,7 +201,7 @@ function hosting_migrate_platform_submit($form, &$form_state) {
           'init_message' => t('Retrieving list of sites.'),
           'progress_message' => t('Submitted @current out of @total sites.'),
           'error_message' => t('Bulk migration has encountered an error.'),
-          'file' => drupal_get_path('module', 'hosting_migrate') . '/hosting_migrate.batch.inc',
+          'file' => \Drupal::service('extension.list.module')->getPath('hosting_migrate') . '/hosting_migrate.batch.inc',
         );
         batch_set($batch);
 
@@ -214,11 +222,14 @@ function hosting_migrate_platform_submit($form, &$form_state) {
  * Batch callback for platform migration submission.
  */
 function hosting_migrate_platform_submit_batch($site_id, $target_platform, $url, $platform_task_vid) {
-  $site = node_load($site_id);
+  $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($site_id);
+  if (!$site) {
+    return;
+  }
   hosting_add_task($site_id, 'migrate', array(
     'target_platform' => $target_platform,
     'new_uri' => $url,
-    'new_db_server' => $site->db_server,
+    'new_db_server' => $site->get('db_server')->target_id,
   ));
   hosting_task_log($platform_task_vid, 'success', t("Migrate task for !url created", array('!url' => $url)));
 }
@@ -227,7 +238,7 @@ function hosting_migrate_platform_submit_batch($site_id, $target_platform, $url,
  * Batch finished callback for platform migration submission.
  */
 function hosting_migrate_platform_submit_finished() {
-  drupal_set_message(t('The sites have been added to the task queue to be migrated'));
+  \Drupal::messenger()->addMessage(t('The sites have been added to the task queue to be migrated'));
 }
 
 /**
@@ -238,41 +249,36 @@ function hosting_migrate_platform_batch($site_id, $target_platform, $context) {
   if (!isset($context['sandbox']['progress'])) {
     $context['sandbox']['progress'] = 0;
   }
-  $site = node_load($site_id);
-  $profile = node_load($site->profile);
+  $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($site_id);
+  if (!$site) {
+    return;
+  }
+  $profile_value = $site->get('profile')->value;
+  $profile = is_numeric($profile_value) ? \Drupal::entityTypeManager()->getStorage('hosting_package')->load($profile_value) : NULL;
+  $profile_name = $profile ? $profile->get('short_name')->value : $profile_value;
   $batch = &batch_get();
   // Determine whether the install profile is available on the target platform
   $profile_instance = hosting_package_instance_load(
     array(
     'i.rid' => $target_platform,
-    'r.type' => 'platform',
-    'n.nid' => $site->profile,
+    'p.short_name' => $profile_name,
   ));
-  if (!$profile_instance) {
-    // Check if there is a possibly renamed profile available
-    $profile_instance = hosting_package_instance_load(
-      array(
-      'i.rid' => $target_platform,
-      'r.type' => 'platform',
-      'p.old_short_name' => $profile->short_name,
-    ));
-  }
   if ($profile_instance) {
-    $status = hosting_package_comparison($site->nid, $profile_instance->iid);
-    $batch['form_state']['storage']['status'][$site->nid] = $status;
-    $batch['form_state']['storage']['instance'][$site->nid] = $profile_instance->iid;
+    $status = hosting_package_comparison($site->id(), $profile_instance->iid);
+    $batch['form_state']['storage']['status'][$site->id()] = $status;
+    $batch['form_state']['storage']['instance'][$site->id()] = $profile_instance->iid;
     // If there were no errors, this site passes and can be migrated
-    if (!$status['error'] && $profile->short_name != 'hostmaster') { // The hostmaster site can not be upgraded via the interface.
-      $batch['form_state']['storage']['passed'][$site->nid] = hosting_site_get_domain($site->title);
+    if (!$status['error'] && $profile_name != 'hostmaster') { // The hostmaster site can not be upgraded via the interface.
+      $batch['form_state']['storage']['passed'][$site->id()] = hosting_site_get_domain($site->label());
       return TRUE;
     }
   }
   else {
-    $batch['form_state']['storage']['status'][$site->nid] = array(
+    $batch['form_state']['storage']['status'][$site->id()] = array(
       'error' => 1,
       'missing' => 0,
       'upgrade' => 0,
     );
   }
-  $batch['form_state']['storage']['failed'][$site->nid] = hosting_site_get_domain($site->title);
+  $batch['form_state']['storage']['failed'][$site->id()] = hosting_site_get_domain($site->label());
 }

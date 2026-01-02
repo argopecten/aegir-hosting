@@ -1,0 +1,6 @@
+queued:
+  title: 'Hosting queue daemon'
+  description: 'Runs the hosting tasks queue as a daemonized process.'
+  status: disabled
+  module: hosting_queued
+  group: optional

@@ -1,0 +1,7 @@
+name: 'Site aliases'
+type: module
+description: 'Maintain domain aliases for sites.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_site'

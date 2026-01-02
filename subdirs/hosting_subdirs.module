@@ -8,8 +8,8 @@
 /**
  * Implements hook_form_alter().
  */
-function hosting_subdirs_form_alter(&$form, &$form_state, $form_id) {
-  if ($form_id == 'site_node_form') {
+function hosting_subdirs_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  if (in_array($form_id, array('hosting_site_form', 'hosting_site_add_form', 'hosting_site_edit_form'), TRUE)) {
     // Since our form changes should persist across failed validations, we need
     // to use '#after_build' here.
     // @see https://www.drupal.org/project/drupal/issues/671574#comment-3061880
@@ -21,10 +21,18 @@ function hosting_subdirs_form_alter(&$form, &$form_state, $form_id) {
 /**
  * Add inline documentation about subdirs.
  */
-function hosting_subdirs_alter_alias_documentation($form, $form_state) {
+function hosting_subdirs_alter_alias_documentation($form, \Drupal\Core\Form\FormStateInterface $form_state) {
   // Explain about base URLS in the context of subdirectories.
   $domain_help = 'Hint: If you plan to use a subdomain (e.g., example.com/site1, and also use the root domain (e.g., example.com), you must create a site with the root domain *before* adding sites in its subdirectories. Note: Once the first site in a subdirectory is created and the parent site also exists, the parent site must be re-verified (just once) to turn on the web server configuration for the first (and any future) sites in its subdirectory.';
-  if (isset($form['title']['#description'])) {
+  if (isset($form['label']['widget'][0]['value'])) {
+    if (isset($form['label']['widget'][0]['value']['#description'])) {
+      $form['label']['widget'][0]['value']['#description'] .= $domain_help;
+    }
+    else {
+      $form['label']['widget'][0]['value']['#description'] = $domain_help;
+    }
+  }
+  elseif (isset($form['title']['#description'])) {
     $form['title']['#description'] .= $domain_help;
   }
   else {
@@ -40,8 +48,15 @@ function hosting_subdirs_alter_alias_documentation($form, $form_state) {
     $form['aliases_wrapper']['#description'] = $alias_help;
   }
   // Indicate the internal URL.
-  if (isset($form_state['node']->redirection) && $form_state['node']->redirection) {
-    $form['info']['title']['#markup'] = $form_state['node']->redirection . ' (Internal URL: ' . $form_state['node']->title . ')';
+  $entity = $form['#entity'] ?? $form['#node'] ?? ($form_state->get('node') ?? NULL);
+  if ($entity && isset($entity->redirection) && $entity->redirection) {
+    $internal_url = hosting_entity_label($entity);
+    if (isset($form['info']['label']['#markup'])) {
+      $form['info']['label']['#markup'] = $entity->redirection . ' (Internal URL: ' . $internal_url . ')';
+    }
+    elseif (isset($form['label']['widget'][0]['value']['#description'])) {
+      $form['label']['widget'][0]['value']['#description'] .= ' ' . $entity->redirection . ' (Internal URL: ' . $internal_url . ')';
+    }
   }
   return $form;
 }
@@ -49,7 +64,7 @@ function hosting_subdirs_alter_alias_documentation($form, $form_state) {
 /**
  * Replace the normal alias validation with one that will accept subdirs.
  */
-function hosting_subdirs_alter_alias_validation($form, $form_state) {
+function hosting_subdirs_alter_alias_validation($form, \Drupal\Core\Form\FormStateInterface $form_state) {
   $alias_validation = array_search('hosting_alias_site_form_validate', $form['#validate']);
   if ($alias_validation) {
     unset($form['#validate'][$alias_validation]);
@@ -67,7 +82,15 @@ function hosting_subdirs_alter_alias_validation($form, $form_state) {
  *   An alias to have point to the site.
  * @param string $key
  */
-function hosting_subdirs_validate_alias($site, $alias, $key) {
+function hosting_subdirs_validate_alias($site, $alias, $key, $form_state = NULL) {
+  $set_error = function ($name, $message) use ($form_state) {
+    if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+      $form_state->setErrorByName($name, $message);
+    }
+    else {
+      \Drupal::messenger()->addError($message);
+    }
+  };
   $alias = hosting_site_clean_domain($alias);
   // If we're adding a subdirectory alias, it can't begin with '/'.
   if (@strpos($alias, '/', 1)) {
@@ -75,14 +98,17 @@ function hosting_subdirs_validate_alias($site, $alias, $key) {
   }
   else {
     // No subdirectory in use, so validate normally.
-    return hosting_alias_validate_alias($site, $alias, $key);
+    return hosting_alias_validate_alias($site, $alias, $key, $form_state);
   }
 
-  if (!hosting_alias_allow_domain($alias, array('nid' => $site->nid)) || $alias == $site->title) {
-    form_set_error("aliases][$key", t('The domain name @alias is already in use', array('@alias' => $alias)));
+  $site_id = hosting_entity_id($site);
+  $site_label = hosting_entity_label($site) ?? '';
+  $params = $site_id ? array('site_id' => $site_id) : array();
+  if (!hosting_alias_allow_domain($alias, $params) || $alias == $site_label) {
+    $set_error("aliases][$key", t('The domain name @alias is already in use', array('@alias' => $alias)));
   }
   if (!hosting_subdirs_valid_fqdn_subdir($alias)) {
-    form_set_error("aliases][$key", t('The domain name @alias is not a valid subdir url', array('@alias' => $alias)));
+    $set_error("aliases][$key", t('The domain name @alias is not a valid subdir url', array('@alias' => $alias)));
   }
 }
 
@@ -102,13 +128,11 @@ function hosting_subdirs_hosting_site_domain_alter(&$domain) {
  * Handle subdir-specific configuration for a new site.
  */
 function hosting_subdirs_node_presave($node) {
-  // Note that we set this module's weight to ensure that it runs before
-  // hosting_site. This is specifically so that $node->title here is still the
-  // subdir domain.
+  // Run before hosting_site so the label is still the subdir domain.
   // @see: hosting_subdirs_install().
-  if ($node->type == 'site' && hosting_subdirs_is_a_subdir($node->title)) {
+  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface && $node->getEntityTypeId() === 'hosting_site' && hosting_subdirs_is_a_subdir($node->label())) {
     // Add an alias and redirection to the subdir URL.
-    $node->aliases[] = $node->redirection = $node->title;
+    $node->aliases[] = $node->redirection = $node->label();
   }
   // After cloning a site, we lose our alias and redirection during the import
   // task, since they are blank on the back-end at that point. So we preserve
@@ -125,12 +149,16 @@ function hosting_subdirs_node_presave($node) {
  *
  * Allow aliases with subdirectories.
  */
-function hosting_subdirs_site_form_validate($form, &$form_state) {
-  if (isset($form_state['values']['aliases'])) {
-    $aliases = $form_state['values']['aliases'] = array_filter($form_state['values']['aliases']);
-    foreach ($aliases as $key => $alias) {
-      hosting_subdirs_validate_alias($form_state['node'], $alias, $key);
-    }
+function hosting_subdirs_site_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  $aliases = $form_state->getValue('aliases');
+  if ($aliases === NULL) {
+    return;
+  }
+  $aliases = array_filter($aliases);
+  $form_state->setValue('aliases', $aliases);
+  foreach ($aliases as $key => $alias) {
+    $entity = $form['#entity'] ?? $form['#node'] ?? ($form_state->get('node') ?? NULL);
+    hosting_subdirs_validate_alias($entity, $alias, $key, $form_state);
   }
 }
 
@@ -164,7 +192,7 @@ function _hosting_subdirs_is_a_subdir_site($site) {
   // If the site isn't re-directing to a subdir, then it isn't a subdir site.
   if (!hosting_subdirs_is_a_subdir($site->redirection)) return FALSE;
   // If the site is re-directing to a custom alias, leave it alone.
-  if ($site->title != hosting_site_get_domain($site->redirection)) return FALSE;
+  if (hosting_entity_label($site) != hosting_site_get_domain($site->redirection)) return FALSE;
 
   return TRUE;
 }
@@ -187,4 +215,3 @@ function hosting_subdirs_post_hosting_import_task($task, $data) {
   $task->ref->subdir_redirection = $task->ref->redirection;
   $task->ref->subdir_aliases = $task->ref->aliases;
 }
-

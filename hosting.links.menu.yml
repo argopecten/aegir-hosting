@@ -1,0 +1,6 @@
+hosting.admin:
+  title: 'Hosting'
+  description: 'Configure and manage the hosting system'
+  route_name: hosting.admin
+  parent: system.admin_config
+  weight: 100

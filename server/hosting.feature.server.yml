@@ -1,0 +1,7 @@
+server:
+  title: 'Server administration'
+  description: 'Manage multiple servers.'
+  status: required
+  module: hosting_server
+  entity_type: hosting_server
+  group: required

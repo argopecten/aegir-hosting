@@ -1,0 +1,9 @@
+signup:
+  title: 'Sign up form'
+  description: 'Provides a simpler signup form that can be opened to anonymous users.'
+  status: disabled
+  module: hosting_signup
+  group: optional
+  role_permissions:
+    'anonymous user':
+      - 'access hosting signup form'

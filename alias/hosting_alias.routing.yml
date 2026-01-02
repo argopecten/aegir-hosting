@@ -1,0 +1,7 @@
+hosting_alias.settings:
+  path: '/admin/hosting/aliases'
+  defaults:
+    _form: '\Drupal\hosting_alias\Form\HostingAliasSettingsForm'
+    _title: 'Site aliases'
+  requirements:
+    _permission: 'administer hosting aliases'

@@ -1,0 +1,120 @@
+uuid: c3dee66c-3e03-40cb-b797-9d2483d29de8
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_client
+id: hosting_client_list
+label: 'Hosting Client List'
+module: views
+description: 'Display a list of clients in Aegir.'
+tag: hosting_client
+base_table: hosting_client
+base_field: id
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      title: Clients
+      access:
+        type: perm
+        options:
+          perm: 'view client'
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: none
+        options:
+          offset: 0
+      style:
+        type: table
+        options:
+          columns:
+            label: label
+            uname: uname
+            created: created
+          default: label
+          info:
+            label:
+              sortable: true
+              default_sort_order: asc
+              align: ''
+              separator: ''
+            uname:
+              sortable: true
+              default_sort_order: asc
+              align: ''
+              separator: ''
+            created:
+              sortable: true
+              default_sort_order: asc
+              align: ''
+              separator: ''
+      row:
+        type: fields
+      fields:
+        label:
+          id: label
+          table: hosting_client
+          field: label
+          label: 'Client name'
+          plugin_id: field
+          entity_type: hosting_client
+          entity_field: label
+          element_label_colon: false
+          settings:
+            link_to_entity: true
+        uname:
+          id: uname
+          table: hosting_client
+          field: uname
+          label: 'Internal name'
+          plugin_id: standard
+        created:
+          id: created
+          table: hosting_client
+          field: created
+          label: 'Created'
+          plugin_id: field
+          entity_type: hosting_client
+          entity_field: created
+          settings:
+            date_format: short
+  page_clients:
+    display_plugin: page
+    id: page_clients
+    display_title: Page
+    position: 1
+    display_options:
+      path: hosting/clients
+      menu:
+        type: normal
+        title: Clients
+        description: 'List of clients'
+        menu_name: main
+        weight: 5
+  block_1:
+    display_plugin: block
+    id: block_1
+    display_title: Block
+    position: 2
+    display_options:
+      defaults:
+        footer: false
+      footer:
+        area:
+          id: area
+          table: views
+          field: area
+          plugin_id: text
+          empty: true
+          content:
+            value: '<a href="/hosting/clients/add" class="add-new-client">Add new client</a>'
+            format: basic_html

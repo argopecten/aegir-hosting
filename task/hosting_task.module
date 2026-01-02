@@ -5,99 +5,52 @@
  */
 
 /**
- * Implements hook_init().
- *
- * Adds refreshTimeout javascript variable.
+ * Implements hook_page_attachments().
  */
-function hosting_task_init() {
-  $settings['hostingTaskRefresh'] = array(
-      'refreshTimeout' => variable_get('hosting_task_refresh_timeout', 30000),
+function hosting_task_page_attachments(array &$attachments) {
+  $attachments['#attached']['drupalSettings']['hostingTaskRefresh'] = array(
+    'refreshTimeout' => \Drupal::config('hosting_task.settings')->get('hosting_task_refresh_timeout') ?? 30000,
   );
-  drupal_add_js($settings, 'setting');
 }
-
 
 /**
- * Implements hook_menu().
+ * Load a hosting task entity.
  */
-function hosting_task_menu() {
-  $items = array();
-  $tasks = hosting_available_tasks();
-  foreach ($tasks as $type => $type_tasks) {
-    if (empty($type_tasks)) {
-      // This is to workaround problems in the upgrade path where the
-      // hook returns nothing (e.g. for server).
-      continue;
-    }
-    foreach ($type_tasks as $task => $info) {
-      if (empty($info['hidden'])) {
-        $path = sprintf("hosting_confirm/%%hosting_%s_wildcard/%s_%s", $type, $type, $task);
-        $items[$path] = array(
-          'title' => $info['title'],
-          'description' => $info['description'],
-          'page callback' => 'drupal_get_form',
-          'page arguments' => array('hosting_task_confirm_form', 1, $task),
-          'access callback' => 'hosting_task_menu_access_csrf',
-          'access arguments' => array(1, $task),
-          'type' => MENU_CALLBACK,
-        );
-        // Complement the $items array with attributes from the task definition
-        // e.g. a custom access callback.
-        $items[$path] = array_merge($items[$path], $info);
-      }
-    }
+function hosting_task_load_entity($task_id) {
+  if (!is_numeric($task_id)) {
+    return NULL;
   }
-
-  $items['hosting/tasks/%node/list'] = array(
-    'title' => 'Task list',
-    'description' => 'AJAX callback for refreshing task list',
-    'page callback' => 'hosting_task_ajax_list',
-    'page arguments' => array(2),
-    'access callback' => 'node_access',
-    'access arguments' => array('view', 2),
-    'type' => MENU_CALLBACK,
-  );
-
-  $items['hosting/tasks/%node/cancel'] = array(
-    'title' => 'Task list',
-    'description' => 'Callback for stopping tasks',
-    'page callback' => 'hosting_task_cancel',
-    'page arguments' => array(2),
-    'access callback' => 'hosting_task_cancel_access',
-    'access arguments' => array(2),
-    'type' => MENU_CALLBACK,
-  );
-
-  $items['hosting/tasks/queue'] = array(
-    'title' => 'Task list',
-    'description' => 'AJAX callback for refreshing task queue',
-    'page callback' => 'hosting_task_ajax_queue',
-    'access arguments' => array('access task logs'),
-    'type' => MENU_CALLBACK,
-  );
-
-  // Custom path to task node views for overlay.
-  // See hosting_task_overlay_paths().
-  $items['hosting/task/%node'] = array(
-    'page callback' => 'node_page_view',
-    'page arguments' => array(2),
-    'access arguments' => array('access task logs'),
-  );
-
-  $items['hosting/task/log/ajax/%node/%/%'] = array(
-    'page callback' => 'hosting_task_log_ajax',
-    'page arguments' => array(4, 5, 6),
-    'access arguments' => array('access task logs'),
-    'delivery callback' => 'ajax_deliver',
-  );
-
-  return $items;
+  return \Drupal::entityTypeManager()->getStorage('hosting_task')->load($task_id);
 }
+
+/**
+ * Normalize task ID from entity or scalar.
+ */
+function hosting_task_entity_id($task) {
+  if ($task instanceof \Drupal\Core\Entity\EntityInterface) {
+    return (int) $task->id();
+  }
+  return is_numeric($task) ? (int) $task : NULL;
+}
+
+/**
+ * Get the changed timestamp for a hosting entity.
+ */
+function hosting_task_entity_changed($entity) {
+  if ($entity instanceof \Drupal\Core\Entity\ContentEntityInterface && method_exists($entity, 'getChangedTime')) {
+    return (int) $entity->getChangedTime();
+  }
+  if (is_object($entity) && isset($entity->changed)) {
+    return (int) $entity->changed;
+  }
+  return 0;
+}
+
 
 /**
  * Read additional task log data, served via AJAX.
  */
-function hosting_task_log_ajax($node, $last_position, $id) {
+function hosting_task_log_ajax($task, $last_position, $id) {
   $commands = array();
 
   // Long polling for ten seconds.
@@ -105,22 +58,22 @@ function hosting_task_log_ajax($node, $last_position, $id) {
   $table = FALSE;
   while ((empty($table) || !count($table['#rows'])) && (time() < $expire)) {
     usleep(200000);
-    $table = _hosting_task_log_table($node, $last_position);
+    $table = _hosting_task_log_table($task, $last_position);
   }
 
   if (isset($table['#refresh_url'])) {
     $url = $table['#refresh_url'];
   }
   else {
-    $url = url('hosting/task/log/ajax/' . $node->nid . '/' . $last_position);
+    $url = \Drupal\Core\Url::fromUserInput('/hosting/task/log/ajax/' . hosting_task_entity_id($task) . '/' . $last_position)->toString();
   }
 
   if (!empty($table)) {
     unset($table['#header']);
-    $commands[] = hosting_task_ajax_command_hosting_table_append('#' . $id, drupal_render($table));
+    $commands[] = hosting_task_ajax_command_hosting_table_append('#' . $id, \Drupal::service('renderer')->render($table));
   }
 
-  if (!hosting_task_task_has_finished($node)) {
+  if (!hosting_task_task_has_finished($task)) {
     $commands[] = hosting_task_ajax_command_hosting_table_check('#' . $id, $url);
   }
 
@@ -140,9 +93,18 @@ function hosting_task_log_ajax($node, $last_position, $id) {
  *   True if task has finished, false otherwise.
  */
 function hosting_task_task_has_finished($task) {
-  // Check to see if the execution time of task has been set, and if it has
-  // allow an additional 30 seconds for the logs to be entered into the DB.
-  return !empty($task->delta) && $task->executed + $task->delta + 30 < REQUEST_TIME;
+  $delta = NULL;
+  $executed = NULL;
+  if ($task instanceof \Drupal\Core\Entity\EntityInterface && $task->getEntityTypeId() === 'hosting_task') {
+    $delta = (int) $task->get('delta')->value;
+    $executed = (int) $task->get('executed')->value;
+  }
+  elseif (is_object($task)) {
+    $delta = isset($task->delta) ? (int) $task->delta : NULL;
+    $executed = isset($task->executed) ? (int) $task->executed : NULL;
+  }
+  // Allow an additional 30 seconds for the logs to be entered into the DB.
+  return !empty($delta) && $executed + $delta + 30 < REQUEST_TIME;
 }
 
 /**
@@ -192,12 +154,20 @@ function hosting_task_ajax_command_hosting_table_check($selector, $url, $setting
 /**
  * Page callback to provide JSON output for a task.
  */
-function hosting_task_ajax_list($node) {
-  $return['markup'] = hosting_task_table($node);
-  $return['changed'] = $node->changed;
-  $return['navigate_url'] = url('node/' . $node->nid);
-  drupal_json_output($return);
-  exit();
+function hosting_task_ajax_list($entity) {
+  $table_build = hosting_task_table($entity);
+  $return['markup'] = \Drupal::service('renderer')->renderPlain($table_build);
+  $return['changed'] = hosting_task_entity_changed($entity);
+  if ($entity instanceof \Drupal\Core\Entity\EntityInterface) {
+    $return['navigate_url'] = $entity->toUrl('canonical')->toString();
+  }
+  else {
+    $fallback = hosting_entity_load_any(hosting_entity_id($entity));
+    $return['navigate_url'] = $fallback instanceof \Drupal\Core\Entity\EntityInterface
+      ? $fallback->toUrl('canonical')->toString()
+      : \Drupal\Core\Url::fromRoute('<front>')->toString();
+  }
+  return $return;
 }
 
 /**
@@ -208,25 +178,31 @@ function hosting_task_ajax_queue() {
   $view->set_display('block');
   $view->pre_execute();
   $return['markup'] = $view->render('block');
-
-  drupal_json_output($return);
-  exit();
+  return $return;
 }
 
 /**
  * Cancel a task before it's started.
  */
-function hosting_task_cancel($node) {
-  if ($node->type == 'task' && $node->task_status == HOSTING_TASK_QUEUED) {
-    $node->task_status = HOSTING_TASK_WARNING;
-    node_save($node);
+function hosting_task_cancel($task) {
+  if ($task instanceof \Drupal\Core\Entity\EntityInterface && $task->getEntityTypeId() === 'hosting_task' && (int) $task->get('task_status')->value === HOSTING_TASK_QUEUED) {
+    $task->set('task_status', HOSTING_TASK_WARNING);
+    $task->save();
 
     // Log the cancellation.
-    hosting_task_log($node->vid, 'warning', t("Task was cancelled."));
-    drupal_goto('node/' . $node->rid);
+    hosting_task_log($task->id(), 'warning', t("Task was cancelled."));
+    $ref = hosting_entity_load_from_context_id($task->get('rid')->value);
+    if ($ref instanceof \Drupal\Core\Entity\EntityInterface) {
+      return new \Symfony\Component\HttpFoundation\RedirectResponse($ref->toUrl('canonical')->toString());
+    }
+    $fallback = hosting_entity_load_any($task->get('rid')->value);
+    $redirect_url = $fallback instanceof \Drupal\Core\Entity\EntityInterface
+      ? $fallback->toUrl('canonical')->toString()
+      : \Drupal\Core\Url::fromRoute('<front>')->toString();
+    return new \Symfony\Component\HttpFoundation\RedirectResponse($redirect_url);
   }
 
-  drupal_access_denied();
+  throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException();
 }
 
 /**
@@ -235,23 +211,29 @@ function hosting_task_cancel($node) {
  * @param $node object
  *   the node object we're trying to access
  */
-function hosting_task_cancel_access($node) {
+function hosting_task_cancel_access($task) {
   // Bring $user into scope, so we can test task ownership.
   global $user;
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return FALSE;
+  }
 
   // To prevent CSRF attacks, a unique token based upon user is used. Deny
   // access if the token is missing or invalid.
-  if (!isset($_GET['token']) || !drupal_valid_token($_GET['token'], $user->uid)) {
+  $token_service = \Drupal::service('csrf_token');
+  if (!isset($_GET['token']) || !$token_service->validate((string) $_GET['token'], (string) $user->uid)) {
     return FALSE;
   }
 
   // 'administer tasks' allows cancelling any and all tasks on the system.
-  if (user_access('administer tasks')) {
+  if (\Drupal::currentUser()->hasPermission('administer tasks')) {
     return TRUE;
   }
   // 'cancel own tasks' allows cancelling any task the user *could have* created,
   // on nodes she can view.
-  if (user_access('cancel own tasks') && user_access('create ' . $node->task_type . ' task') && node_access('view', $node)) {
+  if (\Drupal::currentUser()->hasPermission('cancel own tasks')
+    && \Drupal::currentUser()->hasPermission('create ' . $task->get('task_type')->value . ' task')
+    && $task->access('view')) {
     return TRUE;
   }
 }
@@ -271,23 +253,27 @@ function hosting_task_cancel_access($node) {
  * @see hosting_task_menu()
  */
 function hosting_task_menu_access($node, $task) {
-  if (user_access("create " . $task . " task")) {
-    if ($node->type == 'site') {
-      if (hosting_task_outstanding($node->nid, 'delete') || ($node->site_status == HOSTING_SITE_DELETED)) {
+  if (\Drupal::currentUser()->hasPermission("create " . $task . " task")) {
+    $task_scope = hosting_entity_task_scope($node);
+    $entity_id = hosting_entity_id($node);
+    $entity_status = hosting_entity_status($node, $task_scope);
+
+    if ($task_scope == 'site') {
+      if (hosting_task_outstanding($entity_id, 'delete') || ($entity_status == HOSTING_SITE_DELETED)) {
         return FALSE;
       }
-      if (($task == 'login-reset') && ($node->site_status != HOSTING_SITE_ENABLED)) {
+      if (($task == 'login-reset') && ($entity_status != HOSTING_SITE_ENABLED)) {
         return FALSE;
       }
       $safe_tasks = array('backup', 'backup-delete', 'verify', 'enable');
       if (!in_array($task, $safe_tasks)) {
         // Don't show certain tasks if the site is the 'special' main aegir site.
-        if ($node->nid == hosting_get_hostmaster_site_nid()) {
+        if ($entity_id == hosting_get_hostmaster_site_id()) {
           return FALSE;
         }
       }
 
-      $site_enabled = (hosting_task_outstanding($node->nid, 'enable') || ($node->site_status == HOSTING_SITE_ENABLED));
+      $site_enabled = (hosting_task_outstanding($entity_id, 'enable') || ($entity_status == HOSTING_SITE_ENABLED));
       $deletable = ($task == "delete");
       $enabable = ($task == "enable");
 
@@ -301,23 +287,23 @@ function hosting_task_menu_access($node, $task) {
         // Site is enabled.
         return (
                  // If we can just delete a site without disabling, allow that.
-                 (!variable_get('hosting_require_disable_before_delete', TRUE)) && $deletable
+                 (!(\Drupal::config('hosting.settings')->get('hosting_require_disable_before_delete') ?? TRUE)) && $deletable
                  // Otherwise we must disable it first, hide the delete task and the enable task as well.
                  || !$delete_or_enable
                );
       }
     }
-    if ($node->type == 'platform') {
+    if ($task_scope == 'platform') {
       // If the user can't edit this node, he can't create tasks on it.
-      if (!node_access('update', $node, $GLOBALS['user'])) {
+      if (!$node->access('update', \Drupal::currentUser())) {
         return FALSE;
       }
       // If the platform is in a deleted state, nothing else can be done with it.
-      if (hosting_task_outstanding($node->nid, 'delete') || ($node->platform_status == HOSTING_PLATFORM_DELETED)) {
+      if (hosting_task_outstanding($entity_id, 'delete') || ($entity_status == HOSTING_PLATFORM_DELETED)) {
         return FALSE;
       }
       // If the platform's been locked, we can unlock it, delete, batch migrate existing sites or verify.
-      if ($node->platform_status == HOSTING_PLATFORM_LOCKED) {
+      if ($entity_status == HOSTING_PLATFORM_LOCKED) {
         $platform_tasks = array('verify', 'unlock', 'delete', 'migrate');
         return (in_array($task, $platform_tasks));
       }
@@ -327,9 +313,9 @@ function hosting_task_menu_access($node, $task) {
       }
       return (in_array($task, $platform_tasks));
     }
-    if ($node->type === 'server') {
+    if ($task_scope === 'server') {
       // If the user can't edit this node, he can't create tasks on it.
-      if (!node_access('update', $node, $GLOBALS['user'])) {
+      if (!$node->access('update', \Drupal::currentUser())) {
         return FALSE;
       }
       // todo probably need more checks
@@ -363,49 +349,12 @@ function hosting_task_menu_access_csrf($node, $task) {
   // To prevent CSRF attacks, a unique token based upon user is used. Deny
   // access if the token is missing or invalid. We only do this on
   // non-interactive tasks.
-  if (!in_array($task, $interactive_tasks) && (!isset($_GET['token']) || !drupal_valid_token($_GET['token'], $user->uid))) {
+  $token_service = \Drupal::service('csrf_token');
+  if (!in_array($task, $interactive_tasks) && (!isset($_GET['token']) || !$token_service->validate((string) $_GET['token'], (string) $user->uid))) {
     return FALSE;
   }
   // Call the main menu access handler.
   return hosting_task_menu_access($node, $task);
-}
-
-/**
- * Implements hook_node_info().
- */
-function hosting_task_node_info() {
-  $types["task"] = array(
-    "type" => 'task',
-    "name" => t('Task'),
-    'base' => 'hosting_task',
-    "has_title" => FALSE,
-    "title_label" => '',
-    "description" => hosting_node_help("task"),
-    "has_body" => 0,
-    "body_label" => '',
-    "min_word_count" => 0,
-  );
-
-  return $types;
-}
-
-/**
- * Implements hook_node_access().
- */
-function hosting_task_node_access($node, $op, $account) {
-  if (hosting_feature('client')) {
-    // We rely on hosting_client_node_grants() instead of global configuration.
-    return NODE_ACCESS_IGNORE;
-  }
-
-  $type = is_string($node) ? $node : $node->type;
-  if ($type != 'task' ) {
-    return NODE_ACCESS_IGNORE;
-  }
-
-  if (user_access('administer tasks', $account)) {
-    return NODE_ACCESS_ALLOW;
-  }
 }
 
 /**
@@ -490,8 +439,8 @@ function hosting_task_hosting_queues() {
 /**
  * Insert an entry in the task log.
  *
- * @param $vid
- *   The vid of the task to add an entry for.
+ * @param $task_id
+ *   The task entity ID to add an entry for.
  * @param $type
  *   The type of log entry being added.
  * @param $message
@@ -502,20 +451,13 @@ function hosting_task_hosting_queues() {
  *   (optional) The UNIX timestamp of this log message, this defaults to the
  *   current time.
  */
-function hosting_task_log($vid, $type, $message, $error = '', $timestamp = NULL) {
-  // We keep track of nids we've looked up in this request, for faster lookups.
-  static $nids = array();
+function hosting_task_log($task_id, $type, $message, $error = '', $timestamp = NULL) {
   $timestamp = ($timestamp) ? $timestamp : REQUEST_TIME;
+  $task_id = (int) $task_id;
 
-  // We need to insert the nid in addition to the vid, so look it up.
-  if (!isset($nids[$vid])) {
-    $nids[$vid] = (int) db_query('SELECT nid FROM {hosting_task} WHERE vid = :vid', array(':vid' => $vid))->fetchField();
-  }
-
-  $id = db_insert('hosting_task_log')
+  $id = \Drupal::database()->insert('hosting_task_log')
     ->fields(array(
-      'vid' => $vid,
-      'nid' => $nids[$vid],
+      'task_id' => $task_id,
       'type' => $type,
       'message' => $message,
       'error' => isset($error) ? $error : '',
@@ -525,45 +467,117 @@ function hosting_task_log($vid, $type, $message, $error = '', $timestamp = NULL)
 }
 
 /**
+ * Save task arguments for a hosting task entity.
+ */
+function hosting_task_save_arguments($task_id, array $args) {
+  \Drupal::database()->delete('hosting_task_arguments')
+    ->condition('task_id', $task_id)
+    ->execute();
+  foreach ($args as $key => $value) {
+    \Drupal::database()->insert('hosting_task_arguments')
+      ->fields(array(
+        'task_id' => $task_id,
+        'name' => $key,
+        'value' => $value,
+      ))
+      ->execute();
+  }
+}
+
+/**
+ * Copy task arguments between task entities.
+ */
+function hosting_task_clone_arguments($source_task_id, $target_task_id) {
+  $args = \Drupal::database()->query("SELECT name, value FROM {hosting_task_arguments} WHERE task_id = :task_id", array(':task_id' => $source_task_id))->fetchAllKeyed();
+  if (!empty($args)) {
+    hosting_task_save_arguments($target_task_id, $args);
+  }
+}
+
+/**
+ * Populate task_args property on a task entity.
+ */
+function hosting_task_load_arguments($task) {
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return $task;
+  }
+  $result = \Drupal::database()->query("SELECT name, value FROM {hosting_task_arguments} WHERE task_id = :task_id", array(':task_id' => $task->id()));
+  $task->task_args = array();
+  foreach ($result as $arg) {
+    $task->task_args[$arg->name] = $arg->value;
+  }
+  return $task;
+}
+
+/**
  * Retry the given task
  */
 function hosting_task_retry($task_id) {
-  $node = node_load($task_id);
-  if ($node->task_status != HOSTING_TASK_QUEUED) {
-    drupal_set_message(t("The task is being retried and has been added to the hosting queue again"));
-    hosting_task_log($node->vid, 'queue', t("The task is being retried and has been added to the hosting queue again"));
-    $node->nid = NULL;
-    $node->vid = NULL;
-    $node->original = NULL;
-    $node->revision = TRUE;
-    $node->created = REQUEST_TIME;
-    $node->changed = REQUEST_TIME;
-    $node->task_status = HOSTING_TASK_QUEUED;
-    node_save($node);
-    drupal_goto("node/{$node->nid}");
+  $task = hosting_task_load_entity($task_id);
+  if (!$task) {
+    return NULL;
+  }
+  if ((int) $task->get('task_status')->value != HOSTING_TASK_QUEUED) {
+    \Drupal::messenger()->addMessage(t("The task is being retried and has been added to the hosting queue again"));
+    hosting_task_log($task->id(), 'queue', t("The task is being retried and has been added to the hosting queue again"));
+
+    $new_task = $task->createDuplicate();
+    $new_task->set('task_status', HOSTING_TASK_QUEUED);
+    $new_task->set('executed', 0);
+    $new_task->set('delta', 0);
+    $new_task->set('created', REQUEST_TIME);
+    $new_task->set('changed', REQUEST_TIME);
+    $new_task->save();
+
+    hosting_task_clone_arguments($task->id(), $new_task->id());
+
+    return new \Symfony\Component\HttpFoundation\RedirectResponse($new_task->toUrl('canonical')->toString());
   }
 }
 
 /**
  * Helper function to generate new task node
  */
-function hosting_add_task($nid, $type, $args = NULL, $status = HOSTING_TASK_QUEUED) {
+function hosting_add_task($target, $type, $args = NULL, $status = HOSTING_TASK_QUEUED, $entity_type_id = NULL) {
   global $user;
 
+  $entity = NULL;
+  if ($target instanceof \Drupal\Core\Entity\EntityInterface) {
+    $entity = $target;
+  }
+  $target_id = hosting_entity_id($target);
+  if (!$entity && $entity_type_id) {
+    $entity = \Drupal::entityTypeManager()->getStorage($entity_type_id)->load($target_id);
+  }
+
   // Guard against destructive tasks run on guarded nodes.
-  if (!hosting_task_dangerous_task_is_allowed($type, $nid)) {
+  if (!hosting_task_dangerous_task_is_allowed($type, $target_id)) {
     return FALSE;
   }
 
-  $node = db_query("SELECT nid, uid, title FROM {node} WHERE nid = :nid", array(':nid' => $nid))->fetchObject();
+  $label = $entity ? hosting_entity_label($entity) : NULL;
+  $owner_id = NULL;
+  if ($entity && method_exists($entity, 'getOwnerId')) {
+    $owner_id = $entity->getOwnerId();
+  }
+  if (!$label && $target_id) {
+    $fallback_entity = hosting_entity_load_any($target_id);
+    if ($fallback_entity) {
+      $label = hosting_entity_label($fallback_entity);
+      if (!$owner_id && method_exists($fallback_entity, 'getOwnerId')) {
+        $owner_id = $fallback_entity->getOwnerId();
+      }
+    }
+  }
 
-  $task = new stdClass();
-  $task->language = LANGUAGE_NONE;
-  $task->type = 'task';
-  # TODO: make this pretty
-  $task->title = t("!type !title", array('!type' => $type, '!title' => $node->title));
-  $task->task_type = $type;
-  $task->rid = $node->nid;
+  $task = \Drupal::entityTypeManager()->getStorage('hosting_task')->create(array(
+    'label' => t("!type !title", array('!type' => $type, '!title' => $label)),
+    'task_type' => $type,
+    'rid' => $target_id,
+    'task_status' => $status,
+    'status' => 1,
+    'uid' => $user->uid ? $user->uid : (int) $owner_id,
+  ));
   /*
    * fallback the owner of the task to the owner of the node we operate
    * upon
@@ -571,17 +585,10 @@ function hosting_add_task($nid, $type, $args = NULL, $status = HOSTING_TASK_QUEU
    * this is mostly for the signup form, which runs as the anonymous
    * user, but for which the node is set to the right user
    */
-  $task->uid = $user->uid ? $user->uid : $node->uid;
-  $task->status = 1;
-  $task->task_status = $status;
-  if ($status == HOSTING_TASK_QUEUED) {
-    $task->revision = TRUE;
-  }
-  // Arguments, such as which backup to restore.
+  $task->save();
   if (is_array($args)) {
-    $task->task_args = $args;
+    hosting_task_save_arguments($task->id(), $args);
   }
-  node_save($task);
   return $task;
 }
 
@@ -589,25 +596,23 @@ function hosting_add_task($nid, $type, $args = NULL, $status = HOSTING_TASK_QUEU
  * Implements hook_form().
  */
 function hosting_task_confirm_form($form, $form_state, $node, $task) {
-  drupal_add_js(drupal_get_path('module', 'hosting_task') . '/hosting_task.js');
-  $tasks = hosting_available_tasks($node->type);
-
-  if (!isset($tasks[$task]['dialog']) || !$tasks[$task]['dialog']) {
-    hosting_add_task($node->nid, $task);
-    if ($task == 'delete') {
-      // We're deleting a Hosting object, and thus its corresponding node. If
-      // we stay on the current page, we'll end up with a 404, so redirect to
-      // the home page.
-      drupal_set_message(t(':title has been queued for deletion.', array(':title' => $node->title)));
-      drupal_goto();
-    }
-    drupal_goto('node/' . $node->nid);
+  $form['#attached']['library'][] = 'hosting_task/task';
+  $task_scope = hosting_entity_task_scope($node);
+  $tasks = hosting_available_tasks($task_scope);
+  $entity_id = hosting_entity_id($node);
+  $entity_type_id = hosting_entity_type_id($node);
+  if ($entity_type_id && strpos($entity_type_id, 'hosting_') !== 0) {
+    $entity_type_id = NULL;
   }
 
   $form['help'] = array('#value' => $tasks[$task]['description']);
-  $form['nid'] = array(
+  $form['entity_id'] = array(
     '#type' => 'value',
-    '#value' => $node->nid,
+    '#value' => $entity_id,
+  );
+  $form['entity_type'] = array(
+    '#type' => 'value',
+    '#value' => $entity_type_id,
   );
   $form['task'] = array(
     '#type' => 'value',
@@ -628,9 +633,28 @@ function hosting_task_confirm_form($form, $form_state, $node, $task) {
     $form['#func_param_1'] = $node;
     $form['#func_param_2'] = $task;
   }
-  $question = t("Are you sure you want to @task @object?", array('@task' => $task, '@object' => $node->title));
-  $path = !empty($_REQUEST['destination']) ? $_REQUEST['destination'] : 'node/' . $node->nid;
-  $form = confirm_form($form, $question, $path, '', $tasks[$task]['title']);
+  $question = t("Are you sure you want to @task @object?", array('@task' => $task, '@object' => hosting_entity_label($node)));
+  if (!empty($_REQUEST['destination'])) {
+    $path = $_REQUEST['destination'];
+  }
+  elseif ($node instanceof \Drupal\Core\Entity\EntityInterface) {
+    $path = ltrim($node->toUrl('canonical')->toString(), '/');
+  }
+  else {
+    $fallback_entity = $entity_id ? hosting_entity_load_any($entity_id) : NULL;
+    $path = $fallback_entity instanceof \Drupal\Core\Entity\EntityInterface ? ltrim($fallback_entity->toUrl('canonical')->toString(), '/') : '<front>';
+  }
+  $form['#title'] = $question;
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => $tasks[$task]['title'],
+  );
+  $form['actions']['cancel'] = array(
+    '#type' => 'link',
+    '#title' => t('Cancel'),
+    '#url' => \Drupal\Core\Url::fromUserInput('/' . ltrim($path, '/')),
+  );
 
   // Add an extra class to the actions to allow us to
   // disable the cancel link via javascript for the modal dialog.
@@ -646,7 +670,7 @@ function hosting_task_confirm_form($form, $form_state, $node, $task) {
  * This adds the backup listing to the confirmation dialog.
  */
 function hosting_task_restore_form($node) {
-  $list = hosting_site_backup_list($node->nid);
+  $list = hosting_site_backup_list(hosting_entity_id($node));
   if (count($list)) {
     $form['bid'] = array(
       '#type' => 'radios',
@@ -670,9 +694,9 @@ function hosting_task_restore_form($node) {
  *
  * TODO: Move restore functions to hosting_site, where backup functions are.
  */
-function hosting_task_restore_form_validate($form, &$form_state) {
+function hosting_task_restore_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
   if (isset($form['parameters']['no_backups'])) {
-    form_set_error('no_backups', t('There are no valid backups available.'));
+    $form_state->setErrorByName('no_backups', t('There are no valid backups available.'));
   }
 }
 
@@ -688,10 +712,22 @@ function hosting_task_restore_form_validate($form, &$form_state) {
 function hosting_task_confirm_form_submit($form, &$form_state) {
   $values = $form_state['values'];
   $parameters = isset($values['parameters']) ? $values['parameters'] : array();
-  hosting_add_task($values['nid'], $values['task'], $parameters);
-  $form_state['redirect'] = 'node/' . $values['nid'];
+  $entity_id = $values['entity_id'] ?? NULL;
+  hosting_add_task($entity_id, $values['task'], $parameters, HOSTING_TASK_QUEUED, $values['entity_type'] ?? NULL);
+  $redirect_path = '<front>';
+  $entity = NULL;
+  if (!empty($values['entity_type']) && $entity_id) {
+    $entity = \Drupal::entityTypeManager()->getStorage($values['entity_type'])->load($entity_id);
+  }
+  elseif ($entity_id) {
+    $entity = hosting_entity_load_any($entity_id);
+  }
+  if (!empty($entity)) {
+    $redirect_path = ltrim($entity->toUrl('canonical')->toString(), '/');
+  }
+  $form_state['redirect'] = $redirect_path;
 
-  if (module_exists('overlay')) {
+  if (\Drupal::moduleHandler()->moduleExists('overlay')) {
     overlay_close_dialog();
   }
 }
@@ -701,24 +737,23 @@ function hosting_task_confirm_form_submit($form, &$form_state) {
  *
  * Tasks should always be named 'task_type node_title'.
  */
-function hosting_task_set_title(&$node) {
-  $ref = node_load($node->rid);
-  $tasks = hosting_available_tasks($ref->type);
+function hosting_task_set_title(&$task) {
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return;
+  }
+  $ref = hosting_entity_load_from_context_id($task->get('rid')->value);
+  if (!$ref) {
+    return;
+  }
+  $ref_type = hosting_entity_task_scope($ref);
+  $tasks = hosting_available_tasks($ref_type);
 
-  $ref_title = $ref->type == 'site' ? hosting_site_canonical_url($ref) : $ref->title;
-  $node->title = drupal_ucfirst($tasks[$node->task_type]['title']) . ': ' . $ref_title;
-  db_update('node')
-    ->fields(array(
-      'title' => $node->title,
-    ))
-    ->condition('nid', $node->nid)
-    ->execute();
-  db_update('node_revision')
-    ->fields(array(
-      'title' => $node->title,
-    ))
-    ->condition('vid', $node->vid)
-    ->execute();
+  $ref_title = hosting_entity_label($ref);
+  $task_type = $task->get('task_type')->value;
+  if (isset($tasks[$task_type]['title'])) {
+    $task->set('label', \Drupal\Component\Utility\Unicode::ucfirst($tasks[$task_type]['title']) . ': ' . $ref_title);
+    $task->save();
+  }
 }
 
 /**
@@ -757,35 +792,34 @@ function hosting_tasks_queue($count = 20) {
  *   @see drush_invoke_process().
  */
 function hosting_task_execute($task, $backend_options = array()) {
+  $task_id = hosting_task_entity_id($task);
+  $task_label = $task instanceof \Drupal\Core\Entity\EntityInterface ? $task->label() : (hosting_entity_label($task) ?? '');
   // Log in watchdog and drush.
-  watchdog('hosting_task', 'Starting task "@title" [node/@nid].', array(
-    '@title' => $task->title,
-    '@nid' => $task->nid,
-  ), WATCHDOG_NOTICE, url("node/$task->nid"));
-  drush_log(dt('Starting task "@title" [node/@nid].', array(
-    '@title' => $task->title,
-    '@nid' => $task->nid,
+  \Drupal::logger('hosting_task')->notice('Starting task "@title" [task/@id].', ['@title' => $task_label, '@id' => $task_id]);
+  drush_log(dt('Starting task "@title" [task/@id].', array(
+    '@title' => $task_label,
+    '@id' => $task_id,
   )), 'ok');
 
   // Execute in it's own process.
-  drush_invoke_process('@self', "hosting-task", array($task->nid), array('strict' => FALSE), $backend_options);
+  drush_invoke_process('@self', "hosting-task", array($task_id), array('strict' => FALSE), $backend_options);
 
   // Log a message, depending on forked process or not.
   // If forked, the process may not have completed yet, so we should change the message.
   if (isset($backend_options['fork']) && $backend_options['fork']) {
-    drush_log(dt('Launched task "@title" in a forked process. [node/@nid]', array(
-      '@title' => $task->title,
-      '@nid' => $task->nid,
+    drush_log(dt('Launched task "@title" in a forked process. [task/@id]', array(
+      '@title' => $task_label,
+      '@id' => $task_id,
     )), 'ok');
   }
   // If not forked, load and display the task status.
   else {
-    $task = node_load($task->nid, NULL, TRUE);
-    drush_log(dt('Finished task "@title" with status "@status" in @duration [node/@nid].', array(
-      '@title' => $task->title,
-      '@nid' => $task->nid,
-      '@status' => _hosting_parse_error_code($task->task_status),
-      '@duration' => format_interval($task->delta, 1),
+    $task = hosting_task_load_entity($task_id);
+    drush_log(dt('Finished task "@title" with status "@status" in @duration [task/@id].', array(
+      '@title' => $task ? $task->label() : $task_label,
+      '@id' => $task_id,
+      '@status' => $task ? _hosting_parse_error_code($task->get('task_status')->value) : '',
+      '@duration' => $task ? format_interval($task->get('delta')->value, 1) : '',
     )), 'ok');
   }
 }
@@ -795,18 +829,17 @@ function hosting_task_execute($task, $backend_options = array()) {
  *
  * This is used to ensure that there are not multiple tasks of the same type queued.
  */
-function hosting_task_outstanding($nid, $type) {
-  $return = db_query("
-      SELECT t.nid FROM {hosting_task} t
-        INNER JOIN {node} n ON t.vid = n.vid
+function hosting_task_outstanding($entity_id, $type) {
+  $return = \Drupal::database()->query("
+      SELECT t.id FROM {hosting_task} t
       WHERE
         t.rid = :rid
         AND (t.task_status = :status_queued OR t.task_status = :status_processing)
         AND t.task_type = :type
-        ORDER BY t.vid DESC
+        ORDER BY t.id DESC
         LIMIT 1",
         array(
-          ':rid' => $nid,
+          ':rid' => $entity_id,
           ':status_queued' => HOSTING_TASK_QUEUED,
           ':status_processing' => HOSTING_TASK_PROCESSING,
           ':type' => $type
@@ -818,7 +851,7 @@ function hosting_task_outstanding($nid, $type) {
  * Return the amount of items still in the queue.
  */
 function hosting_task_count() {
-  $result = db_query("SELECT COUNT(t.vid) FROM {hosting_task} t INNER JOIN {node} n ON t.vid = n.vid WHERE t.task_status = :task_status", array(':task_status' => HOSTING_TASK_QUEUED))->fetchField();
+  $result = \Drupal::database()->query("SELECT COUNT(t.id) FROM {hosting_task} t WHERE t.task_status = :task_status", array(':task_status' => HOSTING_TASK_QUEUED))->fetchField();
   return $result;
 }
 
@@ -826,9 +859,8 @@ function hosting_task_count() {
  * Return the amount of items running in the queue.
  */
 function hosting_task_count_running() {
-  return db_query("SELECT COUNT(t.nid) FROM {node} n INNER JOIN {hosting_task} t ON n.vid = t.vid WHERE type = :type AND t.task_status = :task_status AND t.executed > (UNIX_TIMESTAMP() - :timeout)",
+  return \Drupal::database()->query("SELECT COUNT(t.id) FROM {hosting_task} t WHERE t.task_status = :task_status AND t.executed > (UNIX_TIMESTAMP() - :timeout)",
     array(
-      ':type' => 'task',
       ':task_status' => HOSTING_TASK_PROCESSING,
       ':timeout' => 28800,
     )
@@ -869,7 +901,7 @@ function hosting_available_tasks($type = NULL, $reset = FALSE) {
     $cache = module_invoke_all('hosting_tasks');
 
     // Invoke hook_hosting_tasks_alter().
-    drupal_alter('hosting_tasks', $cache);
+    \Drupal::moduleHandler()->alter('hosting_tasks', $cache);
   }
   if (isset($type)) {
     return $cache[$type];
@@ -924,35 +956,14 @@ function hosting_task_action_info() {
 /**
  * Implements hook_insert().
  */
-function hosting_task_insert($node) {
-  $node->executed = isset($node->executed) ? $node->executed : NULL;
-  $node->delta = isset($node->delta) ? $node->delta : NULL;
-  $id = db_insert('hosting_task')
-    ->fields(array(
-      'vid' => $node->vid,
-      'nid' => $node->nid,
-      'task_type' => $node->task_type,
-      'task_status' => $node->task_status,
-      'rid' => $node->rid,
-      'executed' => $node->executed,
-      'delta' => $node->delta,
-    ))
-    ->execute();
-
-  if (isset($node->task_args) && is_array($node->task_args)) {
-    foreach ($node->task_args as $key => $value) {
-      $id = db_insert('hosting_task_arguments')
-        ->fields(array(
-          'vid' => $node->vid,
-          'nid' => $node->nid,
-          'name' => $key,
-          'value' => $value,
-        ))
-        ->execute();
-    }
+function hosting_task_insert($task) {
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return;
   }
-  module_invoke_all('hosting_task_update_status', $node, $node->task_status);
-  hosting_task_set_title($node);
+  if (isset($task->task_args) && is_array($task->task_args)) {
+    hosting_task_save_arguments($task->id(), $task->task_args);
+  }
+  module_invoke_all('hosting_task_update_status', $task, (int) $task->get('task_status')->value);
 }
 
 /**
@@ -961,119 +972,83 @@ function hosting_task_insert($node) {
  * As an existing node is being updated in the database, we need to do our own
  * database updates.
  */
-function hosting_task_update($node) {
-  // If this is a new node or we're adding a new revision.
-  if (!empty($node->revision)) {
-    hosting_task_insert($node);
+function hosting_task_update($task) {
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return;
   }
-  else {
-    hosting_task_set_title($node);
-    db_update('hosting_task')
-      ->fields(array(
-        'nid' => $node->nid,
-        'task_type' => $node->task_type,
-        'task_status' => $node->task_status,
-        'rid' => $node->rid,
-        'executed' => $node->executed,
-        'delta' => $node->delta,
-      ))
-      ->condition('vid', $node->vid)
-      ->execute();
-    if (isset($node->task_args) && is_array($node->task_args)) {
-      // Wipe out old arguments first, since arguments could theoretically be removed.
-      db_delete('hosting_task_arguments')
-        ->condition('vid', $node->vid)
-        ->execute();
-      foreach ($node->task_args as $key => $value) {
-        $id = db_insert('hosting_task_arguments')
-          ->fields(array(
-            'vid' => $node->vid,
-            'nid' => $node->nid,
-            'name' => $key,
-            'value' => $value,
-          ))
-          ->execute();
-      }
-    }
-    module_invoke_all('hosting_task_update_status', $node, $node->task_status);
+  if (isset($task->task_args) && is_array($task->task_args)) {
+    hosting_task_save_arguments($task->id(), $task->task_args);
   }
-}
-
-/**
- * Implements hook_delete_revision().
- */
-function hosting_nodeapi_task_delete_revision(&$node) {
-  db_delete('hosting_task')
-    ->condition('vid', $node->vid)
-    ->execute();
-  db_delete('hosting_task_arguments')
-    ->condition('vid', $node->vid)
-    ->execute();
-  db_delete('hosting_task_log')
-    ->condition('vid', $node->vid)
-    ->execute();
+  module_invoke_all('hosting_task_update_status', $task, (int) $task->get('task_status')->value);
 }
 
 /**
  * Implements hook_delete().
  */
-function hosting_task_delete($node) {
-  db_delete('hosting_task')
-    ->condition('nid', $node->nid)
+function hosting_task_delete($task) {
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return;
+  }
+  \Drupal::database()->delete('hosting_task_arguments')
+    ->condition('task_id', $task->id())
     ->execute();
-  db_delete('hosting_task_arguments')
-    ->condition('nid', $node->nid)
-    ->execute();
-  db_delete('hosting_task_log')
-    ->condition('nid', $node->nid)
+  \Drupal::database()->delete('hosting_task_log')
+    ->condition('task_id', $task->id())
     ->execute();
 }
 
 /**
  * Delete tasks related to a given site, platform, server, etc.
  */
-function hosting_task_delete_related_tasks($nid) {
-  $result = db_query("SELECT distinct nid FROM {hosting_task} WHERE rid = :rid", array(':rid' => $nid));
-  foreach ($result as $node) {
-    node_delete($node->nid);
+function hosting_task_delete_related_tasks($entity_id) {
+  $task_ids = \Drupal::entityQuery('hosting_task')
+    ->condition('rid', $entity_id)
+    ->accessCheck(FALSE)
+    ->execute();
+  if (!$task_ids) {
+    return;
   }
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_task');
+  $tasks = $storage->loadMultiple($task_ids);
+  $storage->delete($tasks);
+  \Drupal::database()->delete('hosting_task_arguments')
+    ->condition('task_id', array_values($task_ids), 'IN')
+    ->execute();
+  \Drupal::database()->delete('hosting_task_log')
+    ->condition('task_id', array_values($task_ids), 'IN')
+    ->execute();
 }
 
 /**
  * Implements hook_load().
  */
 function hosting_task_load($nodes) {
-  // Invoke hook_hosting_tasks().
   $types = module_invoke_all('hosting_tasks');
+  \Drupal::moduleHandler()->alter('hosting_tasks', $types);
 
-  // Invoke hook_hosting_tasks_alter().
-  drupal_alter('hosting_tasks', $types);
-  foreach ($nodes as $nid => &$node) {
-    $additions = db_query('SELECT task_type, executed, delta, rid, task_status, r.type as ref_type FROM {hosting_task} t LEFT JOIN {node} r ON t.rid = r.nid WHERE t.vid = :vid', array(':vid' => $node->vid))->fetch();
-    $result = db_query("SELECT name, value FROM {hosting_task_arguments} WHERE vid = :vid", array(':vid' => $node->vid));
-    if ($result) {
-      $additions->task_args = array();
-      while ($arg = $result->fetch()) {
-        $additions->task_args[$arg->name] = $arg->value;
+  foreach ($nodes as $id => &$task) {
+    if ($task instanceof \Drupal\Core\Entity\EntityInterface && $task->getEntityTypeId() === 'hosting_task') {
+      $task = hosting_task_load_arguments($task);
+      $context_name = \Drupal::database()->query("SELECT name FROM {hosting_context} WHERE entity_id = :entity_id", array(':entity_id' => $task->get('rid')->value))->fetchField();
+      if ($context_name) {
+        $entity_type_id = hosting_entity_type_from_context_name($context_name);
+        $task->ref_type = $entity_type_id ? hosting_entity_type_to_task_scope($entity_type_id) : NULL;
+      }
+      if (!empty($task->ref_type) && isset($types[$task->ref_type][$task->get('task_type')->value]['command'])) {
+        $task->task_command = $types[$task->ref_type][$task->get('task_type')->value]['command'];
       }
     }
-    foreach ($additions as $property => &$value) {
-      $node->$property = is_numeric($value) ? (int) $value : $value;
-    }
-
-    // Load task_command property from hook_hosting_tasks data.
-    $node->task_command = $types[$node->ref_type][$node->task_type]['command'];
   }
 }
 
 /**
  * Adds a retry button to failed task nodes.
  */
-function hosting_task_retry_form($form, $form_state, $nid) {
+function hosting_task_retry_form($form, $form_state, $task_id) {
   $form['#prefix'] = '<div class="hosting-task-retry">';
   $form['task'] = array(
     '#type' => 'hidden',
-    '#default_value' => $nid,
+    '#default_value' => $task_id,
   );
   $form['retry'] = array(
     '#type' => 'submit',
@@ -1088,7 +1063,7 @@ function hosting_task_retry_form($form, $form_state, $nid) {
  */
 function hosting_task_retry_form_submit($form, &$form_state) {
   hosting_task_retry($form_state['values']['task']);
-  if (module_exists('overlay')) {
+  if (\Drupal::moduleHandler()->moduleExists('overlay')) {
     overlay_close_dialog();
   }
 }
@@ -1096,11 +1071,11 @@ function hosting_task_retry_form_submit($form, &$form_state) {
 /**
  * Adds button to update the status of task nodes stuck in the 'processing' state.
  */
-function hosting_task_update_status_form($form, &$form_state, $vid) {
+function hosting_task_update_status_form($form, &$form_state, $task_id) {
   $form['#prefix'] = '<div class="hosting-task-retry">';
   $form['task'] = array(
     '#type' => 'hidden',
-    '#default_value' => $vid,
+    '#default_value' => $task_id,
   );
   $form['update-status'] = array(
     '#type' => 'submit',
@@ -1115,15 +1090,15 @@ function hosting_task_update_status_form($form, &$form_state, $vid) {
  */
 function hosting_task_update_status_form_submit($form, &$form_state) {
   hosting_task_update_status($form_state['values']['task']);
-  if (module_exists('overlay')) {
+  if (\Drupal::moduleHandler()->moduleExists('overlay')) {
     overlay_close_dialog();
   }
-  if (module_exists('hosting_queued')) {
+  if (\Drupal::moduleHandler()->moduleExists('hosting_queued')) {
     // Release the hosting_queued lock.
     // Cannot use lock release because it uses semaphore value, which only works in a single request.
     global $locks;
     unset($locks['hosting_queue_tasks_running']);
-    db_delete('semaphore')
+    \Drupal::database()->delete('semaphore')
       ->condition('name', 'hosting_queue_tasks_running')
       ->execute();
   }
@@ -1133,45 +1108,72 @@ function hosting_task_update_status_form_submit($form, &$form_state) {
 /**
  * Implements hook_view().
  */
-function hosting_task_view($node, $view_mode, $langcode = NULL) {
-  drupal_add_js(drupal_get_path('module', 'hosting') . '/hosting.js');
+function hosting_task_view($task, $view_mode, $langcode = NULL) {
+  return hosting_task_build_view($task);
+}
 
-  $ref = node_load($node->rid);
+/**
+ * Build a render array for a hosting task entity.
+ */
+function hosting_task_build_view($task) {
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return array();
+  }
 
-  hosting_set_breadcrumb($node);
-  $node->content['info']['#prefix'] = '<div id="hosting-task-info" class="clear-block">';
-  $node->content['info']['reference'] = array(
-    '#type' => 'item',
-    '#title' => drupal_ucfirst($ref->type),
-    '#markup' => _hosting_node_link($node->rid),
+  $task = hosting_task_load_arguments($task);
+  $task_status = (int) $task->get('task_status')->value;
+  $build = array(
+    '#attached' => array(
+      'library' => array(
+        'hosting/admin',
+      ),
+    ),
   );
 
-  if ($node->task_status != HOSTING_TASK_QUEUED) {
-    if ($node->task_status == HOSTING_TASK_PROCESSING) {
-      $node->content['info']['started'] = array(
+  $ref = hosting_entity_load_from_context_id($task->get('rid')->value);
+  $ref_label = $ref ? hosting_entity_task_scope($ref) : t('Reference');
+
+  $build['info'] = array(
+    '#type' => 'container',
+    '#attributes' => array(
+      'id' => 'hosting-task-info',
+      'class' => array('clear-block'),
+    ),
+  );
+  if ($ref) {
+    $build['info']['reference'] = array(
+      '#type' => 'item',
+      '#title' => \Drupal\Component\Utility\Unicode::ucfirst($ref_label),
+      '#markup' => _hosting_node_link($ref),
+    );
+  }
+
+  if ($task_status != HOSTING_TASK_QUEUED) {
+    if ($task_status == HOSTING_TASK_PROCESSING) {
+      $build['info']['started'] = array(
         '#type' => 'item',
         '#title' => t('Started'),
-        '#markup' => format_date($node->executed),
+        '#markup' => format_date($task->get('executed')->value),
         '#weight' => 1,
       );
-      $node->content['info']['delta'] = array(
+      $build['info']['delta'] = array(
         '#type' => 'item',
         '#title' => t('Processing time'),
-        '#markup' => format_interval(REQUEST_TIME - $node->executed),
+        '#markup' => format_interval(REQUEST_TIME - $task->get('executed')->value),
         '#weight' => 2,
       );
     }
-    elseif ($node->executed != NULL) {
-      $node->content['info']['executed'] = array(
+    elseif ($task->get('executed')->value) {
+      $build['info']['executed'] = array(
         '#type' => 'item',
         '#title' => t('Executed'),
-        '#markup' => format_date($node->executed),
+        '#markup' => format_date($task->get('executed')->value),
         '#weight' => 1,
       );
-      $node->content['info']['delta'] = array(
+      $build['info']['delta'] = array(
         '#type' => 'item',
         '#title' => t('Execution time'),
-        '#markup' => format_interval($node->delta),
+        '#markup' => format_interval($task->get('delta')->value),
         '#weight' => 2,
       );
     }
@@ -1180,46 +1182,45 @@ function hosting_task_view($node, $view_mode, $langcode = NULL) {
     $queues = hosting_get_queues();
     $queue = $queues['tasks'];
     $next = _hosting_queue_next_run($queue);
-    $node->content['info']['notexecuted'] = array(
+    $build['info']['notexecuted'] = array(
       '#type' => 'item',
       '#title' => t('This task has not been processed yet'),
       '#markup' => t('It will be processed around %date, if the queue is not too crowded. The queue is currently run every %freq, was last run %last and processes %items items at a time. Server time is %time.', array('%freq' => format_interval($queue['frequency']), '%date' => format_date($next, 'custom', 'H:i:sO'), '%last' => hosting_format_interval($queue['last_run']), '%items' => $queue['items'], '%time' => format_date(REQUEST_TIME, 'custom', 'H:i:sO'))),
     );
   }
-  if ($node->task_status) {
-    $node->content['info']['status'] = array(
+
+  if ($task_status) {
+    $build['info']['status'] = array(
       '#type' => 'item',
       '#title' => t('Status'),
-      '#markup' => _hosting_parse_error_code($node->task_status),
+      '#markup' => _hosting_parse_error_code($task_status),
     );
   }
-  $node->content['info']['#suffix'] = '</div>';
 
-  if (user_access('retry failed tasks') && (
-      $node->task_status == HOSTING_TASK_ERROR ||
-      $node->task_status == HOSTING_TASK_WARNING ||
-      $node->task_status == HOSTING_TASK_SUCCESS
+  if (\Drupal::currentUser()->hasPermission('retry failed tasks') && (
+      $task_status == HOSTING_TASK_ERROR ||
+      $task_status == HOSTING_TASK_WARNING ||
+      $task_status == HOSTING_TASK_SUCCESS
     )) {
-    $node->content['retry'] = array(
-      'form' => drupal_get_form('hosting_task_retry_form', $node->nid),
+    $build['retry'] = array(
+      'form' => \Drupal::formBuilder()->getForm('hosting_task_retry_form', $task->id()),
       '#weight' => 5,
     );
 
-    // Change the name of the form button to "Run Again" if the task ended ok.
-    if ($node->task_status == HOSTING_TASK_WARNING || $node->task_status == HOSTING_TASK_SUCCESS) {
-      $node->content['retry']['form']['retry']['#value'] = t('Run Again');
+    if ($task_status == HOSTING_TASK_WARNING || $task_status == HOSTING_TASK_SUCCESS) {
+      $build['retry']['form']['retry']['#value'] = t('Run Again');
     }
   }
 
-  if (user_access('update status of tasks') && ($node->task_status == HOSTING_TASK_PROCESSING)) {
-    $node->content['update-status'] = array(
-      'form' => drupal_get_form('hosting_task_update_status_form', $node->vid),
+  if (\Drupal::currentUser()->hasPermission('update status of tasks') && ($task_status == HOSTING_TASK_PROCESSING)) {
+    $build['update-status'] = array(
+      'form' => \Drupal::formBuilder()->getForm('hosting_task_update_status_form', $task->id()),
       '#weight' => 5,
     );
   }
 
-  if (user_access('access task logs')) {
-    if (in_array($node->task_status, array(HOSTING_TASK_ERROR, HOSTING_TASK_WARNING))) {
+  if (\Drupal::currentUser()->hasPermission('access task logs')) {
+    if (in_array($task_status, array(HOSTING_TASK_ERROR, HOSTING_TASK_WARNING))) {
       $url_options = array(
         'attributes' => array(
           'class' => array(
@@ -1229,40 +1230,42 @@ function hosting_task_view($node, $view_mode, $langcode = NULL) {
         ),
         'fragment' => 'warning',
       );
-      if (module_exists('overlay') && overlay_get_mode() == 'child') {
+      if (\Drupal::moduleHandler()->moduleExists('overlay') && overlay_get_mode() == 'child') {
         $url_options['query'] = array('render' => 'overlay');
       }
-      $node->content['jump-link-warning'] = array(
-        '#markup' => '<div>' . l(t('Jump to first warning'), request_path(), $url_options) . '</div>',
+      $build['jump-link-warning'] = array(
+        '#markup' => '<div>' . \Drupal\Core\Link::fromTextAndUrl(t('Jump to first warning'), \Drupal\Core\Url::fromUserInput(\Drupal::service('path.current')->getPath(), $url_options))->toString() . '</div>',
         '#weight' => 8,
       );
     }
-    if ($node->task_status == HOSTING_TASK_ERROR) {
+    if ($task_status == HOSTING_TASK_ERROR) {
       $url_options['fragment'] = 'error';
-      $node->content['jump-link-error'] = array(
-        '#markup' => '<div>' . l(t('Jump to first error'), request_path(), $url_options) . '</div>',
+      $build['jump-link-error'] = array(
+        '#markup' => '<div>' . \Drupal\Core\Link::fromTextAndUrl(t('Jump to first error'), \Drupal\Core\Url::fromUserInput(\Drupal::service('path.current')->getPath(), $url_options))->toString() . '</div>',
         '#weight' => 9,
       );
     }
-    if ($table = _hosting_task_log_table($node)) {
-      $node->content['hosting_log'] = array(
+    if ($table = _hosting_task_log_table($task)) {
+      $build['hosting_log'] = array(
         '#weight' => 10,
         'table' => $table,
       );
     }
   }
-  return $node;
+
+  return $build;
 }
 
 /**
  * Display table containing the logged information for this task.
  */
-function _hosting_task_log_table($node, $last_position = 0) {
+function _hosting_task_log_table($task, $last_position = 0) {
 
-  $types = variable_get('hosting_task_logs_types_display', hosting_log_types());
-  $query_args = array(':vid' => $node->vid, ':lid' => $last_position, ':types' => $types);
+  $types = \Drupal::config('hosting.settings')->get('hosting_task_logs_types_display') ?? hosting_log_types();
+  $task_id = hosting_task_entity_id($task);
+  $query_args = array(':task_id' => $task_id, ':lid' => $last_position, ':types' => $types);
 
-  $result = db_query("SELECT * FROM {hosting_task_log} WHERE vid = :vid AND lid > :lid AND type IN (:types) ORDER BY lid", $query_args);
+  $result = \Drupal::database()->query("SELECT * FROM {hosting_task_log} WHERE task_id = :task_id AND lid > :lid AND type IN (:types) ORDER BY lid", $query_args);
   if ($result) {
     $headers = array('data' => 'Log message', 'execution_time' => 'Execution time', '');
     $rows = array();
@@ -1341,23 +1344,18 @@ function _hosting_task_log_table($node, $last_position = 0) {
       ),
     );
     // If the task has not finished executing, update via AJAX.
-    if (!hosting_task_task_has_finished($node)) {
+    if (!hosting_task_task_has_finished($task)) {
       $table += array(
-        '#refresh_url' => url('hosting/task/log/ajax/' . $node->nid . '/' . $last_lid),
+        '#refresh_url' => \Drupal\Core\Url::fromUserInput('/hosting/task/log/ajax/' . $task_id . '/' . $last_lid)->toString(),
         '#attached' => array(
-          'js' => array(
-            array(
-              'data' => array(
-                'hosting_task' => array(
-                  'refresh_url' => url('hosting/task/log/ajax/' . $node->nid . '/' . $last_lid),
-                ),
-              ),
-              'type' => 'setting',
+          'drupalSettings' => array(
+            'hosting_task' => array(
+              'refresh_url' => \Drupal\Core\Url::fromUserInput('/hosting/task/log/ajax/' . $task_id . '/' . $last_lid)->toString(),
             ),
-            drupal_get_path('module', 'hosting_task') . '/js/hosting_task.table.js',
           ),
           'library' => array(
-            array('system', 'drupal.ajax'),
+            'hosting_task/table',
+            'core/drupal.ajax',
           ),
         ),
       );
@@ -1409,9 +1407,9 @@ function _hosting_task_log_class($type) {
  * This is used for documenting issues with verification.
  */
 function hosting_get_most_recent_task($rid, $type) {
-  $nid = db_query("SELECT t.nid FROM {hosting_task} t INNER JOIN {node} n ON n.vid = t.vid WHERE task_type = :task_type and t.rid = :t_rid ORDER BY t.vid DESC limit 1", array(':task_type' => $type, ':t_rid' => $rid))->fetchField();
-  if ($nid) {
-    return node_load($nid);
+  $task_id = \Drupal::database()->query("SELECT t.id FROM {hosting_task} t WHERE task_type = :task_type and t.rid = :t_rid ORDER BY t.id DESC limit 1", array(':task_type' => $type, ':t_rid' => $rid))->fetchField();
+  if ($task_id) {
+    return hosting_task_load_entity($task_id);
   }
   return FALSE;
 }
@@ -1425,28 +1423,18 @@ function hosting_get_most_recent_task($rid, $type) {
  * @arg $element integer which element to start from
  */
 function hosting_get_tasks($filter_by = NULL, $filter_value = NULL, $count = 5, $element = 0) {
-  $nodes = array();
-  $query = db_select('node', 'n')
-    ->extend('PagerDefault');
-  $query->element($element);
-  $query->join('hosting_task', 't', 'n.vid=t.vid');
-  $query = $query
-    ->fields('n')
-    ->fields('t', array('task_status', 'task_type', 'rid'))
-    ->condition('type', 'task')
-    ->orderBy('n.vid', 'DESC')
-    ->limit($count)
-    ->addTag('node_access');
+  $query = \Drupal::entityQuery('hosting_task')
+    ->accessCheck(FALSE)
+    ->sort('id', 'DESC')
+    ->range($element, $count);
   if (isset($filter_by) && isset($filter_value)) {
-    $query = $query->condition($filter_by, $filter_value);
+    $query->condition($filter_by, $filter_value);
   }
-  $result = $query->execute();
-
-  foreach ($result as $row) {
-    $nodes[] = $row;
+  $task_ids = $query->execute();
+  if (!$task_ids) {
+    return array();
   }
-
-  return $nodes;
+  return \Drupal::entityTypeManager()->getStorage('hosting_task')->loadMultiple($task_ids);
 }
 
 /**
@@ -1463,14 +1451,12 @@ function hosting_get_tasks($filter_by = NULL, $filter_value = NULL, $count = 5, 
  *   An associative array containing task nodes, indexed by node id.
  */
 function hosting_get_new_tasks($limit = 20, $rid = NULL, $task_type = NULL) {
-  $return = array();
-  $query = db_select('hosting_task', 't');
-  $query->innerJoin('node', 'n', 't.vid = n.vid');
+  $query = \Drupal::database()->select('hosting_task', 't');
   $query
-    ->fields('t', array('nid'))
+    ->fields('t', array('id'))
     ->condition('t.task_status', HOSTING_TASK_QUEUED)
-    ->orderBy('n.changed')
-    ->orderBy('n.nid')
+    ->orderBy('t.changed')
+    ->orderBy('t.id')
     ->groupBy('t.rid')
     ->range(0, $limit)
     ->addTag('hosting_get_new_tasks');
@@ -1483,10 +1469,11 @@ function hosting_get_new_tasks($limit = 20, $rid = NULL, $task_type = NULL) {
     $query->condition('t.task_type', $task_type);
   }
 
-  foreach ($query->execute() as $node) {
-    $return[$node->nid] = node_load($node->nid);
+  $task_ids = $query->execute()->fetchCol();
+  if (!$task_ids) {
+    return array();
   }
-  return $return;
+  return \Drupal::entityTypeManager()->getStorage('hosting_task')->loadMultiple($task_ids);
 }
 
 /**
@@ -1565,16 +1552,13 @@ function _hosting_parse_error_code($code) {
  * Return the status of the task matching the specification.
  */
 function hosting_task_status($filter_by, $filter_value, $type = 'install') {
-  $query = db_select('node', 'n');
-  $query->join('hosting_task', 't', 'n.vid = t.vid');
-  $query
+  $query = \Drupal::database()->select('hosting_task', 't')
     ->fields('t', array('task_status'))
-    ->condition('n.type', 'task')
     ->condition('t.task_type', $type);
   if ($filter_by && $filter_value) {
     $query->condition('t.' . $filter_by, $filter_value);
   }
-  $query->orderBy('t.vid', 'DESC');
+  $query->orderBy('t.id', 'DESC');
 
   return $query->execute()->fetchField();
 }
@@ -1610,7 +1594,7 @@ function hosting_task_list($filter_by = NULL, $filter_value = NULL) {
  * simple interface.
  */
 function hosting_task_table($node) {
-  $output = '';
+  $build = array();
 
   $headers[] = t('Task');
   $headers[] = array(
@@ -1618,13 +1602,16 @@ function hosting_task_table($node) {
     'class' => array('hosting-actions'),
   );
 
-  $tasklist = hosting_task_fetch_tasks($node->nid);
+  $entity_id = hosting_entity_id($node);
+  $entity_type_id = hosting_entity_type_id($node);
+  $task_scope = hosting_entity_task_scope($node);
+  $tasklist = hosting_task_fetch_tasks($entity_id);
   $rows = array();
 
   foreach ($tasklist as $task => $info) {
     $row = array();
 
-    if (!isset($info['nid']) && !$info['task_permitted']) {
+    if (!isset($info['id']) && !$info['task_permitted']) {
       // Just don't show those tasks, since we'll not be able to run them.
       continue;
     }
@@ -1641,13 +1628,13 @@ function hosting_task_table($node) {
     $actions = array();
 
     if (isset($info['task_status']) && ($info['task_status'] == 0)) {
-      $actions['cancel'] = _hosting_task_button(t('Cancel'), sprintf("hosting/tasks/%d/cancel", $info['nid']), t("Cancel the task and remove it from the queue"), 'hosting-button-stop', !$info['task_permitted']);
+      $actions['cancel'] = _hosting_task_button(t('Cancel'), sprintf("hosting/tasks/%d/cancel", $info['id']), t("Cancel the task and remove it from the queue"), 'hosting-button-stop', !$info['task_permitted']);
     }
     else {
-      $actions['run'] = _hosting_task_button(t('Run'), sprintf("hosting_confirm/%d/%s_%s", $node->nid, $node->type, $task), $info['description'], 'hosting-button-run', $info['task_permitted'], $info['dialog']);
+      $actions['run'] = _hosting_task_button(t('Run'), sprintf("hosting_confirm/%s/%d/%s_%s", $entity_type_id, $entity_id, $task_scope, $task), $info['description'], 'hosting-button-run', $info['task_permitted'], $info['dialog']);
     }
 
-    $actions['log'] = _hosting_task_button(t('View'), isset($info['nid']) ? 'hosting/task/' . $info['nid'] : '<front>', t("Display the task log"), 'hosting-button-log', isset($info['nid']) &&  user_access('access task logs'), TRUE, FALSE);
+    $actions['log'] = _hosting_task_button(t('View'), isset($info['id']) ? 'hosting/task/' . $info['id'] : '<front>', t("Display the task log"), 'hosting-button-log', isset($info['id']) &&  \Drupal::currentUser()->hasPermission('access task logs'), TRUE, FALSE);
     $row['actions'] = array(
       'data' => implode('', $actions),
       'class' => array('hosting-actions'),
@@ -1658,8 +1645,18 @@ function hosting_task_table($node) {
       'class' => array($info['class']),
     );
   }
-  $output .= theme('table', array('header' => $headers, 'rows' => $rows, 'attributes' => array('class' => array('hosting-table'))));
-  return $output;
+  $build['table'] = array(
+    '#markup' => \Drupal::service('theme.manager')->render('table', array('header' => $headers, 'rows' => $rows, 'attributes' => array('class' => array('hosting-table')))),
+  );
+
+  if ($entity_type_id && $entity_id) {
+    $build['#attached']['drupalSettings']['hostingTaskRefresh'] = array(
+      'entityType' => $entity_type_id,
+      'entityId' => $entity_id,
+      'changed' => hosting_task_entity_changed($node),
+    );
+  }
+  return $build;
 }
 
 /**
@@ -1683,10 +1680,19 @@ function _hosting_task_button($title, $link, $description, $class = '', $status 
     );
     if ($add_token) {
       $options['query'] = array(
-        'token' => drupal_get_token($user->uid),
+        'token' => \Drupal::service('csrf_token')->get((string) $user->uid),
       );
     }
-    return l($title, $link, $options);
+    if ($link === '<front>' || $link === '') {
+      $url = \Drupal\Core\Url::fromRoute('<front>', $options);
+    }
+    elseif (preg_match('/^https?:/i', $link)) {
+      $url = \Drupal\Core\Url::fromUri($link, $options);
+    }
+    else {
+      $url = \Drupal\Core\Url::fromUserInput('/' . ltrim($link, '/'), $options);
+    }
+    return \Drupal\Core\Link::fromTextAndUrl($title, $url)->toString();
   }
   else {
     return "<span class='hosting-button-disabled'>" . $title . "</span>";
@@ -1708,10 +1714,11 @@ function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0,
       $row = array();
 
       if ($field == 'title') {
-        $data = drupal_ucfirst($node->task_type) . ' ' . _hosting_node_link($node->rid);
+        $ref = hosting_entity_load_from_context_id($node->get('rid')->value);
+        $data = \Drupal\Component\Utility\Unicode::ucfirst($node->get('task_type')->value) . ' ' . _hosting_node_link($ref);
       }
       else {
-        $data = $node->{$field};
+        $data = $node->get($field)->value;
       }
       $row['type'] = array(
         'data' => $data,
@@ -1719,28 +1726,28 @@ function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0,
       );
 
       if (!in_array('created', $skip)) {
-        $row['created'] = t("@interval ago", array('@interval' => format_interval(REQUEST_TIME - $node->created, 1)));
+        $row['created'] = t("@interval ago", array('@interval' => format_interval(REQUEST_TIME - $node->get('created')->value, 1)));
         $headers[t('Created')] = '';
       }
 
-      if ($node->task_status == 0) {
+      if ((int) $node->get('task_status')->value == 0) {
         $row['executed'] = '';
       }
       else {
-        $row['executed'] = t("@interval ago", array('@interval' => format_interval(REQUEST_TIME - $node->changed, 1)));
+        $row['executed'] = t("@interval ago", array('@interval' => format_interval(REQUEST_TIME - $node->get('changed')->value, 1)));
       }
       $headers[t('Executed')] = '';
 
       $headers[t('Actions')] = '';
 
-      $actions['log'] = l(t('View'), 'node/' . $node->nid, array('attributes' => array('class' => array('hosting-button-dialog', 'hosting-button-enabled', 'hosting-button-log'))));
+      $actions['log'] = \Drupal\Core\Link::fromTextAndUrl(t('View'), \Drupal\Core\Url::fromUserInput('/hosting/task/' . $node->id(), array('attributes' => array('class' => array('hosting-button-dialog', 'hosting-button-enabled', 'hosting-button-log')))))->toString();
 
       $row['actions'] = array(
         'data' => $actions['log'],
         'class' => array('hosting-actions'),
       );
 
-      $class = hosting_task_status_class($node->task_status);
+      $class = hosting_task_status_class((int) $node->get('task_status')->value);
 
       $rows[] = array(
         'data' => $row,
@@ -1748,9 +1755,9 @@ function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0,
       );
     }
 
-    $output = theme('table', array('header' => array_keys($headers), 'rows' => $rows, 'attributes' => array('class' => array('hosting-table'))));
+    $output = \Drupal::service('theme.manager')->render('table', array('header' => array_keys($headers), 'rows' => $rows, 'attributes' => array('class' => array('hosting-table'))));
     if ($pager === TRUE) {
-      $output .= theme('pager', array('tags' => NULL, 'element' => $element));
+      $output .= \Drupal::service('theme.manager')->render('pager', array('tags' => NULL, 'element' => $element));
     }
     elseif (is_string($pager)) {
       $output .= $pager;
@@ -1764,21 +1771,22 @@ function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0,
  * @see http://drupal.org/node/1354
  */
 function hosting_task_fetch_tasks($rid) {
-  $node = node_load($rid);
+  $entity = hosting_entity_load_from_context_id($rid);
+  $task_scope = hosting_entity_task_scope($entity);
 
-  $result = db_query("SELECT n.nid, t.task_type, t.task_status FROM {node} n INNER JOIN {hosting_task} t ON n.vid = t.vid
-    WHERE n.type = :ntype AND t.rid = :trid
-    ORDER BY n.changed ASC", array(':ntype' => 'task', ':trid' => $rid));
+  $result = \Drupal::database()->query("SELECT t.id, t.task_type, t.task_status FROM {hosting_task} t
+    WHERE t.rid = :trid
+    ORDER BY t.changed ASC", array(':trid' => $rid));
 
   foreach ($result as $obj) {
     $return[$obj->task_type] = array(
-      'nid' => $obj->nid,
+      'id' => $obj->id,
       'task_status' => $obj->task_status,
       'exists' => TRUE,
     );
   }
 
-  $tasks = hosting_available_tasks($node->type);
+  $tasks = $task_scope ? hosting_available_tasks($task_scope) : array();
   ksort($tasks);
 
   foreach ($tasks as $type => $hook_task) {
@@ -1793,7 +1801,7 @@ function hosting_task_fetch_tasks($rid) {
     $task = array_merge($return[$type], $hook_task);
 
     $allowed = (isset($task['exists']) && !in_array($task['task_status'], array(HOSTING_TASK_QUEUED, HOSTING_TASK_PROCESSING))) || !isset($task['exists']);
-    if ($allowed && empty($task['hidden']) && $access_callback($node, $type)) {
+    if ($allowed && empty($task['hidden']) && $entity && $access_callback($entity, $type)) {
       $task['task_permitted'] = TRUE;
     }
     else {
@@ -1849,13 +1857,93 @@ function hosting_task_status_class($status = NULL) {
 }
 
 /**
- * Views integration.
+ * Implements hook_views_data().
  */
-function hosting_task_views_api() {
-  return array(
-    'api' => 3,
-    'path' => drupal_get_path('module', 'hosting_task') . '/includes/views',
-  );
+function hosting_task_views_data() {
+  $data = [];
+
+  $data['hosting_task']['table'] = [
+    'group' => t('Hosting Task'),
+    'title' => t('Task'),
+    'entity type' => 'hosting_task',
+  ];
+
+  $data['hosting_task']['task_type'] = [
+    'title' => t('Type'),
+    'help' => t('The type of task.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+    'filter' => [
+      'id' => 'hosting_task_type_filter',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_task']['rid'] = [
+    'title' => t('Reference ID'),
+    'help' => t('The referenced ID for the task.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_task']['task_status'] = [
+    'title' => t('Status'),
+    'help' => t('Current status of the task.'),
+    'field' => [
+      'id' => 'hosting_task_status',
+    ],
+    'filter' => [
+      'id' => 'hosting_task_status_filter',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_task']['executed'] = [
+    'title' => t('Executed'),
+    'help' => t('Date this task was executed.'),
+    'field' => [
+      'id' => 'date',
+    ],
+    'sort' => [
+      'id' => 'date',
+    ],
+    'filter' => [
+      'id' => 'date',
+    ],
+    'argument' => [
+      'id' => 'date',
+    ],
+  ];
+
+  $data['hosting_task']['delta'] = [
+    'title' => t('Execution time'),
+    'help' => t('Time this task took.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_task']['hosting_task_default'] = [
+    'title' => t('Default'),
+    'help' => t('The default sort order for tasks.'),
+    'sort' => [
+      'id' => 'hosting_task_default_sort',
+    ],
+  ];
+
+  return $data;
 }
 
 /**
@@ -1881,12 +1969,10 @@ function hosting_task_preprocess_views_view_table(&$vars) {
 
   switch ($id) {
     case 'hosting_task_list-block':
-      drupal_add_js(drupal_get_path('module', 'hosting_task') . '/hosting_task.js');
-
-      $settings['hostingTaskRefresh'] = array(
+      $vars['#attached']['library'][] = 'hosting_task/task';
+      $vars['#attached']['drupalSettings']['hostingTaskRefresh'] = array(
         'queueBlock' => 1,
       );
-      drupal_add_js($settings, 'setting');
       break;
   }
 }
@@ -1902,21 +1988,16 @@ function hosting_task_preprocess_views_view_table(&$vars) {
  */
 function hosting_task_update_status($task) {
   if (is_numeric($task)) {
-    $vid = $task;
-    $task = node_load(NULL, $task);
+    $task = hosting_task_load_entity($task);
   }
-  else {
-    $vid = $task->vid;
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
+    return NULL;
   }
 
-  // Get the status of the task by parsing the log.
-  $status = hosting_task_parse_log($vid);
-  db_update('hosting_task')
-  ->fields(array(
-    'task_status' => $status,
-  ))
-  ->condition('vid', $vid)
-  ->execute();
+  $task_id = $task->id();
+  $status = hosting_task_parse_log($task_id);
+  $task->set('task_status', $status);
+  $task->save();
 
   // Invoke hook_hosting_task_update_status().
   module_invoke_all('hosting_task_update_status', $task, $status);
@@ -1926,16 +2007,16 @@ function hosting_task_update_status($task) {
 /**
  * Parse a task's log, and return its status accordingly.
  *
- * @param int $vid
- *   The revision ID of a task node.
+ * @param int $task_id
+ *   The hosting task entity ID.
  *
  * @return int
  *   The task's status error code.
  */
-function hosting_task_parse_log($vid) {
+function hosting_task_parse_log($task_id) {
   // Assume the best.
   $update = HOSTING_TASK_SUCCESS;
-  $result = db_query('SELECT type FROM {hosting_task_log} WHERE vid = :vid', array(':vid' => $vid));
+  $result = \Drupal::database()->query('SELECT type FROM {hosting_task_log} WHERE task_id = :task_id', array(':task_id' => $task_id));
   foreach ($result as $status) {
     if ($status->type == 'error' || $status->type == 'failed') {
       $update = HOSTING_TASK_ERROR;
@@ -1952,11 +2033,11 @@ function hosting_task_parse_log($vid) {
  * Invoke hooks to build a list of NIDs to guard.
  */
 function hosting_task_get_guarded_nodes() {
-  $guarded_nids = &drupal_static(__FUNCTION__);
+  static $guarded_nids;
   if (!isset($guarded_nids)) {
     // Invoke hook_hosting_task_guarded_nodes().
     $guarded_nids = module_invoke_all('hosting_task_guarded_nodes');
-    drupal_alter('hosting_task_guarded_nodes', $guarded_nids);
+    \Drupal::moduleHandler()->alter('hosting_task_guarded_nodes', $guarded_nids);
   }
   return $guarded_nids;
 }
@@ -1965,11 +2046,11 @@ function hosting_task_get_guarded_nodes() {
  * Invoke hooks to build a list of dangerous tasks.
  */
 function hosting_task_get_dangerous_tasks() {
-  $dangerous_tasks = &drupal_static(__FUNCTION__);
+  static $dangerous_tasks;
   if (!isset($dangerous_tasks)) {
     // Invoke hook_hosting_task_dangerous_tasks().
     $dangerous_tasks = module_invoke_all('hosting_task_dangerous_tasks');
-    drupal_alter('hosting_task_dangerous_tasks', $dangerous_tasks);
+    \Drupal::moduleHandler()->alter('hosting_task_dangerous_tasks', $dangerous_tasks);
   }
   return $dangerous_tasks;
 }
@@ -1988,20 +2069,22 @@ function hosting_task_hosting_task_dangerous_tasks() {
 /**
  * Guard against destructive tasks running on guarded Aegir entities.
  */
-function hosting_task_dangerous_task_is_allowed($task_type, $nid) {
+function hosting_task_dangerous_task_is_allowed($task_type, $entity_id) {
   $allowed = TRUE;
-  $guarded_nids = hosting_task_get_guarded_nodes();
-  if (in_array($nid, $guarded_nids)) {
+  $guarded_ids = hosting_task_get_guarded_nodes();
+  if (in_array($entity_id, $guarded_ids)) {
     $dangerous_tasks = hosting_task_get_dangerous_tasks();
     if (in_array($task_type, $dangerous_tasks)) {
-      $node = node_load($nid);
+      $entity = hosting_entity_load_from_context_id($entity_id);
+      $label = $entity ? hosting_entity_label($entity) : $entity_id;
+      $type = $entity ? hosting_entity_task_scope($entity) : t('entity');
       $map = array(
         ':task' => $task_type,
-        ':title' => $node->title,
-        ':type' => $node->type,
+        ':title' => $label,
+        ':type' => $type,
       );
-      drupal_set_message(t('You cannot run dangerous :task task on guarded :type :title.', $map), 'warning');
-      watchdog('hostmaster', 'Detected attempt to run dangerous :task task on guarded :type :title.', $map, WATCHDOG_WARNING);
+      \Drupal::messenger()->addMessage(t('You cannot run dangerous :task task on guarded :type :title.', $map), 'warning');
+      \Drupal::logger('hostmaster')->warning('Detected attempt to run dangerous :task task on guarded :type :title.', $map);
       $allowed = FALSE;
     }
   }

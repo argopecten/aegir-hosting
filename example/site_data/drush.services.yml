@@ -1,0 +1,5 @@
+services:
+  hosting_site_data.commands:
+    class: Drupal\hosting_site_data\Commands\HostingSiteDataCommands
+    tags:
+      - { name: drush.command }

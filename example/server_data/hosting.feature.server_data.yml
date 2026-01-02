@@ -1,0 +1,6 @@
+server_data:
+  title: 'Server data example'
+  description: 'Example implementation of saving data into a server context.'
+  status: disabled
+  module: hosting_server_data
+  group: experimental

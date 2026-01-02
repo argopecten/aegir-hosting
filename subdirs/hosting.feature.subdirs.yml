@@ -1,0 +1,6 @@
+subdirs:
+  title: 'Site subdirectories'
+  description: 'Subdirectory multisite support.'
+  status: disabled
+  module: hosting_subdirs
+  group: experimental

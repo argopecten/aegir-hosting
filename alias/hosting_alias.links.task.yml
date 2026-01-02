@@ -1,0 +1,4 @@
+hosting_alias.settings:
+  route_name: hosting_alias.settings
+  title: 'Site aliases'
+  base_route: hosting.admin

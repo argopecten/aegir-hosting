@@ -1,0 +1,14 @@
+hosting_platform.list:
+  route_name: entity.hosting_platform.collection
+  title: 'List'
+  base_route: entity.hosting_platform.collection
+
+hosting_platform.add:
+  route_name: entity.hosting_platform.add_form
+  title: 'Add platform'
+  base_route: entity.hosting_platform.collection
+
+hosting_platform.edit:
+  route_name: hosting_platform.edit
+  title: 'Edit Platform'
+  base_route: entity.hosting_site.canonical

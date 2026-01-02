@@ -1,0 +1,7 @@
+name: 'Web Cluster'
+type: module
+description: 'Allow hostmaster to configure web clusters.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_web_server'

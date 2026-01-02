@@ -24,8 +24,8 @@
  *   An array of paramters that may contain information about the site. None of
  *   the keys are required however, so you should not depend on the value of any
  *   particular key in this array. If the array is not empty it will usually
- *   contain at least a 'nid' key whose value is the nid of the site being
- *   created.
+ *   contain at least an 'id' key whose value is the entity ID of the site
+ *   being created.
  *
  * @return bool
  *   Return TRUE/FALSE if you allow or deny the domain respectively.
@@ -82,51 +82,34 @@ function hook_drush_context_import($context, &$node) {
  * The frontend provides a UI for enabling and disabling features, which usually
  * corresponds to enabling and disabling a module providing the feature.
  *
- * This hook can be implemented in a file named:
- * hosting.feature.FEATURE_KEY.inc
+ * Features are declared in YAML files named:
+ * hosting.feature.FEATURE_KEY.yml
  *
  * Note that the module providing this hook does not need to be enabled for it
  * to be called. The frontend will use details in this hook to enable a module
  * if the feature is enabled.
  *
- * @return array
- *   An array of hosting features, keyed by the machine name of the feature.
- *   Inner arrays may contain the following keys:
- *   - 'title': The localised title of the feature.
- *   - 'description': The localised description of the feature.
- *   - 'status': The inital status of the feature, either
- *      HOSTING_FEATURE_DISABLED, HOSTING_FEATURE_ENABLED or
- *      HOSTING_FEATURE_REQUIRED.
- *   - 'module': A module to enable or disable whenever the feature is enabled
- *      or disabled.
- *   - 'node': A node type that is associated with this feature.
- *   - 'enable': A function name to call when this feature is enabled.
- *   - 'disable': A function name to call when this feature is disabled.
- *   - 'group': The group that this feature belongs to, should be either NULL or
- *     'experimental' (or 'required' for core features).
+ * Features are now declared in `hosting.feature.*.yml` files stored alongside
+ * each module. Example (hosting.feature.example.yml):
+ *
+ * @code
+ * example:
+ *   title: 'Example feature'
+ *   description: 'Example feature documenting how to create extensions.'
+ *   status: disabled
+ *   module: hosting_example
+ *   entity_type: hosting_example
+ *   enable: 'hosting_example_feature_enable_callback'
+ *   disable: 'hosting_example_feature_disable_callback'
+ *   group: experimental
+ * @endcode
+ *
+ * @deprecated Hook-based feature definitions are no longer loaded.
  *
  * @see hosting_get_features()
  */
 function hook_hosting_feature() {
-  // From hosting_example_hosting_feature().
-  $features['example'] = array(
-    // Title to display in form.
-    'title' => t('Example feature'),
-    // Description.
-    'description' => t('Example feature documenting how to create your own extensions.'),
-    // Initial status ( HOSTING_FEATURE_DISABLED, HOSTING_FEATURE_ENABLED, HOSTING_FEATURE_REQUIRED )
-    'status' => HOSTING_FEATURE_DISABLED,
-    // Module to enable/disable alongside feature.
-    'module' => 'hosting_example',
-    // Callback functions to execute on enabling or disabling this feature.
-    'enable' => 'hosting_example_feature_enable_callback',
-    'disable' => 'hosting_example_feature_disable_callback',
-    // Associate with a specific node type.
-    // 'node' => 'nodetype',
-    // Which group to display in ( null , experimental , required )
-    'group' => 'experimental',
-  );
-  return $features;
+  return [];
 }
 
 /**
@@ -255,44 +238,30 @@ function hook_hosting_TASK_TYPE_task_rollback($task, $data) {
   else {
     $task->ref->no_verify = TRUE;
     $task->ref->site_status = HOSTING_SITE_DISABLED;
-    node_save($task->ref);
+    if ($task->ref instanceof \Drupal\Core\Entity\EntityInterface) {
+      $task->ref->save();
+    }
   }
 }
 
 /**
- * Act on nodes defined by other modules.
+ * Act on hosting entities defined by other modules.
  *
- * This is a more specific version of hook_nodeapi() that includes a node type
- * and operation being performed, in the function name. When implementing this
- * hook you should replace TYPE with the node type and OP with the node
- * operation you would like to be notified for. A list of possible values for OP
- * can be found in the documentation for hook_nodeapi().
+ * This is a more specific version of hook_entity_*() that includes an entity
+ * type and operation in the function name. When implementing this hook you
+ * should replace ENTITY_TYPE with the hosting entity type and OP with the
+ * operation you would like to be notified for (insert, update, delete, etc).
  *
- * This hook may help you write code that is easier to follow, but this is a
- * hosting specific hook so you may confuse other developers that are not so
- * familar with the internals of hosting.
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ *   The entity the action is being performed on.
  *
- * @param object &$node
- *   The node the action is being performed on.
- * @param mixed $a3
- *   - When OP is "view", passes in the $teaser parameter from node_view().
- *   - When OP is "validate", passes in the $form parameter from node_validate().
- * @param mixed $a4
- *   - When OP is "view", passes in the $page parameter from node_view().
- *
- * @return mixed
- *   This varies depending on the operation (OP).
- *   - The "presave", "insert", "update", "delete", "print" and "view"
- *     operations have no return value.
- *   - The "load" operation should return an array containing pairs
- *     of fields => values to be merged into the node object.
- *
- * @see hook_nodeapi()
- * @see hosting_nodeapi()
+ * @see hook_entity_insert()
+ * @see hook_entity_update()
+ * @see hook_entity_delete()
  */
-function hook_nodeapi_TYPE_OP(&$node, $a3, $a4) {
-  // From hosting_nodeapi_client_delete_revision().
-  db_query('DELETE FROM {hosting_client} WHERE vid = %d', $node->vid);
+function hook_hosting_client_delete(\Drupal\Core\Entity\EntityInterface $entity) {
+  // From hosting_client_entity_delete().
+  \Drupal::database()->delete('hosting_client')->condition('id', $entity->id())->execute();
 }
 
 /**
@@ -325,11 +294,12 @@ function hook_nodeapi_TYPE_OP(&$node, $a3, $a4) {
 function hook_post_hosting_TASK_TYPE_task($task, $data) {
   // From hosting_site_post_hosting_backup_task().
   if ($data['context']['backup_file'] && $task->ref->type == 'site') {
-    $platform = node_load($task->ref->platform);
+    $platform = \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($task->ref->get('platform')->target_id);
 
     $desc = $task->task_args['description'];
     $desc = ($desc) ? $desc : t('Generated on request');
-    hosting_site_add_backup($task->ref->nid, $platform->web_server, $data['context']['backup_file'], $desc, $data['context']['backup_file_size']);
+    $web_server_id = $platform instanceof \Drupal\Core\Entity\ContentEntityInterface ? $platform->get('web_server')->target_id : NULL;
+    hosting_site_add_backup($task->ref->id(), $web_server_id, $data['context']['backup_file'], $desc, $data['context']['backup_file_size']);
   }
 }
 
@@ -359,7 +329,7 @@ function hosting_QUEUE_TYPE_queue($count = 5) {
   drush_log(dt("Running tasks queue"));
   $tasks = hosting_get_new_tasks($count);
   foreach ($tasks as $task) {
-    drush_invoke_process('@self', "hosting-task", array($task->nid), array(), array('fork' => TRUE));
+    drush_invoke_process('@self', "hosting-task", array($task->id()), array(), array('fork' => TRUE));
   }
 }
 
@@ -391,21 +361,23 @@ function hosting_TASK_SINGULAR_summary() {
  */
 function hook_hosting_task_update_status($task, $status) {
 
-  // A task's "RID" is a node ID for the object the task is run on. (Site, Platform, Server, etc)
-  $node = node_load($task->rid);
+  // A task's "RID" is the entity ID for the object the task is run on. (Site, Platform, Server, etc)
+  $node = hosting_entity_load_any($task->rid);
 
   // On error, output a new message.
   if ($status == HOSTING_TASK_ERROR) {
+    $label = hosting_entity_label($node) ?? '';
     drush_log(dt("!title: !task task ended in an Error", array(
       '!task' => $task->task_type,
-      '!title' => $node->title,
+      '!title' => $label,
     )), 'error');
   }
   else {
+    $label = hosting_entity_label($node) ?? '';
     drush_log(" Task completed successfully: " . $task->task_type, 'ok');
     drush_log(dt("!title: !task task ended with !status", array(
       '!task' => $task->task_type,
-      '!title' => $node->title,
+      '!title' => $label,
       '!status' => _hosting_parse_error_code($status),
     )), 'ok');
   }
@@ -419,27 +391,27 @@ function hook_hosting_task_update_status($task, $status) {
  */
 function hook_hosting_task_guarded_nodes() {
   // Guard against destructive tasks run on the hostmaster site or platform.
-  $hostmaster_site_nid = hosting_get_hostmaster_site_nid();
-  $hostmaster_platform_nid = hosting_get_hostmaster_platform_nid();
-  $guarded_nids = array(
-    $hostmaster_site_nid,
-    $hostmaster_platform_nid,
+  $hostmaster_site_id = hosting_get_hostmaster_site_id();
+  $hostmaster_platform_id = hosting_get_hostmaster_platform_id();
+  $guarded_ids = array(
+    $hostmaster_site_id,
+    $hostmaster_platform_id,
   );
-  return $guarded_nids;
+  return $guarded_ids;
 }
 
 /**
  * Alter the list of guarded nodes.
  *
- * @param $nids
- *   A list of NIDs as returned by hook_hosting_task_guarded_nodes().
+ * @param $ids
+ *   A list of entity IDs as returned by hook_hosting_task_guarded_nodes().
  */
-function hook_hosting_task_guarded_nodes_alter(&$nids) {}
+function hook_hosting_task_guarded_nodes_alter(&$ids) {}
 
 /**
  * Return a list of dangerous tasks.
  *
- * These tasks will be blocked on guarded noded.
+ * These tasks will be blocked on guarded entities.
  * @see: hook_hosting_task_guarded_nodes().
  * @see: hook_hosting_task_dangerous_tasks_alter().
  */
@@ -464,40 +436,37 @@ function hook_hosting_task_dangerous_tasks_alter(&$tasks) {}
  */
 
 /**
- * Easily create a new site and a platform by passing just a name and a makefile URL.
+ * Easily create a new site and a platform by passing a name and publish path.
  *
  * To get a new website running from a new codebase in Aegir, you need to create
  * a platform, and then a site node. With the latest version, you can use code
  * to do both at once.
  *
- * This function will create a platform node for /var/aegir/mywebservice/$name
- * using the $makefile specified, and will then create a site node with the URL
+ * This function will create a platform entity pointing at an existing
+ * Composer-managed codebase, and then create a site entity with the URL
  * $name.mywebservice.com.
  */
-function example_create_site($name, $makefile) {
+function example_create_site($name, $publish_path) {
 
   // Create site node.
-  $site = new stdClass();
-  $site->type = 'site';
-  $site->title = "{$name}.mywebservice.com";
-  $site->status = 1;
-  $site->uid = 1;
-  $site->client = HOSTING_DEFAULT_CLIENT;
-  $site->site_status = HOSTING_SITE_QUEUED;
+  $site_values = array(
+    'label' => "{$name}.mywebservice.com",
+    'status' => 1,
+    'client' => HOSTING_DEFAULT_CLIENT,
+  );
 
   // Create a platform node.
-  $platform_node = new stdClass();
-  $platform_node->type = 'platform';
-  $platform_node->title = "mywebservice_{$name}";
-  $platform_node->publish_path = "/var/aegir/mywebservice/{$name}";
-  $platform_node->makefile = $makefile;
+  $platform = \Drupal::entityTypeManager()->getStorage('hosting_platform')->create(array(
+    'label' => "mywebservice_{$name}",
+    'publish_path' => $publish_path,
+    'status' => HOSTING_PLATFORM_QUEUED,
+  ));
+  $platform->save();
 
-  // Attach platform node to site node:
-  $site->platform_node = $platform_node;
+  // Attach platform to site entity.
+  $site_values['platform'] = $platform->id();
+  $site_values['status'] = HOSTING_SITE_QUEUED;
 
-  // Save the site node, along with the platform.
-  // This is possible thanks to the patch in https://www.drupal.org/node/2824731
-  if ($site = node_submit($site)) {
-    node_save($site);
-  }
+  $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->create($site_values);
+  $site->save();
 }

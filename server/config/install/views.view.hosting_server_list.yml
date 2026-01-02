@@ -1,0 +1,118 @@
+uuid: 27cfcd24-7c74-4ed5-9c33-ef6a42b56c7a
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_server
+id: hosting_server_list
+label: 'Hosting Server List'
+module: views
+description: 'A list of servers in Aegir.'
+tag: hosting_server
+base_table: hosting_server
+base_field: id
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      title: Servers
+      access:
+        type: perm
+        options:
+          perm: 'view server'
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: full
+        options:
+          items_per_page: 10
+          offset: 0
+      style:
+        type: table
+        options:
+          row_class: '[status]'
+          columns:
+            status: status
+            human_name: human_name
+            services: services
+      row:
+        type: fields
+      fields:
+        status:
+          id: status
+          table: hosting_server
+          field: status
+          label: ''
+          exclude: true
+          plugin_id: hosting_server_status
+          status_mode: class
+        human_name:
+          id: human_name
+          table: hosting_server
+          field: human_name
+          label: Name
+          plugin_id: hosting_server_human_name
+          alter:
+            make_link: true
+            path: 'hosting/server/[id]'
+            alt: '[label]'
+        services:
+          id: services
+          table: hosting_server
+          field: services
+          label: ''
+          plugin_id: hosting_server_services
+          element_label_colon: false
+        id:
+          id: id
+          table: hosting_server
+          field: id
+          label: ''
+          exclude: true
+          plugin_id: field
+          entity_type: hosting_server
+          entity_field: id
+        label:
+          id: label
+          table: hosting_server
+          field: label
+          label: Server
+          exclude: true
+          plugin_id: field
+          entity_type: hosting_server
+          entity_field: label
+      filters:
+        status_1:
+          id: status_1
+          table: hosting_server
+          field: status
+          operator: '!='
+          value:
+            value: '-2'
+          plugin_id: numeric
+      sorts:
+        label:
+          id: label
+          table: hosting_server
+          field: label
+          order: ASC
+          plugin_id: standard
+  page:
+    display_plugin: page
+    id: page
+    display_title: Page
+    position: 1
+    display_options:
+      path: hosting/servers
+      menu:
+        type: normal
+        title: Servers
+        menu_name: main
+        weight: 4

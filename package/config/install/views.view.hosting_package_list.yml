@@ -1,0 +1,108 @@
+uuid: 6bb33687-3196-4a54-8624-0e2a7dfd07a8
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_package
+id: hosting_package_list
+label: 'Hosting Package List'
+module: views
+description: 'A list of packages present on a site or platform.'
+tag: hosting_package
+base_table: hosting_package_instance
+base_field: iid
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      access:
+        type: none
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: full
+        options:
+          items_per_page: 25
+          offset: 0
+      style:
+        type: table
+        options:
+          row_class: '[status]'
+          default: '-1'
+          columns:
+            status: status
+            title: title
+            version: version
+      row:
+        type: fields
+      relationships:
+        package_node:
+          id: package_id
+          table: hosting_package_instance
+          field: package_id
+          plugin_id: standard
+      fields:
+        status:
+          id: status
+          table: hosting_package_instance
+          field: status
+          label: ''
+          exclude: true
+          plugin_id: hosting_package_status
+          status_mode: class
+        title:
+          id: title
+          table: hosting_package
+          field: label
+          relationship: package_node
+          label: 'Package'
+          plugin_id: field
+          entity_type: hosting_package
+          entity_field: label
+          settings:
+            link_to_entity: true
+        version:
+          id: version
+          table: hosting_package_instance
+          field: version
+          label: 'Release'
+          plugin_id: standard
+      arguments:
+        rid:
+          id: rid
+          table: hosting_package_instance
+          field: rid
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }
+      sorts:
+        status:
+          id: status
+          table: hosting_package_instance
+          field: status
+          order: DESC
+          plugin_id: standard
+  page_packages:
+    display_plugin: page
+    id: page_packages
+    display_title: Page
+    position: 1
+    display_options:
+      path: 'hosting/%/packages'
+  block_sites:
+    display_plugin: block
+    id: block_sites
+    display_title: 'Block: Sites'
+    position: 2
+  block_1:
+    display_plugin: block
+    id: block_1
+    display_title: 'Block: Sites (Alt)'
+    position: 3

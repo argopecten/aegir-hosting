@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_server
+id: hosting_server.hosting_server.default
+targetEntityType: hosting_server
+bundle: hosting_server
+mode: default
+content:
+  label:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 40
+      placeholder: ''
+    third_party_settings: { }
+  human_name:
+    type: string_textfield
+    weight: 1
+    region: content
+    settings:
+      size: 40
+      placeholder: ''
+    third_party_settings: { }
+hidden: { }

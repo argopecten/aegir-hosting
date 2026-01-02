@@ -1,0 +1,79 @@
+hosting.disabled:
+  path: '/hosting/disabled'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::disabled'
+    _title: 'Site disabled'
+  requirements:
+    _permission: 'access disabled sites'
+
+hosting.maintenance:
+  path: '/hosting/maintenance'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::maintenance'
+    _title: 'Site maintenance'
+  requirements:
+    _permission: 'access content'
+
+hosting.admin:
+  path: '/admin/hosting'
+  defaults:
+    _form: '\Drupal\hosting\Form\HostingFeaturesForm'
+    _title: 'Hosting'
+  requirements:
+    _permission: 'administer hosting'
+
+hosting.admin.features:
+  path: '/admin/hosting/features'
+  defaults:
+    _form: '\Drupal\hosting\Form\HostingFeaturesForm'
+    _title: 'Features'
+  requirements:
+    _permission: 'administer hosting features'
+
+hosting.admin.queues:
+  path: '/admin/hosting/queues'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::queuesConfig'
+    _title: 'Queues'
+  requirements:
+    _permission: 'administer hosting queues'
+
+hosting.admin.settings:
+  path: '/admin/hosting/settings'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::settings'
+    _title: 'Settings'
+  requirements:
+    _permission: 'administer hosting settings'
+
+hosting.queues:
+  path: '/hosting/queues/{key}'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::queues'
+    _title: 'Queues'
+    key: ''
+  requirements:
+    _permission: 'access task logs'
+
+hosting.hostmaster:
+  path: '/hostmaster'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::hostmasterRedirect'
+    _title: 'Hostmaster'
+  requirements:
+    _custom_access: '\Drupal\hosting\Controller\HostingController::hostmasterAccess'
+
+
+hosting.js:
+  path: '/hosting/js/{path}'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingController::jsPage'
+    _title: 'Hosting JS'
+    path: ''
+  requirements:
+    _permission: 'access content'
+  options:
+    parameters:
+      path:
+        type: string
+    no_cache: true

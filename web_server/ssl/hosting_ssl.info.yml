@@ -1,0 +1,8 @@
+name: 'SSL support'
+type: module
+description: 'Allow hostmaster to configure web servers with SSL support. (LEGACY, see hosting_https)'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'
+  - 'hosting_web_server'

@@ -1,0 +1,56 @@
+hosting_task.confirm:
+  path: '/hosting_confirm/{entity_type}/{entity_id}/{task_full}'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingTaskController::confirm'
+    _title: 'Run task'
+  requirements:
+    _custom_access: '\Drupal\hosting\Controller\HostingTaskController::access'
+    entity_id: '\d+'
+
+hosting_task.ajax_list:
+  path: '/hosting/tasks/{entity_type}/{entity_id}/list'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingTaskController::ajaxList'
+  requirements:
+    _custom_access: '\Drupal\hosting\Controller\HostingTaskController::ajaxAccess'
+    entity_id: '\d+'
+
+hosting_task.cancel:
+  path: '/hosting/tasks/{hosting_task}/cancel'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingTaskController::cancel'
+  requirements:
+    _custom_access: '\Drupal\hosting\Controller\HostingTaskController::cancelAccess'
+  options:
+    parameters:
+      hosting_task:
+        type: entity:hosting_task
+
+hosting_task.queue:
+  path: '/hosting/tasks/queue'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingTaskController::ajaxQueue'
+  requirements:
+    _permission: 'access task logs'
+
+hosting_task.view:
+  path: '/hosting/task/{hosting_task}'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingTaskController::view'
+  requirements:
+    _entity_access: 'hosting_task.view'
+  options:
+    parameters:
+      hosting_task:
+        type: entity:hosting_task
+
+hosting_task.log_ajax:
+  path: '/hosting/task/log/ajax/{hosting_task}/{last_position}/{id}'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingTaskController::logAjax'
+  requirements:
+    _permission: 'access task logs'
+  options:
+    parameters:
+      hosting_task:
+        type: entity:hosting_task

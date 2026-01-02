@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_server
+name: 'Server'
+type: 'server'
+description: 'Hosting server.'
+help: ''
+new_revision: false
+preview_mode: 0
+display_submitted: false

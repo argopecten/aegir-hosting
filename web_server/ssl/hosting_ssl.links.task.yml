@@ -1,0 +1,4 @@
+hosting_ssl.certs:
+  route_name: hosting_ssl.certs
+  title: 'Certificates'
+  base_route: entity.hosting_server.canonical

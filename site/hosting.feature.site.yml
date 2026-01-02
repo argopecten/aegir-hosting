@@ -1,0 +1,21 @@
+site:
+  title: 'Site administration'
+  description: 'Create and manage sites.'
+  status: required
+  module: hosting_site
+  entity_type: hosting_site
+  group: required
+  role_permissions:
+    'aegir platform manager':
+      - 'administer sites'
+      - 'create site'
+      - 'delete site'
+      - 'edit site'
+      - 'view site'
+    'aegir account manager':
+      - 'view site'
+    'aegir client':
+      - 'create site'
+      - 'delete site'
+      - 'view site'
+      - 'edit site'

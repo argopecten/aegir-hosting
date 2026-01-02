@@ -1,0 +1,9 @@
+name: 'Nginx +SSL servers'
+type: module
+description: 'Allow hostmaster to configure NGINX web servers with SSL support. (LEGACY, see hosting_https)'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting_web_server'
+  - 'hosting_ssl'
+  - 'hosting_nginx'

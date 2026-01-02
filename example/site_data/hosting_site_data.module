@@ -8,81 +8,136 @@
  * Implements hook_form_alter().
  */
 function hosting_site_data_form_alter(&$form, $form_state, $form_id) {
-  if ($form_id == 'site_node_form') {
-
-    $form['site_data'] = array(
-      '#type' => 'fieldset',
-      '#title' => t('Site data example'),
-      '#description' => t('Example implementation of saving data into the site context.'),
-    );
-
-    $form['site_data']['site_data'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Site data'),
-      '#default_value' => isset($form['#node']->site_data) ? $form['#node']->site_data : '',
-      '#weight' => 0,
-    );
-    return $form;
+  if (!in_array($form_id, array('hosting_site_form', 'hosting_site_add_form', 'hosting_site_edit_form'), TRUE)) {
+    return;
   }
+
+  $entity = NULL;
+  if (isset($form['#entity'])) {
+    $entity = $form['#entity'];
+  }
+  elseif (isset($form['#node'])) {
+    $entity = $form['#node'];
+  }
+
+  $form['site_data'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Site data example'),
+    '#description' => t('Example implementation of saving data into the site context.'),
+  );
+
+  $form['site_data']['site_data'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Site data'),
+    '#default_value' => ($entity && isset($entity->site_data)) ? $entity->site_data : '',
+    '#weight' => 0,
+  );
 }
 
 /**
- * Implements hook_node_insert().
+ * Implements hook_hosting_site_insert().
  */
-function hosting_site_data_node_insert($node) {
-  if ($node->type == 'site' && !empty($node->site_data)) {
-    $id = db_insert('hosting_site_data')->fields(array(
-      'vid' => $node->vid,
-      'nid' => $node->nid,
-      'site_data' => $node->site_data,
+function hosting_site_data_hosting_site_insert($entity) {
+  $site_id = hosting_entity_id($entity);
+  if ($site_id && !empty($entity->site_data)) {
+    \Drupal::database()->insert('hosting_site_data')->fields(array(
+      'site_id' => $site_id,
+      'site_data' => $entity->site_data,
     ))
     ->execute();
   }
 }
 
 /**
- * Implements hook_node_update().
+ * Implements hook_hosting_site_update().
  */
-function hosting_site_data_node_update($node) {
-  if (FALSE === db_query("SELECT site_data FROM {hosting_site_data} WHERE vid = :vid", array(':vid' => $node->vid))->fetchField()) {
-    hosting_site_data_node_insert($node);
+function hosting_site_data_hosting_site_update($entity) {
+  $site_id = hosting_entity_id($entity);
+  if (!$site_id) {
+    return;
+  }
+
+  if (FALSE === \Drupal::database()->query("SELECT site_data FROM {hosting_site_data} WHERE site_id = :site_id", array(':site_id' => $site_id))->fetchField()) {
+    hosting_site_data_hosting_site_insert($entity);
   }
   else {
-    db_update('hosting_site_data')
+    \Drupal::database()->update('hosting_site_data')
       ->fields(array(
-        'site_data' => $node->site_data,
+        'site_data' => $entity->site_data,
       ))
-      ->condition('vid', $node->vid)
+      ->condition('site_id', $site_id)
       ->execute();
   }
 }
 
 /**
- * Implements hook_node_load().
+ * Implements hook_hosting_site_load().
  */
-function hosting_site_data_node_load($nodes, $types) {
-  foreach ($nodes as $nid => &$node) {
-    if ($node->type == 'site') {
-      // array instead
-      $nodes[$nid]->site_data = db_query("SELECT site_data FROM {hosting_site_data} WHERE vid = :vid", array(':vid' => $node->vid))->fetchField();;
+function hosting_site_data_hosting_site_load($entities) {
+  foreach ($entities as $entity_id => $entity) {
+    $site_id = hosting_entity_id($entity);
+    if ($site_id) {
+      $entities[$entity_id]->site_data = \Drupal::database()->query("SELECT site_data FROM {hosting_site_data} WHERE site_id = :site_id", array(':site_id' => $site_id))->fetchField();
     }
   }
 }
 
 /**
- * Implements hook_node_delete().
+ * Implements hook_hosting_site_delete().
  */
-function hosting_site_data_node_delete($node) {
-  db_delete('hosting_site_data')
-    ->condition('nid', $node->nid)
-    ->execute();
+function hosting_site_data_hosting_site_delete($entity) {
+  $site_id = hosting_entity_id($entity);
+  if ($site_id) {
+    \Drupal::database()->delete('hosting_site_data')
+      ->condition('site_id', $site_id)
+      ->execute();
+  }
 }
 
 /**
- * Implements hook_revision_revision().
+ * Implements hook_hosting_site_context_options().
  */
-function hosting_site_data_node_revision_delete($node) {
-  db_delete('hosting_site_data')
-    ->condition('vid', $node->vid)
-    ->execute();
+function hosting_site_data_hosting_site_context_options(&$task) {
+  if (isset($task->ref->site_data) && !empty($task->ref->site_data)) {
+    $task->context_options['site_data'] = $task->ref->site_data;
+  }
+  else {
+    $task->context_options['site_data'] = 'null';
+  }
+}
+
+/**
+ * Implements hook_drush_context_import().
+ */
+function hosting_site_data_drush_context_import($context, &$node) {
+  if ($context->type == 'site') {
+    if (isset($context->site_data) && !empty($context->site_data)) {
+      $node->site_data = $context->site_data;
+    }
+  }
+}
+
+/**
+ * Register our directory as a place to find provision classes.
+ */
+function site_data_provision_register_autoload() {
+  static $loaded = FALSE;
+  if (!$loaded) {
+    $loaded = TRUE;
+    provision_autoload_register_prefix('Provision_', dirname(__FILE__) . '/drush');
+  }
+}
+
+/**
+ * Implements hook_provision_services().
+ *
+ * Expose the service type this extension defines to provision.
+ *
+ * @return array
+ *   An array with the service type as key,
+ *   and the default implementation the value.
+ */
+function site_data_provision_services() {
+  site_data_provision_register_autoload();
+  return array('site_data' => NULL);
 }

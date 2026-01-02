@@ -1,0 +1,5 @@
+services:
+  hosting_migrate.commands:
+    class: Drupal\hosting_migrate\Commands\HostingMigrateCommands
+    tags:
+      - { name: drush.command }

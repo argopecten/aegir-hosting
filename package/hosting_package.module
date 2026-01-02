@@ -20,26 +20,6 @@ function _hosting_package_types() {
 }
 
 /**
- * Implements hook_node_info().
- */
-function hosting_package_node_info() {
-  #package management
-  $types["package"] =  array(
-    "type" => 'package',
-    "name" => t('Package'),
-    'base' => 'hosting_package',
-    "has_title" => FALSE,
-    "title_label" => '',
-    "description" => hosting_node_help("package"),
-    "has_body" => 0,
-    "body_label" => '',
-    "min_word_count" => 0,
-  );
-
-  return $types;
-}
-
-/**
  * Implements hook_permission().
  */
 function hosting_package_permission() {
@@ -57,34 +37,6 @@ function hosting_package_permission() {
       'title' => t('delete package'),
     ),
   );
-}
-
-/**
- * Implements hook_node_access().
- * @todo: check that we don't want to manage this through node_grants.
- */
-function hosting_package_node_access($node, $op, $account) {
-  $type = is_string($node) ? $node : $node->type;
-  if ($type != 'platform' ) {
-    return NODE_ACCESS_IGNORE;
-  }
-
-  switch ($op) {
-    case 'create':
-      return user_access('create package', $account);
-      break;
-    case 'view':
-      return user_access('view package', $account);
-      break;
-    case 'update':
-      return user_access('edit package', $account);
-      break;
-    case 'delete':
-      return user_access('delete package', $account);
-      break;
-    default:
-      break;
-  }
 }
 
 /**
@@ -117,8 +69,9 @@ function hosting_get_profiles($platform_nid = NULL, $field = 'title') {
   }
 
   // Prepare list of available profiles, preventing the use of blocked ones.
+  $blocked_profiles = \Drupal::config('hosting_package.settings')->get('hosting_blocked_profiles') ?? ['hostslave', 'hostmaster'];
   foreach ($instances as $iid => $instance) {
-    if (!in_array($instance->short_name, variable_get('hosting_blocked_profiles', array('hostslave', 'hostmaster')))) {
+    if (!in_array($instance->short_name, $blocked_profiles, TRUE)) {
       $profiles[$instance->package_id] = $instance->$field;
     }
   }
@@ -148,16 +101,20 @@ function hosting_get_profile_platforms($profile, $check_old_short_name = FALSE) 
     )));
   }
   foreach ($instances as $iid => $instance) {
-    $platform = node_load($instance->rid);
+    $platform = \Drupal::entityTypeManager()->getStorage('hosting_platform')->load($instance->rid);
+    if (!$platform) {
+      continue;
+    }
     // this is one of the default profiles
     if (in_array($instance->short_name, $defaults) &&
+      isset($platform->profiles) &&
       sizeof(array_diff(array_values($platform->profiles), $defaults)) &&
-      variable_get('hosting_ignore_default_profiles', FALSE)) {
+      (\Drupal::config('hosting.settings')->get('hosting_ignore_default_profiles') ?? FALSE)) {
       // there are other profiles available on this platform. skip this.
       continue;
     }
-    if ($platform->platform_status == HOSTING_PLATFORM_ENABLED) {
-      $platforms[$instance->rid] = $platform->title;
+    if (hosting_entity_status($platform, 'platform') == HOSTING_PLATFORM_ENABLED) {
+      $platforms[$instance->rid] = $platform->label();
     }
   }
 
@@ -177,7 +134,7 @@ function hosting_get_profile_languages($profile = NULL, $platform = NULL) {
     $languages = array_merge($languages, $instance->languages);
   }
   else {
-    $result = db_query("SELECT DISTINCT language FROM {hosting_package_languages}");
+    $result = \Drupal::database()->query("SELECT DISTINCT language FROM {hosting_package_languages}");
     while ($lang = $result->fetch()) {
       $languages[$lang->language] = _hosting_language_name($lang->language);
     }
@@ -202,47 +159,45 @@ function hosting_get_profile_languages($profile = NULL, $platform = NULL) {
  * @return array|bool
  */
 function _hosting_package_load($param) {
-  // Turn the conditions into a query.
+  $query = \Drupal::entityQuery('hosting_package')->accessCheck(FALSE);
   foreach ($param as $key => $value) {
-    $cond[] = 'p.' . db_escape_table($key) . " = '%s'";
-    $arguments[] = $value;
+    $query->condition($key, $value);
   }
-  $cond = implode(' AND ', $cond);
-  // TODO convert this statement to a DBTNG dynamic query.
-  $result = db_query('SELECT n.nid FROM {node} n left join {hosting_package} p on n.nid = p.nid WHERE ' . $cond, $arguments);
-  while ($nid = $result->fetch()) {
-    $return[$nid->nid] = node_load($nid->nid);
+  $ids = $query->execute();
+  if (!$ids) {
+    return NULL;
   }
-  if (sizeof($return)) {
-    return $return;
-  }
-  return NULL;
+  return \Drupal::entityTypeManager()->getStorage('hosting_package')->loadMultiple($ids);
 }
 
 /**
  * @todo document this function
  */
 function hosting_get_packages_by_type($type) {
-  $result = db_query("SELECT nid FROM {hosting_package} WHERE package_type = :package_type", array(':package_type' => $type));
-
-  if ($nid = $result->fetchField()) {
-    return node_load($nid);
+  $ids = \Drupal::entityQuery('hosting_package')
+    ->accessCheck(FALSE)
+    ->condition('package_type', $type)
+    ->range(0, 1)
+    ->execute();
+  if (!$ids) {
+    return FALSE;
   }
-  return FALSE;
+  return \Drupal::entityTypeManager()->getStorage('hosting_package')->load(reset($ids));
 }
 
 /**
  * @todo document this function
  */
 function hosting_get_default_profile($default = NULL) {
-  if ($p = hosting_get_package(variable_get('hosting_default_profile', 'standard'), 'profile')) {
-    return $p->nid;
+  $default_profile = \Drupal::config('hosting.settings')->get('hosting_default_profile') ?? 'standard';
+  if ($p = hosting_get_package($default_profile, 'profile')) {
+    return $p->id();
   }
   elseif ($p = hosting_get_package('standard', 'profile')) {
-    return $p->nid;
+    return $p->id();
   }
   elseif ($p = hosting_get_package('default', 'profile')) {
-    return $p->nid;
+    return $p->id();
   }
   return $default;
 }
@@ -251,35 +206,25 @@ function hosting_get_default_profile($default = NULL) {
  * @todo document this function
  */
 function hosting_get_package($short_name, $type) {
-  $result = db_query("SELECT nid
-                      FROM {hosting_package}
-                      WHERE short_name = :short_name
-                      AND package_type = :type
-                     ", array(
-                       ':short_name' => $short_name,
-                       ':type' => $type,
-                      )
-                    );
-  if ($nid = $result->fetchField()) {
-    return node_load($nid);
+  $ids = \Drupal::entityQuery('hosting_package')
+    ->accessCheck(FALSE)
+    ->condition('short_name', $short_name)
+    ->condition('package_type', $type)
+    ->range(0, 1)
+    ->execute();
+  if (!$ids) {
+    return FALSE;
   }
-  return FALSE;
+  return \Drupal::entityTypeManager()->getStorage('hosting_package')->load(reset($ids));
 }
 
 /**
  * Implements hook_insert().
  */
 function hosting_package_insert($node) {
-  $id = db_insert('hosting_package')
-    ->fields(array(
-      'vid' => $node->vid,
-      'nid' => $node->nid,
-      'package_type' => $node->package_type,
-      'short_name' => $node->short_name,
-      'old_short_name' => $node->old_short_name,
-      'description ' => $node->description,
-    ))
-    ->execute();
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_package') {
+    return;
+  }
 }
 
 
@@ -290,51 +235,25 @@ function hosting_package_insert($node) {
  * database updates.
  */
 function hosting_package_update($node) {
-  // if this is a new node or we're adding a new revision,
-  if (!empty($node->revision)) {
-    hosting_package_insert($node);
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_package') {
+    return;
   }
-  else {
-    db_update('hosting_package')
-      ->fields(array(
-        'package_type' => $node->package_type,
-        'short_name' => $node->short_name,
-        'old_short_name' => $node->old_short_name,
-        'description' => $node->description,
-      ))
-      ->condition('nid', $node->nid)
-      ->execute();
-  }
-}
-
-/**
- * @todo document this function
- */
-function hosting_nodeapi_package_delete_revision(&$node) {
-  db_delete('hosting_package')
-    ->condition('vid', $node->vid)
-    ->execute();
 }
 
 /**
  * Implements hook_delete().
  */
 function hosting_package_delete($node) {
-  db_delete('hosting_package')
-    ->condition('nid', $node->nid)
-    ->execute();
+  if (!$node instanceof \Drupal\Core\Entity\EntityInterface || $node->getEntityTypeId() !== 'hosting_package') {
+    return;
+  }
 }
 
 /**
  * Implements hook_load().
  */
 function hosting_package_load($nodes) {
-  foreach ($nodes as $nid => &$node) {
-    $additions = db_query('SELECT package_type, short_name, old_short_name, description FROM {hosting_package} WHERE vid = :vid', array(':vid' => $node->vid))->fetch();
-    foreach ($additions as $property => &$value) {
-      $node->$property = $value;
-    }
-  }
+  return;
 }
 
 /**
@@ -430,49 +349,167 @@ function hosting_package_sync(&$data) {
       $name = isset($file['info']['name']) ? $file['info']['name'] : $short_name;
       if (!($package = hosting_get_package($short_name, $type))) {
         // Create a new package.
-        $package = new stdClass();
-        $package->type = 'package';
-        $package->uid = 1;
-        $package->package_type = $type;
-        $package->short_name = $short_name;
-        $package->old_short_name = isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '';
-        $package->status = 1;
+        $package = \Drupal::entityTypeManager()->getStorage('hosting_package')->create(array(
+          'label' => $name,
+          'package_type' => $type,
+          'short_name' => $short_name,
+          'old_short_name' => isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '',
+          'status' => 1,
+        ));
       }
 
       // we only call node save when the title, description changes
       // or when it's a new package.
-      if (!isset($package->nid) ||
-        (isset($package->title) && ($package->title != $name)) ||
-        (isset($file['info']['description']) && ($package->description != $file['info']['description'])) ||
-        (isset($file['info']['old_short_name']) && ($package->old_short_name != $file['info']['old_short_name']))) {
+      if (!$package->id() ||
+        ($package->label() != $name) ||
+        ((string) $package->get('description')->value != (string) ($file['info']['description'] ?? '')) ||
+        ((string) $package->get('old_short_name')->value != (string) ($file['info']['old_short_name'] ?? ''))) {
 
-        $package->title = $name;
-        $package->description = isset($file['info']['description']) ? $file['info']['description'] : '';
-        $package->old_short_name = isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '';
-
-        node_save($package);
+        $package->set('label', $name);
+        $package->set('description', isset($file['info']['description']) ? $file['info']['description'] : '');
+        $package->set('old_short_name', isset($file['info']['old_short_name']) ? $file['info']['old_short_name'] : '');
+        $package->save();
       }
-      $data[$plural][$short_name]['package_id'] = $package->nid;
+      $data[$plural][$short_name]['package_id'] = $package->id();
     }
   }
 }
 
 /**
- * Implements hook_views_api().
+ * Implements hook_views_data().
  */
-function hosting_package_views_api() {
-  return array(
-    'api' => 3,
-    'path' => drupal_get_path('module', 'hosting_package') . '/includes/views',
-  );
+function hosting_package_views_data() {
+  $data = [];
+
+  $data['hosting_package']['table'] = [
+    'group' => t('Hosting Package'),
+    'title' => t('Package'),
+    'entity type' => 'hosting_package',
+  ];
+
+  $data['hosting_package']['package_type'] = [
+    'title' => t('Type'),
+    'help' => t('The package type.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+    'filter' => [
+      'id' => 'hosting_package_type_filter',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+    'argument' => [
+      'id' => 'string',
+    ],
+  ];
+
+  $data['hosting_package_instance']['table'] = [
+    'group' => t('Hosting Package Instance'),
+    'base' => [
+      'field' => 'iid',
+      'title' => t('Hosting package instances'),
+      'help' => t('Hosting package instances'),
+    ],
+  ];
+
+  $data['hosting_package_instance']['iid'] = [
+    'title' => t('Instance ID'),
+    'help' => t('The package instance ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+    'filter' => [
+      'id' => 'numeric',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_package_instance']['rid'] = [
+    'title' => t('Reference ID'),
+    'help' => t('The package instance reference ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_package_instance']['site_count'] = [
+    'title' => t('Site count'),
+    'help' => t('A count of sites using a package.'),
+    'real field' => 'package_id',
+    'field' => [
+      'id' => 'hosting_package_site_count',
+    ],
+    'sort' => [
+      'id' => 'hosting_package_site_count_sort',
+    ],
+  ];
+
+  $data['hosting_package_instance']['package_id'] = [
+    'title' => t('Package ID'),
+    'help' => t('The package ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_package',
+      'base field' => 'id',
+      'label' => t('Package'),
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_package_instance']['version'] = [
+    'title' => t('Version'),
+    'help' => t('The package instance version.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+    'argument' => [
+      'id' => 'string',
+    ],
+    'filter' => [
+      'id' => 'string',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  $data['hosting_package_instance']['status'] = [
+    'title' => t('Status'),
+    'help' => t('The status of the package instance.'),
+    'field' => [
+      'id' => 'hosting_package_status',
+    ],
+    'filter' => [
+      'id' => 'hosting_package_status_filter',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+  ];
+
+  return $data;
 }
 
 /**
  * Control block visibility.
  */
 function hosting_package_block_visibility() {
-  $node = menu_get_object();
-  if (!empty($node)) {
-    return $node->type == 'package' && $node->package_type != 'profile';
+  $package = \Drupal::routeMatch()->getParameter('hosting_package');
+  if ($package instanceof \Drupal\Core\Entity\EntityInterface && $package->getEntityTypeId() === 'hosting_package') {
+    return $package->get('package_type')->value != 'profile';
   }
 }

@@ -1,0 +1,11 @@
+sitemigrate:
+  title: 'Site migration'
+  description: 'Migrate sites to platforms of the same or later version.'
+  status: enabled
+  module: hosting_migrate
+  group: optional
+  role_permissions:
+    'aegir platform manager':
+      - 'create migrate task'
+    'aegir client':
+      - 'create migrate task'

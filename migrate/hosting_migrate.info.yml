@@ -1,0 +1,8 @@
+name: 'Site migration'
+type: module
+description: 'Migrate sites between platforms (Drupal 8+ only).'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'
+  - 'hosting_site'

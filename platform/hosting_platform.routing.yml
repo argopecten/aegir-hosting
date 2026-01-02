@@ -1,0 +1,11 @@
+hosting_platform.edit:
+  path: '/hosting/site/{hosting_site}/platform-edit'
+  defaults:
+    _controller: '\Drupal\hosting_platform\Controller\HostingPlatformController::editOnSitePage'
+    _title: 'Edit Platform'
+  requirements:
+    _custom_access: '\Drupal\hosting_platform\Access\HostingPlatformAccess::editOnSitePageAccess'
+  options:
+    parameters:
+      hosting_site:
+        type: entity:hosting_site

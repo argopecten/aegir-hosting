@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+name: 'Site'
+type: 'site'
+description: 'Hosted site.'
+help: ''
+new_revision: false
+preview_mode: 0
+display_submitted: false

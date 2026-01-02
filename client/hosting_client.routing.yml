@@ -1,0 +1,38 @@
+hosting_client.config:
+  path: '/admin/hosting/client'
+  defaults:
+    _form: '\Drupal\hosting_client\Form\HostingClientSettingsForm'
+    _title: 'Clients'
+  requirements:
+    _custom_access: '\Drupal\hosting_client\Access\HostingClientAccess::configureAccess'
+
+hosting_client.site_add:
+  path: '/hosting/client/{hosting_client}/site/add'
+  defaults:
+    _controller: '\Drupal\hosting_client\Controller\HostingClientController::siteAdd'
+    _title: 'Add site'
+  requirements:
+    _custom_access: '\Drupal\hosting_client\Access\HostingClientAccess::siteAddAccess'
+  options:
+    parameters:
+      hosting_client:
+        type: entity:hosting_client
+
+hosting_client.platform_access:
+  path: '/hosting/platform/{hosting_platform}/clients'
+  defaults:
+    _form: '\Drupal\hosting_client\Form\HostingClientPlatformAccessForm'
+    _title: 'Clients'
+  requirements:
+    _custom_access: '\Drupal\hosting_client\Access\HostingClientAccess::platformAccess'
+  options:
+    parameters:
+      hosting_platform:
+        type: entity:hosting_platform
+
+hosting_client.autocomplete:
+  path: '/hosting_client/autocomplete/{type}/{keyword}'
+  defaults:
+    _controller: '\Drupal\hosting_client\Controller\HostingClientController::autocomplete'
+  requirements:
+    _permission: 'access content'

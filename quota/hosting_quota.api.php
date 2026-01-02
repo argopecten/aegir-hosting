@@ -29,7 +29,7 @@ function hook_hosting_quota_resource() {
  * Definition of hook_hosting_quota_get_usage
  *
  * @param $client int
- *   The nid of the client node
+ *   The id of the client entity
  * @param $resource string
  *   The machine name of the resource
  * @param $start string

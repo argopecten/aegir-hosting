@@ -1,0 +1,7 @@
+name: 'Hosting tasks'
+type: module
+description: 'Allow Hostmaster to keep track of tasks that have been processed on the servers.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'

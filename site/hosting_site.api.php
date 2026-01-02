@@ -48,7 +48,7 @@ function hook_hosting_site_options_alter(&$return, $node) {
     // the user has chosen to enter a new key
     if ($node->ssl_key == HOSTING_SSL_CUSTOM_KEY) {
       // default the new key to the site's domain name, after filtering.
-      $default = hosting_ssl_filter_key($node->title);
+      $default = hosting_ssl_filter_key(hosting_entity_label($node));
       $return['ssl_key_new'] = (!empty($default)) ? $default : true;
     }
 

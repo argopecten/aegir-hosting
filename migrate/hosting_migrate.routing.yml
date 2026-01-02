@@ -1,0 +1,7 @@
+hosting_migrate.compare:
+  path: '/hosting/migrate/compare/{current}/{target}'
+  defaults:
+    _controller: '\Drupal\hosting_migrate\Controller\HostingMigrateController::comparison'
+    _title: 'Compare packages'
+  requirements:
+    _permission: 'create migrate task'

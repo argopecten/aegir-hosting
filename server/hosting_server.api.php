@@ -23,7 +23,7 @@
  * the code getting the list of servers, so be very careful if you do this.
  *
  * @param $servers
- *   An array of enabled servers, keys are the nid's of the nodes representing
+ *   An array of enabled servers, keys are the IDs of the entities representing
  *   them, values are the titles of the servers.
  * @param $service
  *   Service type string, like 'http' or 'db'.
@@ -32,11 +32,11 @@
  */
 function hook_hosting_servers_titles_alter(&$servers, $service) {
   // Append the string 'SERVER' to all server titles.
-  foreach ($servers as $nid => $title) {
-    $servers[$nid] .= 'SERVER';
+  foreach ($servers as $server_id => $title) {
+    $servers[$server_id] .= 'SERVER';
   }
 
-  // Don't allow the user to use the server with $nid == 123, for the 'db' service
+  // Don't allow the user to use the server with $server_id == 123, for the 'db' service
   if ($service == 'db') {
     unset($servers[123]);
   }

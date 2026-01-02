@@ -1,0 +1,89 @@
+hosting.settings:
+  type: config_object
+  label: 'Hosting settings'
+  mapping:
+    hosting_default_client:
+      type: integer
+      label: 'Default client node ID'
+    hosting_default_db_server:
+      type: integer
+      label: 'Default database server node ID'
+    hosting_default_web_server:
+      type: integer
+      label: 'Default web server node ID'
+    hosting_admin_client:
+      type: integer
+      label: 'Admin client node ID'
+    hosting_own_db_server:
+      type: integer
+      label: 'Own database server node ID'
+    hosting_own_web_server:
+      type: integer
+      label: 'Own web server node ID'
+    hosting_own_platform:
+      type: integer
+      label: 'Own platform node ID'
+    hosting_default_profile:
+      type: string
+      label: 'Default install profile'
+    hosting_ignore_default_profiles:
+      type: boolean
+      label: 'Hide platforms with non-default profiles'
+    hosting_lock_platforms_by_default:
+      type: boolean
+      label: 'Lock platforms by default'
+    hosting_platform_automatic_site_import:
+      type: boolean
+      label: 'Automatically import sites on verify'
+    hosting_require_disable_before_delete:
+      type: boolean
+      label: 'Require disable before delete'
+    hosting_delete_force:
+      type: boolean
+      label: 'Force delete'
+    hosting_cron_use_backend:
+      type: boolean
+      label: 'Use backend for cron'
+    hosting_task_logs_types_display:
+      type: sequence
+      label: 'Task log types to display'
+      sequence:
+        type: string
+
+hosting.features:
+  type: config_object
+  label: 'Hosting feature settings'
+  mapping:
+    hosting_features_form_settings:
+      type: sequence
+      label: 'Features form settings'
+      sequence:
+        type: string
+    features:
+      type: mapping
+      label: 'Feature statuses'
+      mapping:
+        '*':
+          type: integer
+
+hosting.queues:
+  type: config_object
+  label: 'Hosting queue settings'
+  mapping:
+    queues:
+      type: mapping
+      label: 'Queues'
+      mapping:
+        '*':
+          type: mapping
+          label: 'Queue'
+          mapping:
+            enabled:
+              type: boolean
+              label: 'Queue enabled'
+            frequency:
+              type: integer
+              label: 'Queue frequency'
+            items:
+              type: integer
+              label: 'Queue items per run'

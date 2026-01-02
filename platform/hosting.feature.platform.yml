@@ -1,0 +1,18 @@
+platform:
+  title: 'Platform administration'
+  description: 'Create and manage platforms.'
+  status: required
+  module: hosting_platform
+  entity_type: hosting_platform
+  group: required
+  role_permissions:
+    'aegir platform manager':
+      - 'administer platforms'
+      - 'create platform'
+      - 'delete platform'
+      - 'edit platform'
+      - 'view locked platforms'
+      - 'view platform'
+      - 'create sites on locked platforms'
+    'aegir client':
+      - 'view platform'

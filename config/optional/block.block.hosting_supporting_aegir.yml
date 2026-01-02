@@ -1,0 +1,20 @@
+uuid: 3a87b24b-4d65-4b7c-bfa2-ea9d0f76a18e
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting
+  theme:
+    - eldir
+id: hosting_supporting_aegir
+theme: eldir
+region: sidebar_second
+weight: 1
+provider: hosting
+plugin: hosting_supporting_aegir
+settings:
+  id: hosting_supporting_aegir
+  label: 'Support Aegir'
+  label_display: visible
+  provider: hosting
+visibility: {  }

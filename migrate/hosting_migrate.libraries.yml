@@ -1,0 +1,6 @@
+admin:
+  js:
+    hosting_migrate.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery

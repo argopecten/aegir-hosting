@@ -1,0 +1,36 @@
+hosting_site.add_by_platform:
+  path: '/hosting/platform/{hosting_platform}/sites/add'
+  defaults:
+    _controller: '\Drupal\hosting_site\Controller\HostingSiteController::addByPlatform'
+    _title: 'Add site'
+  requirements:
+    _custom_access: '\Drupal\hosting_site\Access\HostingSiteAccess::addByPlatformAccess'
+  options:
+    parameters:
+      hosting_platform:
+        type: entity:hosting_platform
+
+hosting_site.form_check:
+  path: '/hosting/hosting_site_form_check'
+  defaults:
+    _controller: '\Drupal\hosting_site\Controller\HostingSiteController::formCheck'
+  requirements:
+    _permission: 'access content'
+
+hosting_site.autocomplete:
+  path: '/hosting/sites/autocomplete/{string}'
+  defaults:
+    _controller: '\Drupal\hosting_site\Controller\HostingSiteController::autocomplete'
+  requirements:
+    _permission: 'access content'
+
+hosting_site.goto:
+  path: '/hosting/site/{hosting_site}/goto_site'
+  defaults:
+    _controller: '\Drupal\hosting_site\Controller\HostingSiteController::gotoSite'
+  requirements:
+    _entity_access: 'hosting_site.view'
+  options:
+    parameters:
+      hosting_site:
+        type: entity:hosting_site

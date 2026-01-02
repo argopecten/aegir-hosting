@@ -1,0 +1,5 @@
+services:
+  hosting_subdirs.commands:
+    class: Drupal\hosting_subdirs\Commands\HostingSubdirsCommands
+    tags:
+      - { name: drush.command }

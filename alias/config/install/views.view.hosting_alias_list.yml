@@ -1,0 +1,115 @@
+uuid: 1fa445b0-1544-4d88-96ae-6c5508c7417e
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_alias
+id: hosting_alias_list
+label: 'Hosting Alias List'
+module: views
+description: 'List site aliases configured in Aegir.'
+tag: hosting_alias
+base_table: hosting_site_alias
+base_field: site_id
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      title: 'Site Aliases'
+      access:
+        type: perm
+        options:
+          perm: 'administer hosting aliases'
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: full
+        options:
+          items_per_page: 25
+          offset: 0
+      style:
+        type: table
+        options:
+          columns:
+            title: title
+            alias: alias
+            redirection: redirection
+          default: alias
+          info:
+            title:
+              sortable: true
+              default_sort_order: asc
+              align: ''
+              separator: ''
+            alias:
+              sortable: true
+              default_sort_order: asc
+              align: ''
+              separator: ''
+            redirection:
+              sortable: true
+              default_sort_order: asc
+              align: ''
+              separator: ''
+      row:
+        type: fields
+      fields:
+        title:
+          id: title
+          table: hosting_site
+          field: label
+          label: Site
+          plugin_id: field
+          entity_type: hosting_site
+          entity_field: label
+          settings:
+            link_to_entity: true
+        alias:
+          id: alias
+          table: hosting_site_alias
+          field: alias
+          label: Alias
+          plugin_id: standard
+        redirection:
+          id: redirection
+          table: hosting_site_alias
+          field: redirection
+          label: Redirection
+          plugin_id: standard
+      sorts:
+        alias:
+          id: alias
+          table: hosting_site_alias
+          field: alias
+          order: ASC
+          plugin_id: standard
+  page_aliases:
+    display_plugin: page
+    id: page_aliases
+    display_title: Page
+    position: 1
+    display_options:
+      path: hosting/aliases
+  block_1:
+    display_plugin: block
+    id: block_1
+    display_title: Block
+    position: 2
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        site_id:
+          id: site_id
+          table: hosting_site_alias
+          field: site_id
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }

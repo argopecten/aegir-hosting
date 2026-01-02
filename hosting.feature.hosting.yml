@@ -1,0 +1,21 @@
+hosting:
+  title: 'Hosting system'
+  description: 'API to provide support for servers, platforms and sites.'
+  status: required
+  module: hosting
+  group: required
+  role_permissions:
+    'aegir administrator':
+      - 'access administration menu'
+      - 'access content'
+      - 'view revisions'
+      - 'access user profiles'
+    'aegir platform manager':
+      - 'access content'
+      - 'view revisions'
+    'aegir account manager':
+      - 'access content'
+      - 'access user profiles'
+    'aegir client':
+      - 'access content'
+      - 'view revisions'

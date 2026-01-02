@@ -1,0 +1,15 @@
+hosting_queued.settings:
+  path: '/admin/hosting/queued'
+  defaults:
+    _form: '\Drupal\hosting_queued\Form\HostingQueuedSettingsForm'
+    _title: 'Queue daemon'
+  requirements:
+    _permission: 'administer hosting queues'
+
+hosting_queued.semaphore:
+  path: '/admin/hosting/queued/semaphore'
+  defaults:
+    _form: '\Drupal\hosting_queued\Form\HostingQueuedSemaphoreForm'
+    _title: 'Unlock Hosting Queue'
+  requirements:
+    _permission: 'administer hosting queues'

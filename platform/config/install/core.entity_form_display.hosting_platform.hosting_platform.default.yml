@@ -1,0 +1,33 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_platform
+id: hosting_platform.hosting_platform.default
+targetEntityType: hosting_platform
+bundle: hosting_platform
+mode: default
+content:
+  label:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 40
+      placeholder: ''
+    third_party_settings: { }
+  publish_path:
+    type: string_textarea
+    weight: 1
+    region: content
+    settings:
+      rows: 2
+      placeholder: ''
+    third_party_settings: { }
+  web_server:
+    type: options_buttons
+    weight: 2
+    region: content
+    settings: { }
+    third_party_settings: { }
+hidden: { }

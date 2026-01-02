@@ -1,0 +1,10 @@
+name: 'Sites'
+type: module
+description: 'Allow Aegir to manage of hosted sites.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'
+  - 'hosting_client'
+  - 'hosting_platform'
+  - 'hosting_server'

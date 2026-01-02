@@ -1,0 +1,9 @@
+hosting_queued.settings:
+  route_name: hosting_queued.settings
+  title: 'Queue daemon'
+  base_route: hosting.admin
+
+hosting_queued.semaphore:
+  route_name: hosting_queued.semaphore
+  title: 'Unlock Hosting Queue'
+  base_route: hosting_queued.settings

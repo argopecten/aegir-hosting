@@ -1,0 +1,24 @@
+hosting_client.config:
+  route_name: hosting_client.config
+  title: 'Clients'
+  base_route: hosting.admin
+
+hosting_client.list:
+  route_name: entity.hosting_client.collection
+  title: 'List'
+  base_route: entity.hosting_client.collection
+
+hosting_client.add:
+  route_name: entity.hosting_client.add_form
+  title: 'Add client'
+  base_route: entity.hosting_client.collection
+
+hosting_client.site_add:
+  route_name: hosting_client.site_add
+  title: 'Add site'
+  base_route: entity.hosting_client.canonical
+
+hosting_client.platform_access:
+  route_name: hosting_client.platform_access
+  title: 'Clients'
+  base_route: entity.hosting_platform.canonical

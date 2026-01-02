@@ -1,0 +1,11 @@
+clone:
+  title: 'Site cloning'
+  description: 'Clone sites to platforms of the same or later version.'
+  status: enabled
+  module: hosting_clone
+  group: optional
+  role_permissions:
+    'aegir platform manager':
+      - 'create clone task'
+    'aegir client':
+      - 'create clone task'

@@ -35,39 +35,36 @@ function hosting_task_gc_hosting_queues() {
 function hosting_task_gc_queue() {
   global $user;
 
-  // Prevent session information from being saved while queue is running.
-  $original_session_saving = drupal_save_session();
-  drupal_save_session(FALSE);
-
   // Switch to the super user.
   $old_user = $user;
   $user = user_load(1);
 
   $result = hosting_task_gc_list_sites();
   while ($site = $result->fetchObject()) {
-    $query = "SELECT nid FROM {hosting_task} WHERE rid = :nid";
-    $tasks_to_remove = db_query($query, array(':nid' => $site->nid));
+    $query = "SELECT id FROM {hosting_task} WHERE rid = :rid";
+    $tasks_to_remove = \Drupal::database()->query($query, array(':rid' => $site->id));
     while ($row = $tasks_to_remove->fetchObject()) {
-      node_delete($row->nid);
-      watchdog('hosting_task_gc', 'Deleted task node with nid @nid.', array('@nid' => $row->nid));
+      $task = \Drupal::entityTypeManager()->getStorage('hosting_task')->load($row->id);
+      if ($task) {
+        $task->delete();
+      }
+      \Drupal::logger('hosting_task_gc')->notice('Deleted task entity with id @id.', ['@id' => $row->id]);
     }
   }
 
   // Restore the user.
   $user = $old_user;
-  drupal_save_session($original_session_saving);
-
   // Look for orphaned task log entries.
-  $query = "SELECT DISTINCT h.vid
+  $query = "SELECT DISTINCT h.task_id
               FROM {hosting_task_log} h
-                LEFT OUTER JOIN {node_revision} n ON h.vid = n.vid
-              WHERE n.vid IS NULL LIMIT 100";
-  $result = db_query($query);
+                LEFT OUTER JOIN {hosting_task} t ON h.task_id = t.id
+              WHERE t.id IS NULL LIMIT 100";
+  $result = \Drupal::database()->query($query);
   while ($revision = $result->fetchObject()) {
-    $num = db_delete('hosting_task_log')
-      ->condition('vid', $revision->vid)
+    $num = \Drupal::database()->delete('hosting_task_log')
+      ->condition('task_id', $revision->task_id)
       ->execute();
-    watchdog('hosting_task_gc', 'Deleted @num orphaned task log entries with vid @vid.', array('@num' => $num, '@vid' => $revision->vid));
+    \Drupal::logger('hosting_task_gc')->notice('Deleted @num orphaned task log entries with task_id @task_id.', ['@num' => $num, '@task_id' => $revision->task_id]);
   }
 }
 
@@ -78,10 +75,10 @@ function hosting_task_gc_queue() {
  *   A result object.
  */
 function hosting_task_gc_list_sites() {
-  $query = "SELECT DISTINCT s.nid "
-          . "FROM {hosting_site} s INNER JOIN {hosting_task} t ON s.nid = t.rid "
+  $query = "SELECT DISTINCT s.id "
+          . "FROM {hosting_site} s INNER JOIN {hosting_task} t ON s.id = t.rid "
           . "WHERE s.status = :status LIMIT 5";
-  return db_query($query, array(':status' => HOSTING_SITE_DELETED));
+  return \Drupal::database()->query($query, array(':status' => HOSTING_SITE_DELETED));
 }
 
 /**
@@ -92,15 +89,15 @@ function hosting_task_gc_list_sites() {
  */
 function hosting_task_gc_count_sites() {
   // This query can be super expensive to run, so only run it once every hour.
-  if ($cache = cache_get(__FUNCTION__)) {
+  if ($cache = \Drupal::cache()->get(__FUNCTION__)) {
     return $cache->data;
   }
   else {
-    $query = "SELECT COUNT(DISTINCT s.nid) AS num_sites "
-      . "FROM {hosting_site} s INNER JOIN {hosting_task} t ON s.nid = t.rid "
+    $query = "SELECT COUNT(DISTINCT s.id) AS num_sites "
+      . "FROM {hosting_site} s INNER JOIN {hosting_task} t ON s.id = t.rid "
       . "WHERE s.status = :status";
-    $result = db_query($query, array(':status' => HOSTING_SITE_DELETED))->fetchField();
-    cache_set(__FUNCTION__, $result, 'cache', REQUEST_TIME + 3600);
+    $result = \Drupal::database()->query($query, array(':status' => HOSTING_SITE_DELETED))->fetchField();
+    \Drupal::cache()->set(__FUNCTION__, $result, REQUEST_TIME + 3600);
     return $result;
   }
 }
@@ -111,7 +108,7 @@ function hosting_task_gc_count_sites() {
 function hosting_task_gc_node_update($node) {
   if ($node->type == "site") {
     if (isset($node->site_status) && $node->site_status == HOSTING_SITE_DELETED) {
-      cache_clear_all('hosting_task_gc_count_sites', 'cache');
+      \Drupal::cache()->delete('hosting_task_gc_count_sites');
     }
   }
 }

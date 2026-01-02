@@ -1,0 +1,20 @@
+uuid: 1a3c10d5-5a02-4543-987e-4f688190170a
+langcode: en
+status: false
+dependencies:
+  module:
+    - hosting
+  theme:
+    - eldir
+id: hosting_queues_summary
+theme: eldir
+region: sidebar_first
+weight: 1
+provider: hosting
+plugin: hosting_queues_summary
+settings:
+  id: hosting_queues_summary
+  label: 'Hosting queues summary'
+  label_display: visible
+  provider: hosting
+visibility: {  }

@@ -1,0 +1,6 @@
+web_cluster:
+  title: 'Web clusters'
+  description: 'Provides a service to expose a site across multiple web front ends.'
+  status: disabled
+  module: hosting_web_cluster
+  group: optional

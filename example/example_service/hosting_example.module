@@ -85,7 +85,7 @@ function hosting_example_hosting_service() {
  * @see: hosting_example_hosting_feature().
  */
 function hosting_example_feature_enable_callback() {
-  drupal_set_message(t("The 'example' feature's <strong>enable</strong> callback was just called."));
+  \Drupal::messenger()->addMessage(t("The 'example' feature's <strong>enable</strong> callback was just called."));
 }
 
 /**
@@ -94,6 +94,41 @@ function hosting_example_feature_enable_callback() {
  * @see: hosting_example_hosting_feature().
  */
 function hosting_example_feature_disable_callback() {
-  drupal_set_message(t("The 'example' feature's <strong>disable</strong> callback was just called."));
+  \Drupal::messenger()->addMessage(t("The 'example' feature's <strong>disable</strong> callback was just called."));
 }
 
+/**
+ * Register our directory as a place to find provision classes.
+ *
+ * This is needed so that provision can autoload our classes, which means we
+ * don't need to specifically include the files before we use the class, which
+ * is quite useful!
+ */
+function example_provision_register_autoload() {
+  static $loaded = FALSE;
+  if (!$loaded) {
+    $loaded = TRUE;
+    provision_autoload_register_prefix('Provision_', dirname(__FILE__) . '/drush');
+  }
+}
+
+/**
+ * Implements hook_provision_services().
+ *
+ * Expose the service type this extension defines to provision.
+ *
+ * Implementations are then conditionally loaded when the option
+ * "--$service_service_type=$type" is passed to the provision-save
+ * command of a server.
+ *
+ * Implementations are automatically loaded from :
+ * provision/$service/$type/$type_service.inc.
+ *
+ * @return array
+ *   An array with the service type as key, and the default implementation
+ *   as the value.
+ */
+function example_provision_services() {
+  example_provision_register_autoload();
+  return array('example' => NULL);
+}

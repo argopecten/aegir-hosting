@@ -1,0 +1,8 @@
+name: 'Client Quota'
+type: module
+description: 'Allow Hostmaster to configure quotas.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'
+  - 'hosting_client'

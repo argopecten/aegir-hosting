@@ -11,13 +11,7 @@
 function hosting_ssl_schema() {
   $schema['hosting_ssl_server'] = array(
     'fields' => array(
-      'vid' => array(
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-      ),
-      'nid' => array(
+      'server_id' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
@@ -30,7 +24,7 @@ function hosting_ssl_schema() {
         'default' => 0,
       ),
     ),
-    'primary key' => array('vid', 'nid'),
+    'primary key' => array('server_id'),
   );
 
   $schema['hosting_ssl_cert'] = array(
@@ -64,13 +58,7 @@ function hosting_ssl_schema() {
 
   $schema['hosting_ssl_site'] = array(
     'fields' => array(
-      'vid' => array(
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-      ),
-      'nid' => array(
+      'site_id' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
@@ -89,7 +77,7 @@ function hosting_ssl_schema() {
         'default' => 0,
       ),
     ),
-    'primary key' => array('vid', 'nid'),
+    'primary key' => array('site_id'),
   );
 
   $schema['hosting_ssl_cert_ips'] = array(
@@ -121,11 +109,11 @@ function hosting_ssl_schema() {
  * Remove SSL service records from hosting_service table.
  */
 function hosting_ssl_uninstall() {
-  db_delete('hosting_service')
+  \Drupal::database()->delete('hosting_service')
     ->condition('service', 'http')
     ->condition('type', 'apache_ssl')
     ->execute();
-  db_delete('hosting_service')
+  \Drupal::database()->delete('hosting_service')
     ->condition('service', 'http')
     ->condition('type', 'nginx_ssl')
     ->execute();

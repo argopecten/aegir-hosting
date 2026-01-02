@@ -1,0 +1,206 @@
+uuid: cd44c5ae-461c-462e-ab1f-20d234ce2267
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+id: hosting_site_list
+label: 'Hosting Site List'
+module: views
+description: 'Display a list of sites hosted in Aegir.'
+tag: hosting_site
+base_table: hosting_site
+base_field: id
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      title: Sites
+      access:
+        type: perm
+        options:
+          perm: 'view site'
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: full
+        options:
+          items_per_page: 25
+          offset: 0
+      style:
+        type: table
+        options:
+          row_class: '[status]'
+          default: '-1'
+          columns:
+            bulk_form: bulk_form
+            status: status
+            canonical: canonical
+            created: created
+            verified: verified
+      row:
+        type: fields
+      fields:
+        bulk_form:
+          id: bulk_form
+          table: hosting_site
+          field: bulk_form
+          label: ''
+          plugin_id: bulk_form
+          entity_type: hosting_site
+          action_title: Action
+          include_exclude: include
+          selected_actions:
+            - hosting_site_backup_action
+            - hosting_site_verify_action
+            - hosting_site_disable_action
+            - hosting_site_enable_action
+            - hosting_site_delete_action
+        status:
+          id: status
+          table: hosting_site
+          field: status
+          label: ''
+          exclude: true
+          plugin_id: hosting_site_status
+          status_mode: class
+        canonical:
+          id: canonical
+          table: hosting_site
+          field: canonical
+          label: 'Site'
+          plugin_id: hosting_site_canonical
+          element_class: 'hosting-status'
+        created:
+          id: created
+          table: hosting_site
+          field: created
+          label: 'Created'
+          plugin_id: field
+          entity_type: hosting_site
+          entity_field: created
+          settings:
+            date_format: short
+        verified:
+          id: verified
+          table: hosting_site
+          field: verified
+          label: 'Verified'
+          plugin_id: hosting_interval
+          date_format: short
+      sorts:
+        created:
+          id: created
+          table: hosting_site
+          field: created
+          order: DESC
+          plugin_id: date
+  page_sites:
+    display_plugin: page
+    id: page_sites
+    display_title: 'Site List Page'
+    position: 1
+    display_options:
+      access:
+        type: perm
+        options:
+          perm: 'create site'
+      path: hosting/sites
+      menu:
+        type: normal
+        title: Sites
+        description: 'List of sites'
+        menu_name: main
+        weight: 1
+  block_sites:
+    display_plugin: block
+    id: block_sites
+    display_title: 'Site List Block'
+    position: 2
+  block_platform:
+    display_plugin: block
+    id: block_platform
+    display_title: 'Platform Sites'
+    position: 3
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        platform:
+          id: platform
+          table: hosting_site
+          field: platform
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }
+  block_profile:
+    display_plugin: block
+    id: block_profile
+    display_title: 'Profile Sites'
+    position: 4
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        profile:
+          id: profile
+          table: hosting_site
+          field: profile
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }
+  block_client:
+    display_plugin: block
+    id: block_client
+    display_title: 'Client Sites'
+    position: 5
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        client:
+          id: client
+          table: hosting_site
+          field: client
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }
+  block_client2:
+    display_plugin: block
+    id: block_client2
+    display_title: 'Client Sites (Limited)'
+    position: 6
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        client:
+          id: client
+          table: hosting_site
+          field: client
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }
+  block_1:
+    display_plugin: block
+    id: block_1
+    display_title: 'Platform Sites (Alt)'
+    position: 7
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        platform:
+          id: platform
+          table: hosting_site
+          field: platform
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }

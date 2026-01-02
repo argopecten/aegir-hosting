@@ -1,0 +1,6 @@
+site_data:
+  title: 'Site data example'
+  description: 'Example implementation of saving data into a site context.'
+  status: disabled
+  module: hosting_site_data
+  group: experimental

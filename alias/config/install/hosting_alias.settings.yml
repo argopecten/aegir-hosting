@@ -1,0 +1,6 @@
+hosting_alias_subdomain: ''
+hosting_alias_subdomain_replace_dash: true
+hosting_alias_subdomain_dash_substitute: '--'
+hosting_alias_automatic_www: false
+hosting_alias_automatic_no_www: false
+hosting_alias_redirection: false

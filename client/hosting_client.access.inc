@@ -23,15 +23,6 @@ function hosting_client_user_view($account, $view_mode) {
 }
 
 /**
- * Implements hook_user_XXX().
- */
-function hosting_client_user_XXX($edit, $account) {
-  if (hosting_feature('client')) {
-    return hosting_client_user_form($edit, $account, $category);
-  }
-}
-
-/**
  * Implements hook_user_presave().
  */
 function hosting_client_user_presave(&$edit, $account, $category) {
@@ -49,7 +40,7 @@ function hosting_client_user_insert(&$edit, $account, $category) {
  * Implements hook_user_cancel().
  */
 function hosting_client_user_cancel($edit, $account, $method) {
-  db_delete('hosting_client_user')
+  \Drupal::database()->delete('hosting_client_user')
     ->condition('user', $account->uid)
     ->execute();
 }
@@ -69,7 +60,7 @@ function hosting_client_view_user($user) {
     // This is a table because we'll have types for clients eventually.
     $header = array(t('Hosting client'));
     $items['client_list'] = array(
-      'value' => theme('table', array('header' => $header, 'rows' => $rows)),
+      'value' => \Drupal::service('theme.manager')->render('table', array('header' => $header, 'rows' => $rows)),
       'class' => 'client',
     );
 
@@ -104,7 +95,7 @@ function hosting_client_form_user_profile_form_alter(&$form, &$form_state, $form
         );
       }
     }
-    if (user_access('edit client users')) {
+    if (\Drupal::currentUser()->hasPermission('edit client users')) {
       $form['client_edit']['clients'] = array(
         '#type' => 'checkboxes',
         '#options' => $clients,
@@ -116,7 +107,7 @@ function hosting_client_form_user_profile_form_alter(&$form, &$form_state, $form
       '#value' => array(array('data' => t('Accessible clients')), array('data' => t('Remove'))),
     );
 
-    if (user_access('edit client users')) {
+    if (\Drupal::currentUser()->hasPermission('edit client users')) {
       $form['client_edit']['hosting_client'] = array(
         '#type' => 'textfield',
         '#title' => t('Associate a client to this user'),
@@ -138,7 +129,7 @@ function hosting_client_form_user_profile_form_alter(&$form, &$form_state, $form
 function theme_hosting_client_user_form($variables) {
   $form = $variables['form'];
   if (array_key_exists('hosting_client', $form)) {
-    $edit_name = drupal_render($form['hosting_client']);
+    $edit_name = \Drupal::service('renderer')->render($form['hosting_client']);
   }
   else {
     $edit_name = '';
@@ -149,15 +140,15 @@ function theme_hosting_client_user_form($variables) {
     foreach (element_children($form['name'], TRUE) as $client) {
       $row = array();
       $row['data'][] = $form['name'][$client]['#value'];
-      if (user_access('edit client users')) {
-        $row['data'][] = drupal_render($form['clients'][$client]);
+      if (\Drupal::currentUser()->hasPermission('edit client users')) {
+        $row['data'][] = \Drupal::service('renderer')->render($form['clients'][$client]);
       }
       $rows[] = $row;
     }
   }
 
-  $output = drupal_render_children($form);
-  $output .= theme('table', array('header' => $form['header']['#value'], 'rows' => $rows));
+  $output = \Drupal::service('renderer')->render($form);
+  $output .= \Drupal::service('theme.manager')->render('table', array('header' => $form['header']['#value'], 'rows' => $rows));
   $output .= $edit_name;
   return $output;
 }
@@ -167,11 +158,10 @@ function theme_hosting_client_user_form($variables) {
  *
  * @see hosting_client_user()
  */
-function hosting_client_user_form_validate($form, &$form_state) {
-  if (array_key_exists('hosting_client', $form_state['values']) &&
-      $form_state['values']['hosting_client'] &&
-      (!$client = hosting_get_client($form_state['values']['hosting_client']))) {
-    form_set_error('hosting_client', 'Please fill in a valid client');
+function hosting_client_user_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  $client_id = $form_state->getValue('hosting_client');
+  if ($client_id && (!$client = hosting_get_client($client_id))) {
+    $form_state->setErrorByName('hosting_client', 'Please fill in a valid client');
   }
 }
 
@@ -183,7 +173,7 @@ function hosting_client_user_form_validate($form, &$form_state) {
 function hosting_client_user_form_submit($edit, $user) {
   if (array_key_exists('clients', $edit)) {
     foreach ($edit['clients'] as $client) {
-      $query = db_delete('hosting_client_user')
+      $query = \Drupal::database()->delete('hosting_client_user')
         ->condition('user', $user->uid)
         ->condition('client', $client)
         ->execute();
@@ -191,9 +181,9 @@ function hosting_client_user_form_submit($edit, $user) {
   }
   if (array_key_exists('hosting_client', $edit) && $edit['hosting_client']) {
     $client = hosting_get_client($edit['hosting_client']);
-    $query = $id = db_insert('hosting_client_user')
+    $query = $id = \Drupal::database()->insert('hosting_client_user')
       ->fields(array(
-        'client' => $client->nid,
+        'client' => hosting_entity_id($client),
         'user' => $user->uid,
         'contact_type' => '',
       ))
@@ -201,173 +191,6 @@ function hosting_client_user_form_submit($edit, $user) {
   }
 }
 
-/**
- * Function to make sure we don't respond with grants when disabling ourselves.
- */
-function hosting_client_disabling($set = NULL) {
-  static $disabling = FALSE;
-  if ($set !== NULL) {
-    $disabling = $set;
-  }
-  return $disabling;
-}
-
-/**
- * Implements hook_node_grants().
- */
-function hosting_client_node_grants($account, $op) {
-  $grants = &drupal_static(__FUNCTION__);
-  if (!isset($grants)) {
-    $grants = array();
-  }
-  $cache_id = $account->uid . $op;
-  if (!isset($grants[$cache_id])) {
-    $account->client_id = hosting_get_client_from_user($account->uid);
-    $types = hosting_feature_node_types();
-
-    foreach ($types as $type) {
-      if (user_access('administer ' . $type . 's', $account)) {
-        $grants[$cache_id]['hosting ' . $type] = array(1);
-      }
-      elseif (user_access($op . ' ' . $type, $account)) {
-        // TODO: restrict access to certain op-type based on the user relationship to this client - see content of $client_relations
-        $grants[$cache_id]['hosting ' . $type] = array_keys($account->client_id);
-      }
-      elseif ($op == 'update' && user_access('edit ' . $type, $account)) {
-        $grants[$cache_id]['hosting ' . $type] = array_keys($account->client_id);
-      }
-      elseif ($op == 'view' && !user_access('view ' . $type, $account)) {
-        $grants[$cache_id]['hosting ' . $type] = array_keys($account->client_id);
-      }
-    }
-  }
-  return isset($grants[$cache_id]) ? $grants[$cache_id] : array();
-}
-
-/**
- * Implements hook_node_access_records().
- */
-function hosting_client_node_access_records($node) {
-  if (hosting_client_disabling()) {
-    return;
-  }
-  $grants = array();
-  $base_grant = array(
-    'realm' => 'hosting ' . $node->type,
-    'grant_view' => 1,
-    'grant_update' => 1,
-    'grant_delete' => 0,
-    'priority' => 1,
-  );
-
-  // Tasks inherit from their parent.
-  if ($node->type == 'task') {
-    $node = node_load($node->rid);
-    $base_grant['grant_update'] = 0;
-  }
-
-  switch ($node->type) {
-    case 'site':
-      $base_grant['gid'] = $node->client;
-      break;
-
-    case 'client':
-      $base_grant['gid'] = $node->nid;
-      break;
-
-    case 'package':
-      $base_grant['grant_update'] = 0;
-      break;
-
-    case 'task':
-      // The rest of the node types are configuration, so only admin should see them.
-      $base_grant['gid'] = HOSTING_ADMIN_CLIENT;
-      break;
-
-    case 'server':
-      // The rest of the node types are configuration, so only admin should see them.
-      $base_grant['gid'] = HOSTING_ADMIN_CLIENT;
-
-      // Lookup platforms on this server.
-      $platforms = _hosting_get_platforms($node->nid);
-
-      $gids = array();
-      foreach ($platforms as $nid => $title) {
-        $node = node_load($nid);
-
-        if (!empty($node->clients)) {
-          foreach ($node->clients as $cid => $client) {
-            if ($cid != HOSTING_ADMIN_CLIENT) {
-              $gids[] = $cid;
-            }
-          }
-        }
-        else {
-          // When $node->clients isn't set on a platform, all clients have access.
-          $results = db_query("select nid from {hosting_client} c");
-          foreach ($results as $row) {
-            if ($row->nid != HOSTING_ADMIN_CLIENT) {
-              $gids[] = $row->nid;
-            }
-          }
-        }
-      }
-
-      // Lookup databases hosted on this server.
-      $databases = hosting_get_sites_on_db_server($node->nid);
-      foreach ($databases as $nid => $dbname) {
-        $node = node_load($nid);
-        if (!empty($node->client)) {
-          if ($node->client != HOSTING_ADMIN_CLIENT) {
-            $gids[] = $node->client;
-          }
-        }
-      }
-      $gids = array_unique($gids);
-
-      // Grant access to all clients who have access to a platform.
-      foreach ($gids as $cid) {
-        $grants[] = array_merge($base_grant, array('gid' => $cid, 'grant_update' => 0));
-      }
-      break;
-
-    case 'platform':
-      $base_grant['gid'] = HOSTING_ADMIN_CLIENT;
-      if (isset($node->clients)) {
-        foreach ($node->clients as $cid => $client) {
-          if ($cid != HOSTING_ADMIN_CLIENT) {
-            $grants[] = array_merge($base_grant, array('gid' => $cid, 'grant_update' => 0));
-          }
-        }
-      }
-      else {
-        // When $node->clients isn't set, all clients have access.
-        $results = db_query("select nid from {hosting_client} c");
-        foreach ($results as $row) {
-          if ($row->nid != HOSTING_ADMIN_CLIENT) {
-            $grants[] = array_merge($base_grant, array('gid' => $row->nid, 'grant_update' => 0));
-          }
-        }
-      }
-      break;
-
-    default:
-      // Not hosting node, don't change access.
-      return;
-  }
-
-  if (isset($base_grant['gid'])) {
-    $grants[] = $base_grant;
-
-    // This should _always_ happen.
-    if ($base_grant['gid'] != HOSTING_ADMIN_CLIENT) {
-      // Also give full access to the administrator user.
-      $base_grant['gid'] = HOSTING_ADMIN_CLIENT;
-      $grants[] = $base_grant;
-    }
-    return $grants;
-  }
-}
 
 /**
  * Get relationships a user has with different clients.
@@ -381,7 +204,7 @@ function hosting_client_node_access_records($node) {
  */
 function hosting_get_client_from_user($uid) {
   $clients = array();
-  if ($results = db_query("SELECT client, contact_type FROM {hosting_client_user} WHERE user = :user", array(':user' => $uid))) {
+  if ($results = \Drupal::database()->query("SELECT client, contact_type FROM {hosting_client_user} WHERE user = :user", array(':user' => $uid))) {
     foreach ($results as $result) {
       $clients[$result->client] = explode(',', $result->contact_type);
     }

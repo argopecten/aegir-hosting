@@ -1,0 +1,14 @@
+base:
+  css:
+    theme:
+      hosting.css: {}
+
+admin:
+  css:
+    theme:
+      hosting.css: {}
+  js:
+    hosting.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery

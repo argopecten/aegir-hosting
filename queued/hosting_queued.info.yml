@@ -1,0 +1,7 @@
+name: 'Hosting queue daemon'
+type: module
+description: 'Allows the hosting queue to be run in a daemon.'
+package: 'Hosting'
+core_version_requirement: '^11'
+dependencies:
+  - 'hosting'

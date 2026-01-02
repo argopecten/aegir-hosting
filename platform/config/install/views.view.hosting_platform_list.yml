@@ -1,0 +1,167 @@
+uuid: 5a103dc1-0b81-424b-87c1-3f1425f67d7b
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_platform
+id: hosting_platform_list
+label: 'Hosting Platform List'
+module: views
+description: 'Display a list of platforms in Aegir.'
+tag: hosting_platform
+base_table: hosting_platform
+base_field: id
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      title: Platforms
+      use_ajax: true
+      access:
+        type: perm
+        options:
+          perm: 'view platform'
+      cache:
+        type: none
+      query:
+        type: views_query
+      exposed_form:
+        type: basic
+      pager:
+        type: full
+        options:
+          items_per_page: 25
+          offset: 0
+      style:
+        type: table
+        options:
+          row_class: '[status]'
+          columns:
+            bulk_form: bulk_form
+            status: status
+            title: title
+            release: release
+            title_1: title_1
+            verified: verified
+            sites: sites
+      row:
+        type: fields
+      relationships:
+        web_server:
+          id: web_server
+          table: hosting_platform
+          field: web_server
+          plugin_id: standard
+      fields:
+        bulk_form:
+          id: bulk_form
+          table: hosting_platform
+          field: bulk_form
+          label: ''
+          plugin_id: bulk_form
+          entity_type: hosting_platform
+          action_title: Action
+          include_exclude: include
+          selected_actions:
+            - hosting_platform_verify_action
+            - hosting_platform_lock_action
+            - hosting_platform_unlock_action
+            - hosting_platform_delete_action
+        status:
+          id: status
+          table: hosting_platform
+          field: status
+          label: ''
+          exclude: true
+          plugin_id: hosting_platform_status
+          status_mode: class
+        title:
+          id: title
+          table: hosting_platform
+          field: label
+          label: Platform
+          plugin_id: field
+          entity_type: hosting_platform
+          entity_field: label
+          element_class: 'hosting-status'
+          settings:
+            link_to_entity: true
+        release:
+          id: release
+          table: hosting_platform
+          field: release
+          label: Release
+          plugin_id: hosting_platform_release
+        title_1:
+          id: title_1
+          table: hosting_server
+          field: label
+          relationship: web_server
+          label: Server
+          plugin_id: field
+          entity_type: hosting_server
+          entity_field: label
+          settings:
+            link_to_entity: true
+        verified:
+          id: verified
+          table: hosting_platform
+          field: verified
+          label: Verified
+          plugin_id: date
+          date_format: time_ago
+        sites:
+          id: sites
+          table: hosting_platform
+          field: sites
+          label: Sites
+          plugin_id: hosting_platform_sites
+      filters:
+        status_1:
+          id: status_1
+          table: hosting_platform
+          field: status
+          operator: '!='
+          value:
+            value: '-2'
+          plugin_id: numeric
+      sorts:
+        title:
+          id: title
+          table: hosting_platform
+          field: label
+          order: ASC
+          plugin_id: standard
+  page_platforms:
+    display_plugin: page
+    id: page_platforms
+    display_title: Page
+    position: 1
+    display_options:
+      path: hosting/platforms
+      menu:
+        type: normal
+        title: Platforms
+        description: 'List of platforms'
+        menu_name: main
+        weight: 2
+  block_1:
+    display_plugin: block
+    id: block_1
+    display_title: 'Block: Server'
+    position: 2
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        id:
+          id: id
+          table: hosting_server
+          field: id
+          relationship: web_server
+          plugin_id: numeric
+          default_argument_type: raw
+          default_argument_options: {  }

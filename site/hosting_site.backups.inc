@@ -27,7 +27,7 @@ function hosting_task_backup_form($node) {
  * Builds a list of backups of the site that have been generated.
  */
 function hosting_site_add_backup($site, $web_server, $filename, $description = '', $size = '') {
-  $id = db_insert('hosting_site_backups')
+  $id = \Drupal::database()->insert('hosting_site_backups')
   ->fields(array(
     'site' => $site,
     'web_server' => $web_server,
@@ -44,7 +44,7 @@ function hosting_site_add_backup($site, $web_server, $filename, $description = '
  * Delete a site backup record
  */
 function hosting_site_delete_backup($bid) {
-  db_delete('hosting_site_backups')
+  \Drupal::database()->delete('hosting_site_backups')
     ->condition('bid', $bid)
     ->execute();
 }
@@ -53,14 +53,14 @@ function hosting_site_delete_backup($bid) {
  * Get a site backup record
  */
 function hosting_site_get_backup($bid) {
-  return db_query("SELECT bid, site, web_server, filename, description, size, timestamp FROM {hosting_site_backups} WHERE bid = :bid", array(':bid' => $bid))->fetchAssoc();
+  return \Drupal::database()->query("SELECT bid, site, web_server, filename, description, size, timestamp FROM {hosting_site_backups} WHERE bid = :bid", array(':bid' => $bid))->fetchAssoc();
 }
 
 /**
  * Return an array with site backup IDs as keys, and file paths as values.
  */
-function hosting_site_get_backups($nid) {
-  return db_query("SELECT bid, filename FROM {hosting_site_backups} WHERE site = :nid", array(':nid' => $nid))->fetchAllKeyed();
+function hosting_site_get_backups($site_id) {
+  return \Drupal::database()->query("SELECT bid, filename FROM {hosting_site_backups} WHERE site = :site_id", array(':site_id' => $site_id))->fetchAllKeyed();
 }
 
 
@@ -73,7 +73,7 @@ function hosting_site_get_backups($nid) {
  *   An associative array of backups existing for the site, indexed by bid and sorted reverse chronologically.
  */
 function hosting_site_backup_list($site) {
-  $result = db_query("SELECT bid, description, size, timestamp FROM {hosting_site_backups} WHERE site = :site ORDER BY timestamp DESC", array(':site' => $site));
+  $result = \Drupal::database()->query("SELECT bid, description, size, timestamp FROM {hosting_site_backups} WHERE site = :site ORDER BY timestamp DESC", array(':site' => $site));
   $backups = array();
   foreach ($result as $object) {
     #needs to be cleaned up. but i am NOT generating a theme func for this right now.
@@ -85,15 +85,17 @@ function hosting_site_backup_list($site) {
 /**
  * Implements hosting_task_TASK_TYPE_form_validate().
  */
-function hosting_task_backup_delete_form_validate($form, &$form_state) {
+function hosting_task_backup_delete_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
   if (isset($form['parameters']['no_backups'])) {
-    form_set_error('no_backups', t('There are no valid backups available.'));
+    $form_state->setErrorByName('no_backups', t('There are no valid backups available.'));
   }
   // Filter out unchecked backups.
-  if (isset($form_state['values']['parameters'])) {
-    $form_state['values']['parameters'] = array_filter($form_state['values']['parameters']);
-    if (!count($form_state['values']['parameters'])) {
-      form_set_error('no_backups', t('No backups were selected for deletion.'));
+  $parameters = $form_state->getValue('parameters');
+  if ($parameters !== NULL) {
+    $parameters = array_filter($parameters);
+    $form_state->setValue('parameters', $parameters);
+    if (!count($parameters)) {
+      $form_state->setErrorByName('no_backups', t('No backups were selected for deletion.'));
     }
   }
 }
@@ -102,7 +104,7 @@ function hosting_task_backup_delete_form_validate($form, &$form_state) {
  * Implements hosting_task_TASK_TYPE_form().
  */
 function hosting_task_backup_delete_form($node) {
-  $list = hosting_site_backup_list($node->nid);
+  $list = hosting_site_backup_list(hosting_entity_id($node));
   if (sizeof($list)) {
     foreach ($list as $bid => $info) {
       $backup = hosting_site_get_backup($bid);
@@ -128,9 +130,10 @@ function hosting_task_backup_delete_form($node) {
  */
 function hosting_site_form_hosting_task_confirm_form_alter(&$form, &$form_state) {
   $node = $form_state['build_info']['args'][0];
-  if($node->type == 'site' && $form['task']['#value'] == 'delete') {
-    $backups = hosting_site_get_backups($node->nid);
-    if (!empty($backups) && variable_get('hosting_delete_backups', 'never') == 'prompt') {
+  if ($node->type == 'site' && $form['task']['#value'] == 'delete') {
+    $backups = hosting_site_get_backups(hosting_entity_id($node));
+    $delete_backups = \Drupal::config('hosting_site.settings')->get('hosting_delete_backups') ?? 'never';
+    if (!empty($backups) && $delete_backups == 'prompt') {
       $form['delete_backups'] = array(
         '#type' => 'checkbox',
         '#title' => t('Delete site backups'),
@@ -140,7 +143,7 @@ function hosting_site_form_hosting_task_confirm_form_alter(&$form, &$form_state)
       // prior to the site itself. This results in keeping the pre-delete
       // backup.
     }
-    elseif (variable_get('hosting_delete_backups', 'never') == 'always') {
+    elseif ($delete_backups == 'always') {
       $form['delete_backups'] = array(
         '#markup' => 'Note that all backups for this site will be deleted, except for the final pre-delete backup.',
       );
@@ -154,11 +157,12 @@ function hosting_site_form_hosting_task_confirm_form_alter(&$form, &$form_state)
  */
 function hosting_site_delete_site_task_submit($form, $form_state){
   $delete = isset($form_state['values']['delete_backups']) ? $form_state['values']['delete_backups'] : FALSE ;
-  if ($delete || variable_get('hosting_delete_backups', 'never') == 'always') {
-    $nid = $form_state['values']['nid'];
-    $backups = hosting_site_get_backups($nid);
+  $delete_backups = \Drupal::config('hosting_site.settings')->get('hosting_delete_backups') ?? 'never';
+  if ($delete || $delete_backups == 'always') {
+    $site_id = $form_state['values']['entity_id'] ?? NULL;
+    $backups = hosting_site_get_backups($site_id);
     if (!empty($backups)) {
-      hosting_add_task($nid, 'backup-delete', $backups);
+      hosting_add_task($site_id, 'backup-delete', $backups);
     }
   }
 }
@@ -176,6 +180,6 @@ function hosting_site_form_hosting_settings_alter(&$form, &$form_state) {
       'prompt' => t('Prompt'),
       'never' => t('Never'),
     ),
-    '#default_value' => variable_get('hosting_delete_backups', 'never'),
+    '#default_value' => \Drupal::config('hosting_site.settings')->get('hosting_delete_backups') ?? 'never',
   );
 }

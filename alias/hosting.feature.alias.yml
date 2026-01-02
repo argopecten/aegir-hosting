@@ -1,0 +1,9 @@
+alias:
+  title: 'Site aliasing'
+  description: 'Provide multiple domain names for sites to be accessible by.'
+  status: enabled
+  module: hosting_alias
+  group: optional
+  role_permissions:
+    'aegir client':
+      - 'create site aliases'

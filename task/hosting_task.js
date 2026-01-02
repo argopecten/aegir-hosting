@@ -1,13 +1,18 @@
 (function($) {
 
 hostingTaskRefreshList = function() {
-  if (!Drupal.settings.hostingTaskRefresh.nid) {
+  var settings = (typeof drupalSettings !== 'undefined') ? drupalSettings : Drupal.settings;
+  var refreshSettings = settings.hostingTaskRefresh || {};
+  if (!refreshSettings.entityId) {
     return null;
   }
+  var entityType = refreshSettings.entityType || 'node';
+  var entityId = refreshSettings.entityId;
+  var basePath = settings.basePath || (settings.path ? settings.path.baseUrl : '/');
 
   var hostingTaskListRefreshCallback = function(data, responseText) {
     // If the node has been modified, reload the whole page.
-    if (Drupal.settings.hostingTaskRefresh.changed < data.changed) {
+    if (refreshSettings.changed < data.changed) {
       // only reload if there is no modal frame currently open
       if ($(document).data('hostingOpenModalFrame') != true) {
         // If a specific URL was specified, go there.
@@ -24,12 +29,12 @@ hostingTaskRefreshList = function() {
       $("#hosting-task-list").html(data.markup);
 
       hostingTaskBindButtons('#hosting-task-list');
-      setTimeout("hostingTaskRefreshList()", Drupal.settings.hostingTaskRefresh.refreshTimeout);
+      setTimeout("hostingTaskRefreshList()", refreshSettings.refreshTimeout);
     }
   }
 
   hostingTaskAddOverlay('#hosting-task-list');
-  $.get(Drupal.settings.basePath + 'hosting/tasks/' + Drupal.settings.hostingTaskRefresh.nid + '/list', null, hostingTaskListRefreshCallback , 'json' );
+  $.get(basePath + 'hosting/tasks/' + entityType + '/' + entityId + '/list', null, hostingTaskListRefreshCallback , 'json' );
 }
 
 
@@ -39,25 +44,30 @@ function hostingTaskAddOverlay(elem) {
 
 
 hostingTaskRefreshQueueBlock = function() {
-  if (Drupal.settings.hostingTaskRefresh.queueBlock != 1) {
+  var settings = (typeof drupalSettings !== 'undefined') ? drupalSettings : Drupal.settings;
+  var refreshSettings = settings.hostingTaskRefresh || {};
+  if (refreshSettings.queueBlock != 1) {
     return null;
   }
+  var basePath = settings.basePath || (settings.path ? settings.path.baseUrl : '/');
 
   var hostingTaskQueueRefreshCallback = function(data, responseText) {
     $("#block-views-hosting-task-list-block .content").html(data.markup);
 
     hostingTaskBindButtons('#block-views-hosting-task-list-block');
-    setTimeout("hostingTaskRefreshQueueBlock()", Drupal.settings.hostingTaskRefresh.refreshTimeout);
+    setTimeout("hostingTaskRefreshQueueBlock()", refreshSettings.refreshTimeout);
   }
 
   hostingTaskAddOverlay('#block-views-hosting-task-list-block .view-content');
-  $.get(Drupal.settings.basePath + 'hosting/tasks/queue', null, hostingTaskQueueRefreshCallback , 'json');
+  $.get(basePath + 'hosting/tasks/queue', null, hostingTaskQueueRefreshCallback , 'json');
 }
 
 $(document).ready(function() {
   $(document).data('hostingOpenModalFrame', false);
-  setTimeout("hostingTaskRefreshList()", Drupal.settings.hostingTaskRefresh.refreshTimeout);
-  setTimeout("hostingTaskRefreshQueueBlock()", Drupal.settings.hostingTaskRefresh.refreshTimeout);
+  var settings = (typeof drupalSettings !== 'undefined') ? drupalSettings : Drupal.settings;
+  var refreshSettings = settings.hostingTaskRefresh || {};
+  setTimeout("hostingTaskRefreshList()", refreshSettings.refreshTimeout);
+  setTimeout("hostingTaskRefreshQueueBlock()", refreshSettings.refreshTimeout);
   hostingTaskBindButtons($(this));
   $('#hosting-task-confirm-form-actions a').click(function() {
     if (parent.Drupal.modalFrame.isOpen) {

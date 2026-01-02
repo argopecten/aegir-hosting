@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_platform
+name: 'Platform'
+type: 'platform'
+description: 'Platform node for hosting.'
+help: ''
+new_revision: false
+preview_mode: 0
+display_submitted: false

@@ -1,0 +1,5 @@
+hosting_client_prefix: ''
+hosting_client_register_user: false
+hosting_client_require_client_to_create_site: true
+hosting_client_send_welcome: false
+hosting_client_mail: { }

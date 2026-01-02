@@ -1,0 +1,7 @@
+hosting_task.settings:
+  type: config_object
+  label: 'Hosting task settings'
+  mapping:
+    hosting_task_refresh_timeout:
+      type: integer
+      label: 'Task refresh timeout'

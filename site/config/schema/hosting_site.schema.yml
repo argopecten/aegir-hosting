@@ -1,0 +1,7 @@
+hosting_site.settings:
+  type: config_object
+  label: 'Hosting site settings'
+  mapping:
+    hosting_delete_backups:
+      type: string
+      label: 'Backup deletion mode'

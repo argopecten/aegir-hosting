@@ -1,0 +1,28 @@
+uuid: 43c081de-b3a5-4fae-90de-f19f3bed3233
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+    - views
+  config:
+    - views.view.hosting_site_list
+  theme:
+    - eldir
+id: views_exposed_filter_block__hosting_site_list_page_sites
+theme: eldir
+region: content
+weight: 0
+provider: null
+plugin: 'views_exposed_filter_block:hosting_site_list-page_sites'
+settings:
+  id: 'views_exposed_filter_block:hosting_site_list-page_sites'
+  label: ''
+  label_display: '0'
+  provider: views
+visibility:
+  request_path:
+    id: request_path
+    pages: '/hosting/sites'
+    negate: false
+    context_mapping: {  }

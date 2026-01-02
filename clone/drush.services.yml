@@ -1,0 +1,5 @@
+services:
+  hosting_clone.commands:
+    class: Drupal\hosting_clone\Commands\HostingCloneCommands
+    tags:
+      - { name: drush.command }
