@@ -83,9 +83,9 @@ function hosting_task_migrate_form_validate($form, \Drupal\Core\Form\FormStateIn
 }
 
 /**
- * Implements hook_\Drupal::service('theme.manager')->render().
+ * Implements hook_theme().
  */
-function hosting_migrate_\Drupal::service('theme.manager')->render($existing, $type, $theme, $path) {
+function hosting_migrate_theme($existing, $type, $theme, $path) {
   return array(
     'hosting_migrate_comparison' => array(
       'variables' => array('packages' => NULL),

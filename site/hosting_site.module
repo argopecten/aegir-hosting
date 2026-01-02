@@ -33,9 +33,9 @@ if (\Drupal::moduleHandler()->moduleExists('hosting_quota')) {
 }
 
 /**
- * Implements hook_\Drupal::service('theme.manager')->render().
+ * Implements hook_theme().
  */
-function hosting_site_\Drupal::service('theme.manager')->render($existing, $type, $theme, $path) {
+function hosting_site_theme($existing, $type, $theme, $path) {
   $items = array();
 
   $items['hosting_site_profile'] = array(

@@ -338,9 +338,9 @@ function hosting_page_attachments(array &$attachments) {
 }
 
 /**
- * Implements hook_\Drupal::service('theme.manager')->render().
+ * Implements hook_theme().
  */
-function hosting_\Drupal::service('theme.manager')->render() {
+function hosting_theme($existing, $type, $theme, $path) {
   return array(
     'hosting_queues_configure' => array(
       'file' => 'hosting.module',

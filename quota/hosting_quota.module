@@ -439,9 +439,9 @@ function hosting_quota_save_limits_from_values(array $values, $client_id) {
 }
 
 /**
- * Implements hook_\Drupal::service('theme.manager')->render().
+ * Implements hook_theme().
  */
-function hosting_quota_\Drupal::service('theme.manager')->render($existing, $resource, $theme, $path) {
+function hosting_quota_theme($existing, $type, $theme, $path) {
   return array(
     'hosting_quota_client' => array(
       'variables' => array(
