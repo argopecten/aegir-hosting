@@ -5,10 +5,10 @@ namespace Drupal\hosting_task\Commands;
 use Consolidation\AnnotatedCommand\CommandData;
 use Drush\Attributes as Drush;
 use Drush\Commands\DrushCommands;
-use Drush\HookManager\HookManager;
+use Consolidation\AnnotatedCommand\Hooks\HookManager;
 
 final class HostingTaskCommands extends DrushCommands {
-  #[Drush\Hook(type: HookManager::INIT)]
+  #[Drush\Hook(type: HookManager::INITIALIZE)]
   public function init(CommandData $commandData): void {
     // Update a task's status after Drush operations are complete.
     register_shutdown_function([static::class, 'updateStatus']);

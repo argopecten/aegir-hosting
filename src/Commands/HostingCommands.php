@@ -4,7 +4,7 @@ namespace Drupal\hosting\Commands;
 
 use Drush\Attributes as Drush;
 use Drush\Commands\DrushCommands;
-use Drush\Drupal\DrupalBootLevels;
+use Drush\Boot\DrupalBootLevels;
 use Drush\Exceptions\UserAbortException;
 use Drupal\Core\Entity\ContentEntityInterface;
 
@@ -80,10 +80,10 @@ final class HostingCommands extends DrushCommands {
   #[Drush\Command(name: 'hosting:task', aliases: ['hosting-task'])]
   #[Drush\Argument(name: 'context_name', description: 'Context to work on or a task ID.')]
   #[Drush\Argument(name: 'command', description: 'Provision command to invoke.')]
-  #[Drush\Argument(name: 'task_args', description: 'Additional task arguments in name=value format.', multiple: TRUE)]
+  #[Drush\Argument(name: 'task_args', description: 'Additional task arguments in name=value format.')]
   #[Drush\Option(name: 'force', description: 'Force the specified task to execute even if it is not queued to run.')]
   #[Drush\Bootstrap(level: DrupalBootLevels::FULL)]
-  public function task(string $context_name, ?string $command = NULL, array $task_args = [], array $options = ['force' => FALSE]): void {
+  public function task(string $context_name, ?string $command = NULL, array $task_args, array $options = ['force' => FALSE]): void {
     require_once dirname(__DIR__, 2) . '/task.hosting.inc';
 
     $arguments = [$context_name];

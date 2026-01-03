@@ -5,10 +5,10 @@ namespace Drupal\hosting_package\Commands;
 use Consolidation\AnnotatedCommand\CommandData;
 use Drush\Attributes as Drush;
 use Drush\Commands\DrushCommands;
-use Drush\HookManager\HookManager;
+use Consolidation\AnnotatedCommand\Hooks\HookManager;
 
 final class HostingPackageCommands extends DrushCommands {
-  #[Drush\Hook(type: HookManager::PRE_COMMAND, target: 'hosting:task')]
+  #[Drush\Hook(type: HookManager::PRE_COMMAND_HOOK, target: 'hosting:task')]
   public function preHostingTask(CommandData $commandData): void {
     $task = &drush_get_context('HOSTING_TASK');
     if (!$task) {

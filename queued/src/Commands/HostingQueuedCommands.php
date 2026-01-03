@@ -6,7 +6,7 @@ namespace Drupal\hosting_queued\Commands;
 
 use Drush\Attributes as Drush;
 use Drush\Commands\DrushCommands;
-use Drush\Drupal\DrupalBootLevels;
+use Drush\Boot\DrupalBootLevels;
 use Drupal\Core\Database\Database;
 
 final class HostingQueuedCommands extends DrushCommands {
