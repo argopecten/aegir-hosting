@@ -1,0 +1,10 @@
+edit all quotas:
+  title: 'edit all quotas'
+view all quotas:
+  title: 'view all quotas'
+view own quota:
+  title: 'view own quota'
+bypass all quotas:
+  title: 'bypass all quotas'
+permission_callbacks:
+  - hosting_quota_permissions

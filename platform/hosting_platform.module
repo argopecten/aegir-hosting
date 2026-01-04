@@ -130,35 +130,6 @@ function hosting_platform_hosting_tasks() {
 
 
 /**
- * Implements hook_permission().
- */
-function hosting_platform_permission() {
-  return array(
-    'administer platforms' => array(
-      'title' => t('administer platforms'),
-    ),
-    'create platform' => array(
-      'title' => t('create platform'),
-    ),
-    'view platform' => array(
-      'title' => t('view platform'),
-    ),
-    'edit platform' => array(
-      'title' => t('edit platform'),
-    ),
-    'delete platform' => array(
-      'title' => t('delete platform'),
-    ),
-    'view locked platforms' => array(
-      'title' => t('view locked platforms'),
-    ),
-    'create sites on locked platforms' => array(
-      'title' => t('create sites on locked platforms'),
-    ),
-  );
-}
-
-/**
  * Callback for platform verify action.
  *
  * @see: hosting_task_action_info().
@@ -178,9 +149,11 @@ function hosting_platform_validate_runtime($platform) {
 
   $php_path = trim((string) ($platform->get('php_path')->value ?? ''));
   if ($php_path === '' || !is_file($php_path) || !is_executable($php_path)) {
-    drush_set_error('HOSTING_PLATFORM_PHP_MISSING', dt('PHP binary path is missing or not executable for platform @platform.', array(
+    $message = t('PHP binary path is missing or not executable for platform @platform.', [
       '@platform' => $platform->label(),
-    )));
+    ]);
+    hosting_task_set_error('HOSTING_PLATFORM_PHP_MISSING', (string) $message);
+    hosting_log($message, 'error', [], 'hosting_platform');
     $platform->set('status', HOSTING_PLATFORM_LOCKED);
     $platform->set('verified', 0);
     $platform->no_verify = TRUE;
@@ -208,9 +181,11 @@ function hosting_platform_validate_runtime($platform) {
     }
   }
   if ($drush_path === NULL) {
-    drush_set_error('HOSTING_PLATFORM_DRUSH_MISSING', dt('Drush binary not found for platform @platform.', array(
+    $message = t('Drush binary not found for platform @platform.', [
       '@platform' => $platform->label(),
-    )));
+    ]);
+    hosting_task_set_error('HOSTING_PLATFORM_DRUSH_MISSING', (string) $message);
+    hosting_log($message, 'error', [], 'hosting_platform');
     $platform->set('status', HOSTING_PLATFORM_LOCKED);
     $platform->set('verified', 0);
     $platform->no_verify = TRUE;
@@ -771,7 +746,7 @@ function hosting_platform_view($node, $view_mode, $langcode = NULL) {
   $node->content['info']['publish_path'] = array(
     '#type' => 'item',
     '#title' => t('Publish path'),
-    '#markup' => filter_xss($node->publish_path),
+    '#markup' => \Drupal\Component\Utility\Xss::filter($node->publish_path),
     '#weight' => -8,
   );
 
@@ -1122,11 +1097,11 @@ function hosting_platform_post_hosting_verify_task($task, $data) {
     ));
     if (!empty($platform_release->version) && !hosting_platform_version_supported($platform_release->version)) {
       $major = hosting_platform_major_version($platform_release->version);
-      drush_log(dt('Platform @name uses Drupal @version, which is below the minimum supported major version (@min).', array(
+      hosting_log(t('Platform @name uses Drupal @version, which is below the minimum supported major version (@min).', [
         '@name' => $node->label(),
         '@version' => $platform_release->version,
         '@min' => HOSTING_PLATFORM_MINIMUM_DRUPAL_MAJOR,
-      )), 'error');
+      ]), 'error', [], 'hosting_platform');
       $node->set('status', HOSTING_PLATFORM_LOCKED);
       $node->set('verified', 0);
       $node->no_verify = TRUE;
@@ -1157,7 +1132,7 @@ function hosting_platform_post_hosting_verify_task($task, $data) {
           ));
           $site->import = TRUE;
           $site->save();
-          drush_log(dt("Imported existing site !domain", array('!domain' => _hosting_node_link($site->id()))));
+          hosting_log(t('Imported existing site @domain', ['@domain' => _hosting_node_link($site->id())]), 'notice', [], 'hosting_platform');
           hosting_package_instance_sync($site->id(), 'site', $packages['base']);
         }
       }

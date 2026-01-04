@@ -487,8 +487,7 @@ function hosting_feature_rebuild_caches($features = array()) {
   // /var/aegir/.drush/drushrc.php)
 
   // Allow scripts to skip automatic verify tasks by passing '--no-verify'
-  if (function_exists('drush_get_option') &&
-      drush_get_option('no-verify', FALSE)) {
+  if (hosting_get_cli_option('no-verify', FALSE)) {
     return;
   }
   if ($site_id = hosting_get_hostmaster_site_id()) {

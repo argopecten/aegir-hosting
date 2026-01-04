@@ -76,3 +76,30 @@ function hosting_task_schema() {
   return $schema;
 }
 
+/**
+ * Implements hook_install().
+ */
+function hosting_task_install() {
+  hosting_install_view_configs('hosting_task');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function hosting_task_uninstall() {
+  \Drupal::configFactory()->getEditable('hosting_task.settings')->delete();
+
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if ($entity_type_manager->hasDefinition('node_type')) {
+    $storage = $entity_type_manager->getStorage('node_type');
+    if ($type = $storage->load('task')) {
+      $type->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('view')) {
+    $storage = $entity_type_manager->getStorage('view');
+    if ($view = $storage->load('hosting_task_list')) {
+      $view->delete();
+    }
+  }
+}

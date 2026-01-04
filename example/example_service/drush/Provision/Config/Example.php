@@ -15,7 +15,7 @@ class Provision_Config_Example extends Provision_Config {
    * Where the file generated will end up.
    *
    * It is extremely important that this path is only made up of information
-   * relative to this class, and does not use drush_get_option or the d() accessor.
+   * relative to this class, and does not use CLI option helpers or the d() accessor.
    */
   function filename() {
     return $this->example_config_path . '/example.conf';

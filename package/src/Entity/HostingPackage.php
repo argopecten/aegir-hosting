@@ -15,6 +15,7 @@ use Drupal\hosting\Entity\HostingEntityBase;
  *   handlers = {
  *     "list_builder" = "Drupal\hosting_package\HostingPackageListBuilder",
  *     "access" = "Drupal\hosting_package\HostingPackageAccessControlHandler",
+ *     "views_data" = "Drupal\views\EntityViewsData",
  *     "form" = {
  *       "add" = "Drupal\hosting_package\Form\HostingPackageForm",
  *       "edit" = "Drupal\hosting_package\Form\HostingPackageForm",

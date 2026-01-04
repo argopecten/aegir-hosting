@@ -39,6 +39,7 @@ display:
         options:
           row_class: '[task_status]'
           default: '-1'
+          empty_table: true
           columns:
             task_status: task_status
             label: label
@@ -102,6 +103,14 @@ display:
           field: executed
           order: DESC
           plugin_id: date
+      empty:
+        area_text_custom:
+          id: area_text_custom
+          table: views
+          field: area_text_custom
+          plugin_id: text_custom
+          empty: true
+          content: 'There are no hosting tasks yet.'
   block:
     display_plugin: block
     id: block

@@ -1,0 +1,8 @@
+create package:
+  title: 'create package'
+view package:
+  title: 'view package'
+edit package:
+  title: 'edit package'
+delete package:
+  title: 'delete package'

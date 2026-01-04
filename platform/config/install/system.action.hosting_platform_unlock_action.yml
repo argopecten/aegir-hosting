@@ -1,0 +1,10 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_platform
+id: hosting_platform_unlock_action
+label: 'Unlock platform'
+type: hosting_platform
+plugin: hosting_platform_unlock_action
+configuration: {  }

@@ -102,8 +102,8 @@ class hostingService_example_basic extends hostingService_example {
     $render['example_field'] = array(
       '#type' => 'item',
       '#title' => t('Example field'),
-      // Remember to pass the display through filter_xss!
-      '#markup' => filter_xss($this->example_field),
+      // Remember to pass the display through Xss::filter().
+      '#markup' => \Drupal\Component\Utility\Xss::filter($this->example_field),
     );
   }
 

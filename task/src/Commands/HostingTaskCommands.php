@@ -18,10 +18,10 @@ final class HostingTaskCommands extends DrushCommands {
    * Shutdown function to catch any task status.
    */
   public static function updateStatus(): void {
-    $task = drush_get_context('HOSTING_TASK');
+    $task = hosting_task_get_current();
     if (!empty($task)) {
       $message = _hosting_parse_error_code(hosting_task_update_status($task));
-      \Drush\Drush::logger()->info(dt('Updated task status to "!log"', array('!log' => $message)));
+      \Drush\Drush::logger()->info((string) t('Updated task status to "@log"', ['@log' => $message]));
     }
   }
 }

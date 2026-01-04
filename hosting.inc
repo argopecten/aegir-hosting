@@ -80,7 +80,25 @@ function hosting_format_interval($ts) {
     return t('Never');
   }
 
-  return t("@interval ago", array("@interval" => format_interval(REQUEST_TIME - $ts, 1)));
+  return t("@interval ago", array("@interval" => \Drupal::service('date.formatter')->formatInterval(REQUEST_TIME - $ts, 1)));
+}
+
+/**
+ * Format bytes as a human-readable string.
+ */
+function hosting_format_size($bytes) {
+  if ($bytes === NULL) {
+    return '';
+  }
+  $bytes = (float) $bytes;
+  $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  $unit = 0;
+  while ($bytes >= 1024 && $unit < count($units) - 1) {
+    $bytes /= 1024;
+    $unit++;
+  }
+  $precision = $unit === 0 ? 0 : 2;
+  return number_format($bytes, $precision, '.', '') . ' ' . $units[$unit];
 }
 
 /**
@@ -114,4 +132,117 @@ function hosting_get_hostmaster_site_id() {
 function hosting_get_hostmaster_platform_id() {
   $hostmaster_site = \Drupal::entityTypeManager()->getStorage('hosting_site')->load(hosting_get_hostmaster_site_id());
   return $hostmaster_site ? $hostmaster_site->get('platform')->target_id : NULL;
+}
+
+/**
+ * Ensure view configs are installed for a module.
+ */
+function hosting_install_view_configs($module) {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if (!$entity_type_manager->hasDefinition('view')) {
+    return;
+  }
+
+  $entity_type_manager->clearCachedDefinitions();
+  \Drupal::service('views.views_data')->clear();
+
+  $path = \Drupal::service('extension.path.resolver')->getPath('module', $module);
+  if (!$path) {
+    return;
+  }
+  $config_path = DRUPAL_ROOT . '/' . $path . '/config/install';
+  if (!is_dir($config_path)) {
+    return;
+  }
+
+  $storage = new \Drupal\Core\Config\FileStorage($config_path);
+  $view_storage = $entity_type_manager->getStorage('view');
+  foreach ($storage->listAll('views.view.') as $config_name) {
+    $view_id = substr($config_name, strlen('views.view.'));
+    if ($view_storage->load($view_id)) {
+      continue;
+    }
+    $data = $storage->read($config_name);
+    if (!is_array($data)) {
+      continue;
+    }
+    $view = $view_storage->createFromStorageRecord($data);
+    if ($view->isInstallable()) {
+      $view->trustData()->save();
+    }
+  }
+}
+
+/**
+ * Ensure action configs are installed for a module.
+ */
+function hosting_install_action_configs($module) {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if (!$entity_type_manager->hasDefinition('action')) {
+    return;
+  }
+
+  $entity_type_manager->clearCachedDefinitions();
+
+  $path = \Drupal::service('extension.path.resolver')->getPath('module', $module);
+  if (!$path) {
+    return;
+  }
+  $config_path = DRUPAL_ROOT . '/' . $path . '/config/install';
+  if (!is_dir($config_path)) {
+    return;
+  }
+
+  $storage = new \Drupal\Core\Config\FileStorage($config_path);
+  $action_storage = $entity_type_manager->getStorage('action');
+  foreach ($storage->listAll('system.action.') as $config_name) {
+    $action_id = substr($config_name, strlen('system.action.'));
+    if ($action_storage->load($action_id)) {
+      continue;
+    }
+    $data = $storage->read($config_name);
+    if (!is_array($data)) {
+      continue;
+    }
+    $action = $action_storage->createFromStorageRecord($data);
+    if ($action->isInstallable()) {
+      $action->trustData()->save();
+    }
+  }
+}
+
+/**
+ * Ensure entity form display configs are installed for a module.
+ */
+function hosting_install_form_display_configs($module) {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if (!$entity_type_manager->hasDefinition('entity_form_display')) {
+    return;
+  }
+
+  $path = \Drupal::service('extension.path.resolver')->getPath('module', $module);
+  if (!$path) {
+    return;
+  }
+  $config_path = DRUPAL_ROOT . '/' . $path . '/config/install';
+  if (!is_dir($config_path)) {
+    return;
+  }
+
+  $storage = new \Drupal\Core\Config\FileStorage($config_path);
+  $display_storage = $entity_type_manager->getStorage('entity_form_display');
+  foreach ($storage->listAll('core.entity_form_display.') as $config_name) {
+    $display_id = substr($config_name, strlen('core.entity_form_display.'));
+    if ($display_storage->load($display_id)) {
+      continue;
+    }
+    $data = $storage->read($config_name);
+    if (!is_array($data)) {
+      continue;
+    }
+    $display = $display_storage->createFromStorageRecord($data);
+    if ($display->isInstallable()) {
+      $display->trustData()->save();
+    }
+  }
 }

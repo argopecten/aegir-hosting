@@ -41,3 +41,24 @@ function hosting_alias_schema() {
   return $schema;
 }
 
+/**
+ * Implements hook_install().
+ */
+function hosting_alias_install() {
+  hosting_install_view_configs('hosting_alias');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function hosting_alias_uninstall() {
+  \Drupal::configFactory()->getEditable('hosting_alias.settings')->delete();
+
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if ($entity_type_manager->hasDefinition('view')) {
+    $storage = $entity_type_manager->getStorage('view');
+    if ($view = $storage->load('hosting_alias_list')) {
+      $view->delete();
+    }
+  }
+}

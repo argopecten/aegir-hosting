@@ -101,8 +101,10 @@ display:
     id: block_sites
     display_title: 'Block: Sites'
     position: 2
+    display_options: {  }
   block_1:
     display_plugin: block
     id: block_1
     display_title: 'Block: Sites (Alt)'
     position: 3
+    display_options: {  }

@@ -191,6 +191,23 @@ function hosting_package_instances_load($param) {
 function _hosting_package_instances_load($param, $multiple = FALSE) {
   $instances = array();
 
+  $related_type = NULL;
+  $related_status = NULL;
+  if (is_array($param)) {
+    if (array_key_exists('r.type', $param)) {
+      $related_type = $param['r.type'];
+      unset($param['r.type']);
+    }
+    if (array_key_exists('r.status', $param)) {
+      $related_status = $param['r.status'];
+      unset($param['r.status']);
+    }
+    if (array_key_exists('n.status', $param)) {
+      $param['i.status'] = $param['n.status'];
+      unset($param['n.status']);
+    }
+  }
+
   $query = \Drupal::database()->select('hosting_package_instance', 'i')
     ->addTag('hosting_package_instances_load')
     ->fields('i', array('iid', 'version', 'version_code', 'schema_version', 'status', 'rid', 'package_id'));
@@ -200,6 +217,28 @@ function _hosting_package_instances_load($param, $multiple = FALSE) {
   $site_alias = $query->leftJoin('hosting_site', 's', 'i.rid = %alias.id');
   $platform_alias = $query->leftJoin('hosting_platform', 'h', 'i.rid = %alias.id');
   $query->addExpression("CASE WHEN {$site_alias}.id IS NOT NULL THEN 'site' WHEN {$platform_alias}.id IS NOT NULL THEN 'platform' ELSE '' END", 'type');
+
+  if ($related_type === 'platform') {
+    $query->condition($platform_alias . '.id', NULL, 'IS NOT NULL');
+  }
+  elseif ($related_type === 'site') {
+    $query->condition($site_alias . '.id', NULL, 'IS NOT NULL');
+  }
+
+  if (isset($related_status)) {
+    if ($related_type === 'platform') {
+      $query->condition($platform_alias . '.status', $related_status);
+    }
+    elseif ($related_type === 'site') {
+      $query->condition($site_alias . '.status', $related_status);
+    }
+    else {
+      $status_group = $query->orConditionGroup()
+        ->condition($site_alias . '.status', $related_status)
+        ->condition($platform_alias . '.status', $related_status);
+      $query->condition($status_group);
+    }
+  }
 
   if (is_numeric($param)) {
     $query->condition('i.iid', $param);

@@ -14,7 +14,7 @@ final class HostingAliasCommands extends DrushCommands {
       return;
     }
 
-    $task = &drush_get_context('HOSTING_TASK');
+    $task = hosting_task_get_current();
     if (!$task) {
       return;
     }

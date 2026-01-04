@@ -439,20 +439,6 @@ function hosting_alias_hosting_site_view(array &$build, \Drupal\Core\Entity\Enti
 }
 
 /**
- * Implements hook_permission().
- */
-function hosting_alias_permission() {
-  return array(
-    'create site aliases' => array(
-      'title' => t('create site aliases'),
-    ),
-    'administer hosting aliases' => array(
-      'title' => t('administer hosting aliases'),
-    ),
-  );
-}
-
-/**
  * Configuration form for site aliases.
  *
  * @see hosting_alias_menu()
@@ -478,7 +464,7 @@ function hosting_alias_settings_validate($form, \Drupal\Core\Form\FormStateInter
  * Generate a default set of aliases for the site based on the global options.
  */
 function hosting_alias_automatic_aliases($url) {
-  $aliases = module_invoke_all('hosting_automatic_aliases', $url);
+  $aliases = \Drupal::moduleHandler()->invokeAll('hosting_automatic_aliases', [$url]);
   $context = ['url' => $url];
   \Drupal::moduleHandler()->alter('hosting_automatic_aliases', $aliases, $context);
   return $aliases;
@@ -570,9 +556,16 @@ function hosting_alias_allow_domain($url, $params = array()) {
  * Implements hook_views_data().
  */
 function hosting_alias_views_data() {
+  $data = [];
+
   $data['hosting_site_alias']['table'] = [
     'group' => t('Hosting Site Aliases'),
     'title' => t('Site Aliases'),
+    'base' => [
+      'field' => 'site_id',
+      'title' => t('Site aliases'),
+      'help' => t('Aliases assigned to hosting sites.'),
+    ],
     'join' => [
       'hosting_site' => [
         'left_field' => 'id',
@@ -580,12 +573,68 @@ function hosting_alias_views_data() {
       ],
     ],
   ];
+
+  $data['hosting_site_alias']['site_id'] = [
+    'title' => t('Site ID'),
+    'help' => t('The hosting site ID.'),
+    'field' => [
+      'id' => 'numeric',
+    ],
+    'filter' => [
+      'id' => 'numeric',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+    'argument' => [
+      'id' => 'numeric',
+    ],
+  ];
+
+  $data['hosting_site_alias']['alias'] = [
+    'title' => t('Alias'),
+    'help' => t('The hostname alias.'),
+    'field' => [
+      'id' => 'standard',
+    ],
+    'filter' => [
+      'id' => 'string',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+    'argument' => [
+      'id' => 'string',
+    ],
+  ];
+
   $data['hosting_site_alias']['redirection'] = [
     'title' => t('Redirection Target'),
     'help' => t('The alias redirection target for this site.'),
     'field' => [
       'id' => 'standard',
       'click sortable' => TRUE,
+    ],
+    'filter' => [
+      'id' => 'string',
+    ],
+    'sort' => [
+      'id' => 'standard',
+    ],
+    'argument' => [
+      'id' => 'string',
+    ],
+  ];
+
+  $data['hosting_site_alias']['hosting_site'] = [
+    'title' => t('Hosting site'),
+    'help' => t('The site for this alias.'),
+    'relationship' => [
+      'id' => 'standard',
+      'base' => 'hosting_site',
+      'base field' => 'id',
+      'field' => 'site_id',
+      'label' => t('Site'),
     ],
   ];
 

@@ -51,4 +51,52 @@ function hosting_site_schema() {
   return $schema;
 }
 
+/**
+ * Implements hook_install().
+ */
+function hosting_site_install() {
+  hosting_install_view_configs('hosting_site');
+  hosting_install_form_display_configs('hosting_site');
+  hosting_install_action_configs('hosting_site');
+}
 
+/**
+ * Implements hook_uninstall().
+ */
+function hosting_site_uninstall() {
+  \Drupal::configFactory()->getEditable('hosting_site.settings')->delete();
+
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if ($entity_type_manager->hasDefinition('action')) {
+    $storage = $entity_type_manager->getStorage('action');
+    foreach ([
+      'hosting_site_backup_action',
+      'hosting_site_verify_action',
+      'hosting_site_disable_action',
+      'hosting_site_enable_action',
+      'hosting_site_delete_action',
+    ] as $action_id) {
+      if ($action = $storage->load($action_id)) {
+        $action->delete();
+      }
+    }
+  }
+  if ($entity_type_manager->hasDefinition('node_type')) {
+    $storage = $entity_type_manager->getStorage('node_type');
+    if ($type = $storage->load('site')) {
+      $type->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('view')) {
+    $storage = $entity_type_manager->getStorage('view');
+    if ($view = $storage->load('hosting_site_list')) {
+      $view->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('entity_form_display')) {
+    $storage = $entity_type_manager->getStorage('entity_form_display');
+    if ($display = $storage->load('hosting_site.hosting_site.default')) {
+      $display->delete();
+    }
+  }
+}

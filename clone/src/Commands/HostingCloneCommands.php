@@ -5,12 +5,13 @@ namespace Drupal\hosting_clone\Commands;
 use Consolidation\AnnotatedCommand\CommandData;
 use Drush\Attributes as Drush;
 use Drush\Commands\DrushCommands;
+use Drush\Exceptions\UserAbortException;
 use Consolidation\AnnotatedCommand\Hooks\HookManager;
 
 final class HostingCloneCommands extends DrushCommands {
   #[Drush\Hook(type: HookManager::PRE_COMMAND_HOOK, target: 'hosting:task')]
   public function preHostingTask(CommandData $commandData): void {
-    $task = &drush_get_context('HOSTING_TASK');
+    $task = hosting_task_get_current();
     if (!$task) {
       return;
     }
@@ -25,7 +26,7 @@ final class HostingCloneCommands extends DrushCommands {
         $task->options['profile'] = $profile_instance->short_name;
       }
       else {
-        drush_set_error("HOSTING_NO_VALID_PROFILE", dt("There are no valid install profiles on the target platform to migrate to"));
+        throw new UserAbortException((string) t('There are no valid install profiles on the target platform to migrate to.'));
       }
 
       $db_server_id = $task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface && $task->ref->hasField('db_server') ? $task->ref->get('db_server')->target_id : NULL;

@@ -8,7 +8,7 @@ namespace Drupal\hosting_platform\Plugin\Action;
  * @Action(
  *   id = "hosting_platform_verify_action",
  *   label = @Translation("Verify platform"),
- *   type = "node"
+ *   type = "hosting_platform"
  * )
  */
 class HostingPlatformVerifyAction extends HostingPlatformActionBase {

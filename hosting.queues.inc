@@ -33,7 +33,7 @@
  *
  * When tasks are ran, a provision command is called with the same
  * name of the task type defined in the frontend (see
- * drush_hosting_task()). If we are running a special task like
+ * hosting_task_execute_current()). If we are running a special task like
  * install, verify or import, data from the task is actually saved in
  * the backend, through the backend provision-save command. The data
  * saved is from the associative array "context_options", defined from
@@ -70,7 +70,7 @@ function hosting_get_queues($refresh = FALSE) {
       'singular' => t('item'),
       'plural' => t('items'),
     );
-    $queues = module_invoke_all('hosting_queues');
+    $queues = \Drupal::moduleHandler()->invokeAll('hosting_queues');
     if (!is_array($queues)) {
       $queues = array();
     }
@@ -144,25 +144,32 @@ function hosting_get_queues($refresh = FALSE) {
  * functionality needed to ensure that the queues are running as scheduled.
  */
 function hosting_run_queue() {
-  $cmd = drush_get_command();
-  $queue = $cmd['queue'];
-  $count = drush_get_option(array('i', 'items'), 5); // process a default of 5 items at a time.
+  if (!class_exists(\Drush\Drush::class) || !\Drush\Drush::hasContainer()) {
+    throw new \Drush\Exceptions\UserAbortException('hosting_run_queue requires Drush CLI context.');
+  }
+  $input = \Drush\Drush::input();
+  $queue = $input->hasArgument('queue') ? $input->getArgument('queue') : NULL;
+  $count = hosting_get_cli_option(array('i', 'items'), 5); // process a default of 5 items at a time.
+  if (!$queue) {
+    throw new \Drush\Exceptions\UserAbortException('Queue name is required.');
+  }
   $semaphore = "hosting_queue_{$queue}_running";
 
   \Drupal::state()->set('hosting_queue_' . $queue . '_last_run', $t = REQUEST_TIME);
 
-  drush_log(dt('Acquiring lock on @queue queue.', array('@queue' => $queue)));
-  $lock_wait = drush_get_option('lock-wait', HOSTING_QUEUE_DEFAULT_LOCK_WAIT);
-  if (!lock_wait($semaphore, $lock_wait) || drush_get_option('force', FALSE)) {
+  hosting_log(t('Acquiring lock on @queue queue.', ['@queue' => $queue]), 'notice');
+  $lock_wait = hosting_get_cli_option('lock-wait', HOSTING_QUEUE_DEFAULT_LOCK_WAIT);
+  $force = (bool) hosting_get_cli_option('force', FALSE);
+  if (!lock_wait($semaphore, $lock_wait) || $force) {
     if (lock_acquire($semaphore, HOSTING_QUEUE_LOCK_TIMEOUT)) {
-      drush_log(dt('Acquired lock on @queue queue.', array('@queue' => $queue)));
+      hosting_log(t('Acquired lock on @queue queue.', ['@queue' => $queue]), 'notice');
     }
   }
-  elseif (drush_get_option('force', FALSE)) {
-    drush_log(dt('Bypassing lock on @queue queue.', array('@queue' => $queue)), 'warning');
+  elseif ($force) {
+    hosting_log(t('Bypassing lock on @queue queue.', ['@queue' => $queue]), 'warning');
   }
   else {
-    drush_die(dt('Cannot acquire lock on @queue queue.', array('@queue' => $queue)));
+    throw new \Drush\Exceptions\UserAbortException((string) t('Cannot acquire lock on @queue queue.', ['@queue' => $queue]));
   }
 
   $func = "hosting_" . $queue . "_queue";
@@ -171,7 +178,7 @@ function hosting_run_queue() {
     $func($count);
   }
 
-  drush_log(dt('Releasing @queue lock.', array('@queue' => $queue)));
+  hosting_log(t('Releasing @queue lock.', ['@queue' => $queue]), 'notice');
   lock_release($semaphore);
 }
 
@@ -206,7 +213,7 @@ function _hosting_queue_next_run($queue) {
 }
 
 function _hosting_queues_clean_output($return) {
-  return filter_xss($return, array());
+  return \Drupal\Component\Utility\Xss::filter($return, []);
 }
 
 

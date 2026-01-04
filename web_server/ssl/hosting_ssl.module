@@ -31,17 +31,6 @@ function hosting_ssl_hosting_service() {
 }
 
 /**
- * Implements hook_permission().
- */
-function hosting_ssl_permission() {
-  return array(
-    'create ssl certificate' => array(
-      'title' => t('create ssl certificate'),
-    ),
-  );
-}
-
-/**
  * Return a list of servers which have SSL enabled web services.
  */
 function hosting_ssl_get_servers() {
@@ -188,7 +177,7 @@ function hosting_ssl_server_cert_list($node) {
     $row = array();
     $row[] = $cert->domain;
     $row[] = $cert->ip_address;
-    $row[] = filter_xss($cert->client);
+    $row[] = \Drupal\Component\Utility\Xss::filter($cert->client);
     $rows[] = $row;
   }
   $build['table'] = array(

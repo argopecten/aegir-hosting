@@ -10,7 +10,7 @@ use Consolidation\AnnotatedCommand\Hooks\HookManager;
 final class HostingPackageCommands extends DrushCommands {
   #[Drush\Hook(type: HookManager::PRE_COMMAND_HOOK, target: 'hosting:task')]
   public function preHostingTask(CommandData $commandData): void {
-    $task = &drush_get_context('HOSTING_TASK');
+    $task = hosting_task_get_current();
     if (!$task) {
       return;
     }
@@ -40,18 +40,18 @@ final class HostingPackageCommands extends DrushCommands {
             $task->ref->set('profile', $instance->short_name);
             $profile_name = $instance->short_name;
 
-            $this->logger()->success(dt('Updated site !id with install profile "!profile" with package ID !package_id.', array(
-              '!id' => $task->ref->id(),
-              '!profile' => $task->ref->profile_name,
-              '!package_id' => $profile_name,
-            )));
+            $this->logger()->success((string) t('Updated site @id with install profile "@profile" with package ID @package_id.', [
+              '@id' => $task->ref->id(),
+              '@profile' => $task->ref->profile_name,
+              '@package_id' => $profile_name,
+            ]));
           }
           else {
-            $this->logger()->warning(dt('Package for install profile "!profile" not found in platform !platform. Unable to update site profile field for site !site', array(
-              '!platform' => $task->ref->get('platform')->target_id,
-              '!site' => $task->ref->id(),
-              '!profile' => $task->ref->profile_name,
-            )));
+            $this->logger()->warning((string) t('Package for install profile "@profile" not found in platform @platform. Unable to update site profile field for site @site', [
+              '@platform' => $task->ref->get('platform')->target_id,
+              '@site' => $task->ref->id(),
+              '@profile' => $task->ref->profile_name,
+            ]));
           }
         }
 

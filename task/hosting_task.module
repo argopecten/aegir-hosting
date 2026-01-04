@@ -174,7 +174,11 @@ function hosting_task_ajax_list($entity) {
  * AJAX callback for refreshing task list.
  */
 function hosting_task_ajax_queue() {
-  $view = views_get_view('hosting_task_list');
+  $view = \Drupal\views\Views::getView('hosting_task_list');
+  if (!$view) {
+    $return['markup'] = '';
+    return $return;
+  }
   $view->set_display('block');
   $view->pre_execute();
   $return['markup'] = $view->render('block');
@@ -212,8 +216,8 @@ function hosting_task_cancel($task) {
  *   the node object we're trying to access
  */
 function hosting_task_cancel_access($task) {
-  // Bring $user into scope, so we can test task ownership.
-  global $user;
+  $account = \Drupal::currentUser();
+  $account_id = $account->id();
   if (!$task instanceof \Drupal\Core\Entity\EntityInterface || $task->getEntityTypeId() !== 'hosting_task') {
     return FALSE;
   }
@@ -221,7 +225,7 @@ function hosting_task_cancel_access($task) {
   // To prevent CSRF attacks, a unique token based upon user is used. Deny
   // access if the token is missing or invalid.
   $token_service = \Drupal::service('csrf_token');
-  if (!isset($_GET['token']) || !$token_service->validate((string) $_GET['token'], (string) $user->uid)) {
+  if (!isset($_GET['token']) || !$token_service->validate((string) $_GET['token'], (string) $account_id)) {
     return FALSE;
   }
 
@@ -252,7 +256,13 @@ function hosting_task_cancel_access($task) {
  *
  * @see hosting_task_menu()
  */
-function hosting_task_menu_access($node, $task) {
+function hosting_task_menu_access($node, $task, \Drupal\Core\Session\AccountInterface $account = NULL) {
+  if ($node instanceof \Drupal\Core\Entity\EntityInterface
+    && $node->getEntityTypeId() === 'menu'
+    && $account instanceof \Drupal\Core\Session\AccountInterface) {
+    return \Drupal\Core\Access\AccessResult::neutral();
+  }
+
   if (\Drupal::currentUser()->hasPermission("create " . $task . " task")) {
     $task_scope = hosting_entity_task_scope($node);
     $entity_id = hosting_entity_id($node);
@@ -342,7 +352,7 @@ function hosting_task_menu_access($node, $task) {
  * @see hosting_task_menu_access()
  */
 function hosting_task_menu_access_csrf($node, $task) {
-  global $user;
+  $account_id = \Drupal::currentUser()->id();
 
   $interactive_tasks = array('migrate', 'clone');
 
@@ -350,70 +360,11 @@ function hosting_task_menu_access_csrf($node, $task) {
   // access if the token is missing or invalid. We only do this on
   // non-interactive tasks.
   $token_service = \Drupal::service('csrf_token');
-  if (!in_array($task, $interactive_tasks) && (!isset($_GET['token']) || !$token_service->validate((string) $_GET['token'], (string) $user->uid))) {
+  if (!in_array($task, $interactive_tasks) && (!isset($_GET['token']) || !$token_service->validate((string) $_GET['token'], (string) $account_id))) {
     return FALSE;
   }
   // Call the main menu access handler.
   return hosting_task_menu_access($node, $task);
-}
-
-/**
- * Implements hook_permission().
- */
-function hosting_task_permission() {
-  return array(
-    'administer tasks' => array(
-      'title' => t('administer tasks'),
-    ),
-    'create backup task' => array(
-      'title' => t('create backup task'),
-    ),
-    'create restore task' => array(
-      'title' => t('create restore task'),
-    ),
-    'create disable task' => array(
-      'title' => t('create disable task'),
-    ),
-    'create enable task' => array(
-      'title' => t('create enable task'),
-    ),
-    'create delete task' => array(
-      'title' => t('create delete task'),
-    ),
-    'create verify task' => array(
-      'title' => t('create verify task'),
-    ),
-    'create lock task' => array(
-      'title' => t('create lock task'),
-    ),
-    'create unlock task' => array(
-      'title' => t('create unlock task'),
-    ),
-    'create login-reset task' => array(
-      'title' => t('create login-reset task'),
-    ),
-    'create backup-delete task' => array(
-      'title' => t('create backup-delete task'),
-    ),
-    'view own tasks' => array(
-      'title' => t('view own tasks'),
-    ),
-    'view task' => array(
-      'title' => t('view task'),
-    ),
-    'access task logs' => array(
-      'title' => t('access task logs'),
-    ),
-    'retry failed tasks' => array(
-      'title' => t('retry failed tasks'),
-    ),
-    'cancel own tasks' => array(
-      'title' => t('cancel own tasks'),
-    ),
-    'update status of tasks' => array(
-      'title' => t('update status of tasks'),
-    ),
-  );
 }
 
 /**
@@ -539,7 +490,7 @@ function hosting_task_retry($task_id) {
  * Helper function to generate new task node
  */
 function hosting_add_task($target, $type, $args = NULL, $status = HOSTING_TASK_QUEUED, $entity_type_id = NULL) {
-  global $user;
+  $account_id = \Drupal::currentUser()->id();
 
   $entity = NULL;
   if ($target instanceof \Drupal\Core\Entity\EntityInterface) {
@@ -576,7 +527,7 @@ function hosting_add_task($target, $type, $args = NULL, $status = HOSTING_TASK_Q
     'rid' => $target_id,
     'task_status' => $status,
     'status' => 1,
-    'uid' => $user->uid ? $user->uid : (int) $owner_id,
+    'uid' => $account_id ?: (int) $owner_id,
   ));
   /*
    * fallback the owner of the task to the owner of the node we operate
@@ -767,60 +718,61 @@ function hosting_tasks_queue($count = 20) {
   $tasks = hosting_get_new_tasks($count);
 
   if (count($tasks)) {
-    drush_log(dt("Found @count tasks (max @max) in queue. Running...", array(
+    hosting_log(t('Found @count tasks (max @max) in queue. Running...', [
       '@count' => count($tasks),
       '@max' => $count,
-    )), "notice");
+    ]), 'notice');
   }
   else {
-    drush_log(dt("Found no tasks in queue. Not running."), "notice");
+    hosting_log(t('Found no tasks in queue. Not running.'), 'notice');
   }
 
   foreach ($tasks as $task) {
-    hosting_task_execute($task, array('fork' => drush_get_option('fork', TRUE)));
+    hosting_task_execute($task, array('fork' => hosting_get_cli_option('fork', TRUE)));
   }
 }
 
 /**
- * Executes a task while logging to watchdog and drush.
- * Implemented by drush hosting-tasks and hosting-queued commands.
+ * Executes a task while logging to watchdog and CLI.
+ * Implemented by hosting-tasks and hosting-queued commands.
  *
  * @param $task
  *   A fully loaded task node.
  *
  * @param $backend_options
- *   @see drush_invoke_process().
+ *   @see hosting_run_drush_command().
  */
 function hosting_task_execute($task, $backend_options = array()) {
   $task_id = hosting_task_entity_id($task);
   $task_label = $task instanceof \Drupal\Core\Entity\EntityInterface ? $task->label() : (hosting_entity_label($task) ?? '');
+  $date_formatter = \Drupal::service('date.formatter');
   // Log in watchdog and drush.
   \Drupal::logger('hosting_task')->notice('Starting task "@title" [task/@id].', ['@title' => $task_label, '@id' => $task_id]);
-  drush_log(dt('Starting task "@title" [task/@id].', array(
+  hosting_log(t('Starting task "@title" [task/@id].', [
     '@title' => $task_label,
     '@id' => $task_id,
-  )), 'ok');
+  ]), 'ok', [], 'hosting_task');
 
   // Execute in it's own process.
-  drush_invoke_process('@self', "hosting-task", array($task_id), array('strict' => FALSE), $backend_options);
+  hosting_run_drush_command('@self', 'hosting-task', array($task_id), array('strict' => FALSE), $backend_options);
 
   // Log a message, depending on forked process or not.
   // If forked, the process may not have completed yet, so we should change the message.
   if (isset($backend_options['fork']) && $backend_options['fork']) {
-    drush_log(dt('Launched task "@title" in a forked process. [task/@id]', array(
+    hosting_log(t('Launched task "@title" in a forked process. [task/@id]', [
       '@title' => $task_label,
       '@id' => $task_id,
-    )), 'ok');
+    ]), 'ok', [], 'hosting_task');
   }
   // If not forked, load and display the task status.
   else {
     $task = hosting_task_load_entity($task_id);
-    drush_log(dt('Finished task "@title" with status "@status" in @duration [task/@id].', array(
+    hosting_log(t('Finished task "@title" with status "@status" in @duration [task/@id].', [
       '@title' => $task ? $task->label() : $task_label,
       '@id' => $task_id,
       '@status' => $task ? _hosting_parse_error_code($task->get('task_status')->value) : '',
-      '@duration' => $task ? format_interval($task->get('delta')->value, 1) : '',
-    )), 'ok');
+      '@duration' => $task ? $date_formatter->formatInterval($task->get('delta')->value, 1) : '',
+    ]), 'ok', [], 'hosting_task');
   }
 }
 
@@ -898,7 +850,7 @@ function hosting_available_tasks($type = NULL, $reset = FALSE) {
 
   if (!count($cache) || $reset) {
     // Invoke hook_hosting_tasks().
-    $cache = module_invoke_all('hosting_tasks');
+    $cache = \Drupal::moduleHandler()->invokeAll('hosting_tasks');
 
     // Invoke hook_hosting_tasks_alter().
     \Drupal::moduleHandler()->alter('hosting_tasks', $cache);
@@ -963,7 +915,7 @@ function hosting_task_insert($task) {
   if (isset($task->task_args) && is_array($task->task_args)) {
     hosting_task_save_arguments($task->id(), $task->task_args);
   }
-  module_invoke_all('hosting_task_update_status', $task, (int) $task->get('task_status')->value);
+  \Drupal::moduleHandler()->invokeAll('hosting_task_update_status', [$task, (int) $task->get('task_status')->value]);
 }
 
 /**
@@ -979,7 +931,7 @@ function hosting_task_update($task) {
   if (isset($task->task_args) && is_array($task->task_args)) {
     hosting_task_save_arguments($task->id(), $task->task_args);
   }
-  module_invoke_all('hosting_task_update_status', $task, (int) $task->get('task_status')->value);
+  \Drupal::moduleHandler()->invokeAll('hosting_task_update_status', [$task, (int) $task->get('task_status')->value]);
 }
 
 /**
@@ -1023,7 +975,7 @@ function hosting_task_delete_related_tasks($entity_id) {
  * Implements hook_load().
  */
 function hosting_task_load($nodes) {
-  $types = module_invoke_all('hosting_tasks');
+  $types = \Drupal::moduleHandler()->invokeAll('hosting_tasks');
   \Drupal::moduleHandler()->alter('hosting_tasks', $types);
 
   foreach ($nodes as $id => &$task) {
@@ -1120,6 +1072,7 @@ function hosting_task_build_view($task) {
     return array();
   }
 
+  $date_formatter = \Drupal::service('date.formatter');
   $task = hosting_task_load_arguments($task);
   $task_status = (int) $task->get('task_status')->value;
   $build = array(
@@ -1153,13 +1106,13 @@ function hosting_task_build_view($task) {
       $build['info']['started'] = array(
         '#type' => 'item',
         '#title' => t('Started'),
-        '#markup' => format_date($task->get('executed')->value),
+        '#markup' => $date_formatter->format($task->get('executed')->value, 'medium'),
         '#weight' => 1,
       );
       $build['info']['delta'] = array(
         '#type' => 'item',
         '#title' => t('Processing time'),
-        '#markup' => format_interval(REQUEST_TIME - $task->get('executed')->value),
+        '#markup' => $date_formatter->formatInterval(REQUEST_TIME - $task->get('executed')->value),
         '#weight' => 2,
       );
     }
@@ -1167,13 +1120,13 @@ function hosting_task_build_view($task) {
       $build['info']['executed'] = array(
         '#type' => 'item',
         '#title' => t('Executed'),
-        '#markup' => format_date($task->get('executed')->value),
+        '#markup' => $date_formatter->format($task->get('executed')->value, 'medium'),
         '#weight' => 1,
       );
       $build['info']['delta'] = array(
         '#type' => 'item',
         '#title' => t('Execution time'),
-        '#markup' => format_interval($task->get('delta')->value),
+        '#markup' => $date_formatter->formatInterval($task->get('delta')->value),
         '#weight' => 2,
       );
     }
@@ -1185,7 +1138,7 @@ function hosting_task_build_view($task) {
     $build['info']['notexecuted'] = array(
       '#type' => 'item',
       '#title' => t('This task has not been processed yet'),
-      '#markup' => t('It will be processed around %date, if the queue is not too crowded. The queue is currently run every %freq, was last run %last and processes %items items at a time. Server time is %time.', array('%freq' => format_interval($queue['frequency']), '%date' => format_date($next, 'custom', 'H:i:sO'), '%last' => hosting_format_interval($queue['last_run']), '%items' => $queue['items'], '%time' => format_date(REQUEST_TIME, 'custom', 'H:i:sO'))),
+      '#markup' => t('It will be processed around %date, if the queue is not too crowded. The queue is currently run every %freq, was last run %last and processes %items items at a time. Server time is %time.', array('%freq' => $date_formatter->formatInterval($queue['frequency']), '%date' => $date_formatter->format($next, 'custom', 'H:i:sO'), '%last' => hosting_format_interval($queue['last_run']), '%items' => $queue['items'], '%time' => $date_formatter->format(REQUEST_TIME, 'custom', 'H:i:sO'))),
     );
   }
 
@@ -1275,11 +1228,11 @@ function _hosting_task_log_table($task, $last_position = 0) {
     $row_count = -1;
     foreach ($result as $entry) {
       if (strlen($entry->message) > 300) {
-        $summary = "<span class='hosting-task-summary'>" . filter_xss(substr($entry->message, 0, 75), array()) . "... <a href='javascript:void(0)' class='hosting-summary-expand modalframe-exclude'>(" . t('Expand') . ')</a></span>';
-        $message = $summary . "<span class='hosting-task-full'>" . filter_xss($entry->message) . '</span>';
+        $summary = "<span class='hosting-task-summary'>" . \Drupal\Component\Utility\Xss::filter(substr($entry->message, 0, 75), []) . "... <a href='javascript:void(0)' class='hosting-summary-expand modalframe-exclude'>(" . t('Expand') . ')</a></span>';
+        $message = $summary . "<span class='hosting-task-full'>" . \Drupal\Component\Utility\Xss::filter($entry->message) . '</span>';
       }
       else {
-        $message = filter_xss($entry->message);
+        $message = \Drupal\Component\Utility\Xss::filter($entry->message);
       }
 
       // Add error and warning anchors, so we can provide a quick link to them.
@@ -1492,7 +1445,7 @@ function _hosting_get_new_tasks($limit = 20) {
  * @name Error status definitions
  * @{
  * Bitmask values used to generate the error code to return.
- * @see drush_set_error(), drush_get_error(), drush_cmp_error()
+ * @see hosting_task_set_error(), hosting_task_get_last_error(), hosting_task_has_error()
  */
 
 /**
@@ -1663,7 +1616,7 @@ function hosting_task_table($node) {
  * Utility function to create HTML for a task button.
  */
 function _hosting_task_button($title, $link, $description, $class = '', $status = TRUE, $dialog = FALSE, $add_token = TRUE) {
-  global $user;
+  $account_id = \Drupal::currentUser()->id();
 
   if ($status) {
     $classes[] = 'hosting-button-enabled';
@@ -1680,7 +1633,7 @@ function _hosting_task_button($title, $link, $description, $class = '', $status 
     );
     if ($add_token) {
       $options['query'] = array(
-        'token' => \Drupal::service('csrf_token')->get((string) $user->uid),
+        'token' => \Drupal::service('csrf_token')->get((string) $account_id),
       );
     }
     if ($link === '<front>' || $link === '') {
@@ -1704,6 +1657,7 @@ function _hosting_task_button($title, $link, $description, $class = '', $status 
  */
 function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0, $field = 'title', $skip = array(), $pager = TRUE) {
   $nodes = hosting_get_tasks($filter_by, $filter_value, $count, $element);
+  $date_formatter = \Drupal::service('date.formatter');
 
   if (!$nodes) {
     return t('No tasks available');
@@ -1726,7 +1680,7 @@ function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0,
       );
 
       if (!in_array('created', $skip)) {
-        $row['created'] = t("@interval ago", array('@interval' => format_interval(REQUEST_TIME - $node->get('created')->value, 1)));
+        $row['created'] = t("@interval ago", array('@interval' => $date_formatter->formatInterval(REQUEST_TIME - $node->get('created')->value, 1)));
         $headers[t('Created')] = '';
       }
 
@@ -1734,7 +1688,7 @@ function _hosting_task_list($filter_by, $filter_value, $count = 5, $element = 0,
         $row['executed'] = '';
       }
       else {
-        $row['executed'] = t("@interval ago", array('@interval' => format_interval(REQUEST_TIME - $node->get('changed')->value, 1)));
+        $row['executed'] = t("@interval ago", array('@interval' => $date_formatter->formatInterval(REQUEST_TIME - $node->get('changed')->value, 1)));
       }
       $headers[t('Executed')] = '';
 
@@ -2000,7 +1954,7 @@ function hosting_task_update_status($task) {
   $task->save();
 
   // Invoke hook_hosting_task_update_status().
-  module_invoke_all('hosting_task_update_status', $task, $status);
+  \Drupal::moduleHandler()->invokeAll('hosting_task_update_status', [$task, $status]);
   return $status;
 }
 
@@ -2036,7 +1990,7 @@ function hosting_task_get_guarded_nodes() {
   static $guarded_nids;
   if (!isset($guarded_nids)) {
     // Invoke hook_hosting_task_guarded_nodes().
-    $guarded_nids = module_invoke_all('hosting_task_guarded_nodes');
+    $guarded_nids = \Drupal::moduleHandler()->invokeAll('hosting_task_guarded_nodes');
     \Drupal::moduleHandler()->alter('hosting_task_guarded_nodes', $guarded_nids);
   }
   return $guarded_nids;
@@ -2049,7 +2003,7 @@ function hosting_task_get_dangerous_tasks() {
   static $dangerous_tasks;
   if (!isset($dangerous_tasks)) {
     // Invoke hook_hosting_task_dangerous_tasks().
-    $dangerous_tasks = module_invoke_all('hosting_task_dangerous_tasks');
+    $dangerous_tasks = \Drupal::moduleHandler()->invokeAll('hosting_task_dangerous_tasks');
     \Drupal::moduleHandler()->alter('hosting_task_dangerous_tasks', $dangerous_tasks);
   }
   return $dangerous_tasks;

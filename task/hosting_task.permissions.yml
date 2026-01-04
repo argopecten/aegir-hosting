@@ -1,0 +1,34 @@
+administer tasks:
+  title: 'administer tasks'
+create backup task:
+  title: 'create backup task'
+create restore task:
+  title: 'create restore task'
+create disable task:
+  title: 'create disable task'
+create enable task:
+  title: 'create enable task'
+create delete task:
+  title: 'create delete task'
+create verify task:
+  title: 'create verify task'
+create lock task:
+  title: 'create lock task'
+create unlock task:
+  title: 'create unlock task'
+create login-reset task:
+  title: 'create login-reset task'
+create backup-delete task:
+  title: 'create backup-delete task'
+view own tasks:
+  title: 'view own tasks'
+view task:
+  title: 'view task'
+access task logs:
+  title: 'access task logs'
+retry failed tasks:
+  title: 'retry failed tasks'
+cancel own tasks:
+  title: 'cancel own tasks'
+update status of tasks:
+  title: 'update status of tasks'

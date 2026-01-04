@@ -11,7 +11,7 @@ use Drupal\Core\Session\AccountInterface;
  * @Action(
  *   id = "hosting_site_delete_action",
  *   label = @Translation("Delete site"),
- *   type = "node"
+ *   type = "hosting_site"
  * )
  */
 class HostingSiteDeleteAction extends HostingSiteActionBase {

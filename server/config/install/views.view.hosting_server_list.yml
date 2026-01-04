@@ -38,6 +38,7 @@ display:
         type: table
         options:
           row_class: '[status]'
+          empty_table: true
           columns:
             status: status
             human_name: human_name
@@ -67,7 +68,7 @@ display:
           id: services
           table: hosting_server
           field: services
-          label: ''
+          label: 'Certificate, Database, Remote Import, Web'
           plugin_id: hosting_server_services
           element_label_colon: false
         id:
@@ -104,6 +105,14 @@ display:
           field: label
           order: ASC
           plugin_id: standard
+      empty:
+        area_text_custom:
+          id: area_text_custom
+          table: views
+          field: area_text_custom
+          plugin_id: text_custom
+          empty: true
+          content: 'There are no hosting server entities yet.'
   page:
     display_plugin: page
     id: page

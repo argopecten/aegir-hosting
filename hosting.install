@@ -25,6 +25,11 @@ function hosting_uninstall() {
   $state->delete('hosting_queue_tasks_items');
   $state->delete('aegir_hostmaster_site_id');
   $state->delete('user_admin_role');
+
+  $config_factory = \Drupal::configFactory();
+  $config_factory->getEditable('hosting.settings')->delete();
+  $config_factory->getEditable('hosting.features')->delete();
+  $config_factory->getEditable('hosting.queues')->delete();
 }
 
 /**

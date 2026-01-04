@@ -15,6 +15,7 @@ use Drupal\hosting\Entity\HostingEntityBase;
  *   handlers = {
  *     "list_builder" = "Drupal\hosting_site\HostingSiteListBuilder",
  *     "access" = "Drupal\hosting_site\HostingSiteAccessControlHandler",
+ *     "views_data" = "Drupal\views\EntityViewsData",
  *     "form" = {
  *       "add" = "Drupal\hosting_site\Form\HostingSiteForm",
  *       "edit" = "Drupal\hosting_site\Form\HostingSiteForm",
@@ -64,7 +65,7 @@ class HostingSite extends HostingEntityBase {
 
     $fields['platform'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Platform'))
-      ->setDescription(t('The platform you want the site to be hosted on.'))
+      ->setDescription(t('The Drupal platform you want the site to be hosted on.'))
       ->setSetting('target_type', 'hosting_platform')
       ->setRequired(TRUE)
       ->setDisplayConfigurable('form', TRUE)
@@ -86,7 +87,7 @@ class HostingSite extends HostingEntityBase {
 
     $fields['profile'] = BaseFieldDefinition::create('list_string')
       ->setLabel(t('Install profile'))
-      ->setDescription(t('The type of site to install. The profile determines the supported platforms.'))
+      ->setDescription(t('The site profile to install. The platform determines the supported profiles.'))
       ->setSetting('allowed_values_function', 'hosting_site_profile_allowed_values')
       ->setRequired(TRUE)
       ->setDisplayConfigurable('form', TRUE)

@@ -268,38 +268,6 @@ function hosting_site_maintenance() {
 
 
 /**
- * Implements hook_permission().
- */
-function hosting_permission() {
-  return array(
-    'access hosting wizard' => array(
-      'title' => t('access hosting wizard'),
-      'description' => t("TODO Remove 'access hosting wizard', as it is not checked anywhere."),
-    ),
-    'administer hosting queues' => array(
-      'title' => t('administer hosting queues'),
-      'description' => t('Configure the frequency that cron, backup and task events are process.'),
-    ),
-    'administer hosting features' => array(
-      'title' => t('administer hosting features'),
-      'description' => t('Configure the exposed functionality of the hosting system.'),
-    ),
-    'administer hosting' => array(
-      'title' => t('administer hosting'),
-      'description' => t('Configure and manage the hosting system.'),
-    ),
-    'access disabled sites' => array(
-      'title' => t('access disabled sites'),
-      'description' => t('Access disabled sites.'),
-    ),
-    'administer hosting settings' => array(
-      'title' => t('administer hosting settings'),
-      'description' => t('Configure general hosting settings.'),
-    ),
-  );
-}
-
-/**
  * Implements hook_init().
  */
 function hosting_init() {
@@ -386,7 +354,7 @@ function _hosting_node_link($entity_or_id, $title = NULL) {
       $title = $entity->get('human_name')->value;
     }
   }
-  $title = filter_xss($title ?? '');
+  $title = \Drupal\Component\Utility\Xss::filter($title ?? '');
   if ($entity instanceof \Drupal\Core\Entity\EntityInterface) {
     return $entity->access('view') ? \Drupal\Core\Link::fromTextAndUrl($title, $entity->toUrl('canonical'))->toString() : $title;
   }
@@ -466,6 +434,7 @@ function hosting_block_view($delta) {
 function hosting_queue_summary_block() {
   if (\Drupal::currentUser()->hasPermission('administer hosting queues')) {
     $queues = hosting_get_queues();
+    $date_formatter = \Drupal::service('date.formatter');
     $output = '';
     foreach ($queues as $queue => $info) {
       $disp = array();
@@ -486,7 +455,7 @@ function hosting_queue_summary_block() {
           $info[$key] = hosting_format_interval($info[$key]);
         }
         elseif ($key == 'frequency') {
-          $info[$key] = t('every @interval', array('@interval' => format_interval($info[$key])));
+          $info[$key] = t('every @interval', array('@interval' => $date_formatter->formatInterval($info[$key])));
         }
         $disp[] = $title . ": " . $info[$key];
       }
@@ -549,7 +518,7 @@ function hosting_supporting_aegir_block() {
  * @see hook_allow_domain()
  */
 function hosting_domain_allowed($url, $params = array()) {
-  $results = module_invoke_all('allow_domain', $url, $params);
+  $results = \Drupal::moduleHandler()->invokeAll('allow_domain', [$url, $params]);
   $return = !in_array(FALSE, $results);
   return $return;
 }
@@ -568,18 +537,18 @@ function _hosting_setup_cron($add = TRUE) {
   exec('crontab -l 2> /dev/null', $cron_lines);
   \Drupal::state()->set('hosting_cron_backup', $cron_lines);
   if (count($cron_lines)) {
-    drush_log(dt("Replacing existing crontab"), 'notice');
+    hosting_log(t('Replacing existing crontab'), 'notice');
     $cron_lines = hosting_queues_cron_removal($cron_lines);
     $cron = implode("\n", $cron_lines);
   }
   else {
-    drush_log(dt("No existing crontab was found"), 'message');
+    hosting_log(t('No existing crontab was found'), 'message');
   }
 
   if ($add) {
     // Append the fresh Aegir specific lines.
     $cron .= "\n" . hosting_queues_cron_cmd();
-    drush_log(dt("Adding hosting-dispatch cron entry to run every minute"), 'ok');
+    hosting_log(t('Adding hosting-dispatch cron entry to run every minute'), 'ok');
   }
 
   // Write a new crontab.
@@ -602,10 +571,10 @@ function _hosting_setup_cron($add = TRUE) {
   }
 
   if ($success) {
-    drush_log(dt("Installed a new crontab entry."), 'success');
+    hosting_log(t('Installed a new crontab entry.'), 'success');
   }
   else {
-    drush_set_error('PROVISION_CRON_FAILED', dt('Failed to install cron job'));
+    throw new \Drush\Exceptions\UserAbortException((string) t('Failed to install cron job.'));
   }
 }
 
@@ -981,7 +950,7 @@ function hosting_form_submit_messages($form, $form_state) {
   $queues = hosting_get_queues();
   if ($queues['tasks']['enabled']) {
     $until = _hosting_queue_next_run('tasks') - REQUEST_TIME;
-    \Drupal::messenger()->addMessage(t('Task is scheduled to start in approximately %until.', array('%until' => format_interval($until))));
+    \Drupal::messenger()->addMessage(t('Task is scheduled to start in approximately %until.', array('%until' => \Drupal::service('date.formatter')->formatInterval($until))));
   }
 }
 
@@ -1159,6 +1128,71 @@ function hosting_context_entity_id($alias) {
 }
 
 /**
+ * Import a backend context into the frontend.
+ *
+ * @param object|string $alias
+ *   The name of the provision context to import.
+ *
+ * @return int|null
+ *   The entity ID associated with the imported context, if successful.
+ */
+function hosting_drush_import($alias) {
+  $name = is_object($alias) ? $alias->name : $alias;
+  static $known_contexts = [];
+
+  if (isset($known_contexts[$name])) {
+    return $known_contexts[$name];
+  }
+
+  if (!function_exists('d')) {
+    hosting_log(t('Provision context loader is unavailable for @name.', ['@name' => $name]), 'error', [], 'hosting');
+    return NULL;
+  }
+
+  $context = d($name);
+  if (!$context || empty($context->type)) {
+    hosting_log(t('Unable to load context @name for import.', ['@name' => $name]), 'error', [], 'hosting');
+    return NULL;
+  }
+
+  $entity_type_id = hosting_entity_type_from_task_scope($context->type);
+  if (!$entity_type_id || !\Drupal::entityTypeManager()->hasDefinition($entity_type_id)) {
+    hosting_log(t('Unknown context type @type for @name.', ['@type' => $context->type, '@name' => $name]), 'error', [], 'hosting');
+    return NULL;
+  }
+
+  $node = hosting_context_load($name);
+  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+    if ($node->hasField('no_verify')) {
+      $node->set('no_verify', TRUE);
+    }
+    $known_contexts[$name] = $node->id();
+  }
+  else {
+    $node = \Drupal::entityTypeManager()->getStorage($entity_type_id)->create(['status' => 1]);
+    $hosting_name = trim($context->name, '@');
+    if ($node->hasField('hosting_name')) {
+      $node->set('hosting_name', $hosting_name);
+    }
+    else {
+      $node->hosting_name = $hosting_name;
+    }
+  }
+
+  \Drupal::moduleHandler()->invokeAll('drush_context_import', [$context, $node]);
+
+  if ($node->hasField('label') && !$node->label()) {
+    $node->set('label', trim($context->name, '@'));
+  }
+
+  $node->save();
+  hosting_context_register($node->id(), $node->hasField('hosting_name') ? $node->get('hosting_name')->value : trim($context->name, '@'));
+  $known_contexts[$name] = $node->id();
+
+  return $node->id();
+}
+
+/**
  * Define the entity types that have associated provision contexts.
  *
  * @deprecated See issue #2763509. If you really need this, you can check
@@ -1309,46 +1343,75 @@ function hosting_settings_submit($form, &$form_state) {
  */
 function hosting_create_roles() {
   // Only allow access to our splash pages for anyone without a specific role.
-  user_role_grant_permissions(DRUPAL_ANONYMOUS_RID, array('access disabled sites'));
-  user_role_grant_permissions(DRUPAL_AUTHENTICATED_RID, array('access disabled sites'));
+  $access_roles = [
+    \Drupal\user\RoleInterface::ANONYMOUS_ID,
+    \Drupal\user\RoleInterface::AUTHENTICATED_ID,
+  ];
+  foreach ($access_roles as $role_id) {
+    $role = \Drupal\user\Entity\Role::load($role_id);
+    if ($role) {
+      $role->grantPermission('access disabled sites');
+      $role->save();
+    }
+  }
 
-  // Create a default role for Aegir clients.
-  $client_role = new stdClass();
-  $client_role->name = 'aegir client';
-  $client_role->weight = 4;
-  user_role_save($client_role);
-  // Create a default role for Aegir account managers.
-  $acct_mgr_role = new stdClass();
-  $acct_mgr_role->name = 'aegir account manager';
-  $acct_mgr_role->weight = 6;
-  user_role_save($acct_mgr_role);
-  // Create a default role for Aegir platform managers.
-  $plat_mgr_role = new stdClass();
-  $plat_mgr_role->name = 'aegir platform manager';
-  $plat_mgr_role->weight = 8;
-  user_role_save($plat_mgr_role);
+  $default_roles = [
+    'aegir_client' => [
+      'label' => 'aegir client',
+      'weight' => 4,
+    ],
+    'aegir_account_manager' => [
+      'label' => 'aegir account manager',
+      'weight' => 6,
+    ],
+    'aegir_platform_manager' => [
+      'label' => 'aegir platform manager',
+      'weight' => 8,
+    ],
+    'aegir_administrator' => [
+      'label' => 'aegir administrator',
+      'weight' => 10,
+    ],
+  ];
 
-  // Create a default role for Aegir administrators.
-  $aegir_admin_role = new stdClass();
-  $aegir_admin_role->name = 'aegir administrator';
-  $aegir_admin_role->weight = 10;
-  user_role_save($aegir_admin_role);
+  foreach ($default_roles as $role_id => $info) {
+    $role = \Drupal\user\Entity\Role::load($role_id);
+    if (!$role) {
+      $role = \Drupal\user\Entity\Role::create([
+        'id' => $role_id,
+        'label' => $info['label'],
+        'weight' => $info['weight'],
+      ]);
+    }
+    else {
+      $role->set('label', $info['label']);
+      $role->setWeight($info['weight']);
+    }
+    $role->save();
+  }
 
   // Create a default role for site administrators,
   // with all available permissions assigned.
-  $admin_role = new stdClass();
-  $admin_role->name = 'administrator';
-  $admin_role->weight = 20;
-  user_role_save($admin_role);
-  user_role_grant_permissions($admin_role->rid, array_keys(module_invoke_all('permission')));
+  $admin_role = \Drupal\user\Entity\Role::load('administrator');
+  if (!$admin_role) {
+    $admin_role = \Drupal\user\Entity\Role::create([
+      'id' => 'administrator',
+      'label' => 'administrator',
+      'weight' => 20,
+    ]);
+  }
+  $admin_role->set('permissions', array_keys(\Drupal::service('user.permissions')->getPermissions()));
+  $admin_role->save();
+
   // Set this as the administrator role.
-  \Drupal::state()->set('user_admin_role', $admin_role->rid);
+  \Drupal::state()->set('user_admin_role', $admin_role->id());
 
   // Assign user 1 the "administrator" role.
-  \Drupal::database()->insert('users_roles')
-    ->fields(array('uid' => 1, 'rid' => $admin_role->rid))
-    ->execute();
-
+  $user = \Drupal::entityTypeManager()->getStorage('user')->load(1);
+  if ($user) {
+    $user->addRole($admin_role->id());
+    $user->save();
+  }
 }
 
 /**
@@ -1367,6 +1430,27 @@ function hosting_modules_enabled($modules) {
   }
 
   hosting_features_enable($enable, TRUE, FALSE);
+
+  $refresh_admin = FALSE;
+  foreach ($modules as $module) {
+    if ($module === 'hosting' || str_starts_with($module, 'hosting_')) {
+      $refresh_admin = TRUE;
+      hosting_install_view_configs($module);
+      hosting_install_form_display_configs($module);
+      if ($module === 'hosting_site' || $module === 'hosting_platform') {
+        hosting_install_action_configs($module);
+      }
+    }
+  }
+
+  if ($refresh_admin) {
+    $admin_role_id = \Drupal::state()->get('user_admin_role') ?: 'administrator';
+    $admin_role = \Drupal\user\Entity\Role::load($admin_role_id);
+    if ($admin_role) {
+      $admin_role->set('permissions', array_keys(\Drupal::service('user.permissions')->getPermissions()));
+      $admin_role->save();
+    }
+  }
 }
 
 /**
@@ -1385,4 +1469,171 @@ function hosting_modules_disabled($modules) {
   }
 
   hosting_features_disable($disable, $rebuild = TRUE, $disable_module = FALSE);
+}
+
+/**
+ * Return a logger suitable for CLI or web requests.
+ */
+function hosting_logger($channel = 'hosting') {
+  if (class_exists(\Drush\Drush::class) && \Drush\Drush::hasContainer()) {
+    return \Drush\Drush::logger();
+  }
+  return \Drupal::logger($channel);
+}
+
+/**
+ * Log a message with a normalized severity level.
+ */
+function hosting_log($message, $severity = 'notice', array $context = [], $channel = 'hosting') {
+  $levels = [
+    'ok' => 'info',
+    'success' => 'info',
+    'queue' => 'info',
+    'message' => 'notice',
+  ];
+  $level = $levels[$severity] ?? $severity;
+  hosting_logger($channel)->log($level, (string) $message, $context);
+}
+
+/**
+ * Read a CLI option when running under Drush.
+ */
+function hosting_get_cli_option($keys, $default = NULL) {
+  if (!class_exists(\Drush\Drush::class) || !\Drush\Drush::hasContainer()) {
+    return $default;
+  }
+  $input = \Drush\Drush::input();
+  foreach ((array) $keys as $key) {
+    if ($input->hasOption($key)) {
+      $value = $input->getOption($key);
+      if ($value !== NULL) {
+        return $value;
+      }
+    }
+  }
+  return $default;
+}
+
+/**
+ * Execute a Drush command and return its output details.
+ */
+function hosting_run_drush_command($site_alias, $command, array $args = [], array $options = [], array $backend_options = []) {
+  if (!class_exists(\Drush\Drush::class) || !\Drush\Drush::hasContainer()) {
+    throw new \Drush\Exceptions\UserAbortException('Drush is not available for backend invocation.');
+  }
+
+  $alias = \Drush\Drush::aliasManager()->get($site_alias);
+  if (!$alias) {
+    throw new \Drush\Exceptions\UserAbortException("Alias {$site_alias} not found.");
+  }
+
+  $fork = !empty($backend_options['fork']);
+  $backend_cli_options = $backend_options;
+  unset($backend_cli_options['fork']);
+  $options = $backend_cli_options + $options;
+
+  $process = \Drush\Drush::drush($alias, $command, $args, $options);
+  if ($fork) {
+    $process->start();
+    return [
+      'error_status' => 0,
+      'output' => '',
+      'error' => '',
+    ];
+  }
+
+  $process->run();
+  return [
+    'error_status' => $process->getExitCode() ?? 1,
+    'output' => $process->getOutput(),
+    'error' => $process->getErrorOutput(),
+  ];
+}
+
+/**
+ * Store per-process task context for hosting:task execution.
+ */
+function &hosting_task_context_storage() {
+  static $store = [
+    'task' => NULL,
+    'output' => [],
+    'options' => [],
+    'errors' => [],
+    'last_error' => NULL,
+  ];
+  return $store;
+}
+
+function hosting_task_set_current($task) {
+  $store = &hosting_task_context_storage();
+  $store['task'] = $task;
+}
+
+function hosting_task_get_current() {
+  $store = &hosting_task_context_storage();
+  return $store['task'];
+}
+
+function hosting_task_set_output(array $output) {
+  $store = &hosting_task_context_storage();
+  $store['output'] = $output;
+}
+
+function hosting_task_get_output(): array {
+  $store = &hosting_task_context_storage();
+  return $store['output'];
+}
+
+function hosting_task_set_options(array $options) {
+  $store = &hosting_task_context_storage();
+  $store['options'] = $options;
+}
+
+function hosting_task_get_option($key, $default = NULL) {
+  $store = &hosting_task_context_storage();
+  return array_key_exists($key, $store['options']) ? $store['options'][$key] : $default;
+}
+
+function hosting_task_set_error($code, $message) {
+  $store = &hosting_task_context_storage();
+  $store['errors'][$code] = $message;
+  $store['last_error'] = $message;
+}
+
+function hosting_task_has_error($code): bool {
+  $store = &hosting_task_context_storage();
+  return array_key_exists($code, $store['errors']);
+}
+
+function hosting_task_get_last_error() {
+  $store = &hosting_task_context_storage();
+  return $store['last_error'];
+}
+
+function hosting_task_clear_errors(): void {
+  $store = &hosting_task_context_storage();
+  $store['errors'] = [];
+  $store['last_error'] = NULL;
+}
+
+/**
+ * Check backend output for a specific error code.
+ */
+function hosting_output_has_error_code(array $output, $code): bool {
+  if (empty($output['error_log']) || !is_array($output['error_log'])) {
+    return FALSE;
+  }
+  foreach ($output['error_log'] as $entry) {
+    if (is_array($entry)) {
+      foreach ($entry as $value) {
+        if (is_scalar($value) && strpos((string) $value, $code) !== FALSE) {
+          return TRUE;
+        }
+      }
+    }
+    elseif (is_scalar($entry) && strpos((string) $entry, $code) !== FALSE) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }

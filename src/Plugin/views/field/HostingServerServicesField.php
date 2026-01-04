@@ -15,16 +15,7 @@ class HostingServerServicesField extends FieldPluginBase {
    * {@inheritdoc}
    */
   public function label() {
-    if ($this->view->editing) {
-      return $this->t('Services');
-    }
-
-    $services = hosting_server_services();
-    foreach ($services as $name => $service) {
-      $services[$name] = $service['title'];
-    }
-
-    return implode(',', $services);
+    return parent::label();
   }
 
   /**

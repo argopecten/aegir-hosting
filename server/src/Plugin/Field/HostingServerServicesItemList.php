@@ -2,12 +2,15 @@
 
 namespace Drupal\hosting_server\Plugin\Field;
 
-use Drupal\Core\Field\ComputedFieldItemList;
+use Drupal\Core\Field\FieldItemList;
+use Drupal\Core\TypedData\ComputedItemListTrait;
 
 /**
  * Computed field for server service entries.
  */
-class HostingServerServicesItemList extends ComputedFieldItemList {
+class HostingServerServicesItemList extends FieldItemList {
+
+  use ComputedItemListTrait;
 
   /**
    * {@inheritdoc}

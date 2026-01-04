@@ -16,6 +16,7 @@ use Drupal\hosting_platform\Plugin\Field\HostingPlatformClientsItemList;
  *   handlers = {
  *     "list_builder" = "Drupal\hosting_platform\HostingPlatformListBuilder",
  *     "access" = "Drupal\hosting_platform\HostingPlatformAccessControlHandler",
+ *     "views_data" = "Drupal\views\EntityViewsData",
  *     "form" = {
  *       "add" = "Drupal\hosting_platform\Form\HostingPlatformForm",
  *       "edit" = "Drupal\hosting_platform\Form\HostingPlatformForm",

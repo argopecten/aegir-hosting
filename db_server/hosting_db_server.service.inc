@@ -100,7 +100,7 @@ class hostingService_db_mysql extends hostingService_db {
     $render['db_user'] = array(
       '#type' => 'item',
       '#title' => t('Database user'),
-      '#markup' => filter_xss($this->db_user),
+      '#markup' => \Drupal\Component\Utility\Xss::filter($this->db_user),
       '#weight' => 1,
     );
 

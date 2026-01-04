@@ -111,46 +111,29 @@ function hosting_server_hosting_tasks() {
 }
 
 /**
- * Implements hook_permission().
- */
-function hosting_server_permission() {
-  return array(
-    'administer servers' => array(
-      'title' => t('administer servers'),
-    ),
-    'create server' => array(
-      'title' => t('create server'),
-    ),
-    'view server' => array(
-      'title' => t('view server'),
-    ),
-    'edit server' => array(
-      'title' => t('edit server'),
-    ),
-    'delete server' => array(
-      'title' => t('delete server'),
-    ),
-  );
-}
-
-/**
  * Return an associative array of services enabled on this system.
  */
 function hosting_server_services() {
   static $services;
 
   if (!isset($services)) {
-    foreach (module_implements('hosting_service_type') as $module) {
-      // Load all service_type classes.
-      \Drupal::moduleHandler()->loadInclude($module, 'service.inc');
+    $module_handler = \Drupal::moduleHandler();
+    $module_handler->loadAll();
+    foreach (array_keys($module_handler->getModuleList()) as $module) {
+      if (function_exists($module . '_hosting_service_type') || function_exists($module . '_hosting_service')) {
+        $module_handler->loadInclude($module, 'service.inc');
+      }
     }
+
     // Invoke hook_hosting_service_type().
-    $services = module_invoke_all('hosting_service_type');
-    foreach (module_implements('hosting_service') as $module) {
+    $services = $module_handler->invokeAll('hosting_service_type');
+    foreach (array_keys($module_handler->getModuleList()) as $module) {
+      if (!function_exists($module . '_hosting_service')) {
+        continue;
+      }
       // Invoke hook_hosting_service().
-      foreach (module_invoke($module, 'hosting_service') as $service => $service_type) {
-        // Load all service classes.
-        \Drupal::moduleHandler()->loadInclude($module, 'service.inc');
+      $service_types = $module_handler->invoke($module, 'hosting_service');
+      foreach ((array) $service_types as $service => $service_type) {
         $services[$service_type]['types'][$service] = 'hostingService_' . $service_type . '_' . $service;
       }
     }
@@ -923,71 +906,143 @@ function hosting_server_views_data() {
  */
 function hosting_server_preprocess(&$variables) {
   if (isset($variables['view']) && array_key_exists('services', $variables['view']->field)) {
-    if ($variables['header']) {
-      $services = explode(',', $variables['header']['services']);
-      // Split our headers and fields.
-      _hosting_server_preprocess_explode($variables['header']);
-      _hosting_server_preprocess_explode($variables['rows'], 1);
-      // Adjust the rest of the $variables accordingly.
-      _hosting_server_preprocess_expand($variables['header_classes'], $services);
-      _hosting_server_preprocess_expand($variables['field_attributes'], $services);
-      _hosting_server_preprocess_expand($variables['field_classes'], $services);
-      _hosting_server_preprocess_expand($variables['fields'], $services);
-      // Add service availability classes.
-      _hosting_server_preprocess_classes($variables['field_classes'], $variables['rows']);
-    }
-  }
-}
-
-/**
- * Add fields to table headers or rows.
- *
- * In order to allow the our server list view to dynamically respond to the
- * number of enabled services, we define the field as a comma-separated list
- * in our field handler. Here we explode that text back into an array, and add
- * it back to the table render array.
- *
- * @see: hosting_server_handler_field_services::label()
- * @see: hosting_server_handler_field_services::render()
- */
-function _hosting_server_preprocess_explode(&$element, $depth = 0) {
-  if ($depth) {
-    foreach ($element as $i => $sub_element) {
-      _hosting_server_preprocess_explode($sub_element, $depth - 1);
-      $element[$i] = $sub_element;
-    }
-  }
-  else {
-    $index = array_search('services', array_keys($element));
-    $services = explode(',', $element['services']);
-    array_splice($element, $index, 1, $services);
-  }
-}
-
-/**
- * Preprocess $variables for all in $services.
- *
- * Since we're adding headers and fields to our table render array, we need to
- * adjust other $variables as their passed to the template.
- */
-function _hosting_server_preprocess_expand(&$element, $services) {
-  foreach ($services as $i => $name) {
-    $element[$i] = $element['services'];
-  }
-  unset($element['services']);
-}
-
-/**
- * Add our service availability classes.
- */
-function _hosting_server_preprocess_classes(&$classes, $rows) {
-  foreach ($classes as $field_label => $field_row) {
-    if (is_numeric($field_label)) {
-      foreach ($field_row as $index => $field_classes) {
-        $classes[$field_label][$index] .= $rows[$index][$field_label] == 'no' ? ' hosting-service-unavailable' : ' hosting-service-available';
+    if (!empty($variables['header']['services']['content'])) {
+      $services = _hosting_server_preprocess_service_titles($variables['header']['services']['content']);
+      if (count($services) > 1) {
+        $base_header_id = NULL;
+        if (isset($variables['header']['services']['attributes']) && $variables['header']['services']['attributes'] instanceof \Drupal\Core\Template\Attribute) {
+          $base_header_id = (string) $variables['header']['services']['attributes']->offsetGet('id');
+        }
+        $variables['header'] = _hosting_server_preprocess_split_header($variables['header'], $services, $base_header_id);
+        $variables['rows'] = _hosting_server_preprocess_split_rows($variables['rows'], $services, $base_header_id);
+        if (isset($variables['fields'])) {
+          $variables['fields'] = _hosting_server_preprocess_split_fields($variables['fields'], $services);
+        }
       }
     }
   }
+}
+
+/**
+ * Split a comma-separated service label into titles.
+ */
+function _hosting_server_preprocess_service_titles($label) {
+  if (is_array($label)) {
+    $label = \Drupal::service('renderer')->renderPlain($label);
+  }
+  $label = trim((string) $label);
+  if ($label === '') {
+    return [];
+  }
+
+  $services = array_map('trim', explode(',', $label));
+  return array_values(array_filter($services, 'strlen'));
+}
+
+/**
+ * Replace the services header column with one column per service.
+ */
+function _hosting_server_preprocess_split_header(array $header, array $services, $base_header_id) {
+  $split_header = [];
+  foreach ($header as $key => $item) {
+    if ($key !== 'services') {
+      $split_header[$key] = $item;
+      continue;
+    }
+    foreach ($services as $index => $title) {
+      $new_key = 'services_' . $index;
+      $new_item = $item;
+      $new_item['content'] = $title;
+      if (isset($new_item['attributes']) && $new_item['attributes'] instanceof \Drupal\Core\Template\Attribute) {
+        $new_item['attributes'] = clone $new_item['attributes'];
+        if (!empty($base_header_id)) {
+          $new_item['attributes']->setAttribute('id', $base_header_id . '-' . ($index + 1));
+        }
+      }
+      $split_header[$new_key] = $new_item;
+    }
+  }
+  return $split_header;
+}
+
+/**
+ * Split the services row column into one column per service.
+ */
+function _hosting_server_preprocess_split_rows(array $rows, array $services, $base_header_id) {
+  foreach ($rows as $row_index => $row) {
+    if (empty($row['columns']) || !array_key_exists('services', $row['columns'])) {
+      continue;
+    }
+    $column = $row['columns']['services'];
+    $values = _hosting_server_preprocess_service_values($column, count($services));
+    $split_columns = [];
+    foreach ($row['columns'] as $key => $col) {
+      if ($key !== 'services') {
+        $split_columns[$key] = $col;
+        continue;
+      }
+      foreach ($services as $index => $title) {
+        $new_key = 'services_' . $index;
+        $new_col = $column;
+        $value = $values[$index] ?? '';
+        $new_col['content'] = [
+          [
+            'field_output' => ['#markup' => $value],
+          ],
+        ];
+        if (isset($new_col['attributes']) && $new_col['attributes'] instanceof \Drupal\Core\Template\Attribute) {
+          $new_col['attributes'] = clone $new_col['attributes'];
+          if (!empty($base_header_id)) {
+            $new_col['attributes']->setAttribute('headers', [$base_header_id . '-' . ($index + 1)]);
+          }
+          $new_col['attributes']->addClass($value === 'no' || $value === '' ? 'hosting-service-unavailable' : 'hosting-service-available');
+        }
+        $split_columns[$new_key] = $new_col;
+      }
+    }
+    $row['columns'] = $split_columns;
+    $rows[$row_index] = $row;
+  }
+  return $rows;
+}
+
+/**
+ * Expand the services field mapping for the table headers.
+ */
+function _hosting_server_preprocess_split_fields(array $fields, array $services) {
+  if (!isset($fields['services'])) {
+    return $fields;
+  }
+
+  $expanded = [];
+  foreach ($fields as $key => $class) {
+    if ($key !== 'services') {
+      $expanded[$key] = $class;
+      continue;
+    }
+    foreach ($services as $index => $title) {
+      $expanded['services_' . $index] = $class;
+    }
+  }
+  return $expanded;
+}
+
+/**
+ * Extract the service values from the services column.
+ */
+function _hosting_server_preprocess_service_values(array $column, $expected_count) {
+  $raw = '';
+  if (!empty($column['content'][0]['field_output'])) {
+    $raw = $column['content'][0]['field_output'];
+  }
+  if (is_array($raw)) {
+    $raw = $raw['#markup'] ?? \Drupal::service('renderer')->renderPlain($raw);
+  }
+  $values = array_map('trim', explode(',', (string) $raw));
+  if ($expected_count > count($values)) {
+    $values = array_pad($values, $expected_count, '');
+  }
+  return $values;
 }
 
 /**

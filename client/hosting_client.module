@@ -43,35 +43,6 @@ function hosting_client_theme($existing, $type, $theme, $path) {
 }
 
 /**
- * Implements hook_permission().
- */
-function hosting_client_permission() {
-  return array(
-    'create client' => array(
-      'title' => t('create client'),
-    ),
-    'view client' => array(
-      'title' => t('view client'),
-    ),
-    'edit own client' => array(
-      'title' => t('edit own client'),
-    ),
-    'delete own client' => array(
-      'title' => t('delete own client'),
-    ),
-    'administer clients' => array(
-      'title' => t('administer clients'),
-    ),
-    'edit client users' => array(
-      'title' => t('edit client users'),
-    ),
-    'edit client uname' => array(
-      'title' => t('edit client uname'),
-    ),
-  );
-}
-
-/**
  * Implements hook_hosting_platform_delete().
  */
 function hosting_client_hosting_platform_delete(\Drupal\Core\Entity\EntityInterface $entity) {
@@ -196,10 +167,9 @@ function hosting_client_form(&$node, &$form_state) {
     $form['user_edit']['#theme'] = 'hosting_client_form';
   }
   else {
-    global $user;
     $form['new_user'] = array(
       '#type' => 'value',
-      '#value' => isset($user->name) ? $user->name : '',
+      '#value' => \Drupal::currentUser()->getAccountName(),
     );
   }
   return $form;
@@ -405,13 +375,13 @@ function hosting_client_form_hosting_site_edit_form_alter(&$form, \Drupal\Core\F
  * Apply client selection logic to site forms.
  */
 function hosting_client_site_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state) {
-  global $user;
+  $account_id = \Drupal::currentUser()->id();
   $node = $form['#entity'] ?? $form['#node'] ?? NULL;
   if (!$node) {
     return;
   }
 
-  $client_ids = hosting_get_client_from_user($user->uid);
+  $client_ids = $account_id ? hosting_get_client_from_user($account_id) : [];
   if (empty($client_ids) && !\Drupal::currentUser()->hasPermission('administer clients') && (\Drupal::config('hosting_client.settings')->get('hosting_client_require_client_to_create_site') ?? FALSE)) {
     $error_name = 'client';
     if (isset($form['client']['widget'][0]['target_id']['#parents'])) {
@@ -470,26 +440,27 @@ function hosting_client_insert($node) {
     ->execute();
 
   $email = $node->hasField('email') ? $node->get('email')->value : NULL;
+  $user_storage = \Drupal::entityTypeManager()->getStorage('user');
   if ((\Drupal::config('hosting_client.settings')->get('hosting_client_register_user') ?? FALSE)
      && $email
-     && user_load_multiple(array(), array('mail' => $email)) == FALSE) {
+     && empty($user_storage->loadByProperties(['mail' => $email]))) {
     $user = hosting_client_register_user($node);
-    $node->set('uid', $user->uid);
+    $node->set('uid', $user->id());
     \Drupal::database()->update('hosting_client')
       ->fields(array(
-        'uid' => $user->uid,
+        'uid' => $user->id(),
       ))
       ->condition('id', $client_id)
       ->execute();
   }
   if (isset($node->new_user)) {
-    $user = user_load_multiple(array(), array('name' => $node->new_user));
-    $user = array_shift($user);
+    $users = $user_storage->loadByProperties(['name' => $node->new_user]);
+    $user = $users ? reset($users) : NULL;
     if ($user) {
       $id = \Drupal::database()->insert('hosting_client_user')
         ->fields(array(
           'client' => $client_id,
-          'user' => $user->uid,
+          'user' => $user->id(),
           'contact_type' => '',
         ))
         ->execute();
@@ -507,7 +478,17 @@ function hosting_client_insert($node) {
  * @deprecated remove this function once the above setting is implemented
  */
 function _hosting_client_get_role() {
-  return \Drupal::database()->query("SELECT rid FROM {role} WHERE name = :name", array(':name' => 'aegir client'))->fetchField();
+  $role_storage = \Drupal::entityTypeManager()->getStorage('user_role');
+  $role = $role_storage->load('aegir_client');
+  if ($role) {
+    return $role->id();
+  }
+  $roles = $role_storage->loadByProperties(['label' => 'aegir client']);
+  if ($roles) {
+    $role = reset($roles);
+    return $role->id();
+  }
+  return NULL;
 }
 
 /**
@@ -520,36 +501,51 @@ function _hosting_client_get_role() {
  * @see hosting_client_insert()
  */
 function hosting_client_register_user($node) {
-  $pass = user_password();
-  $user = new stdClass();
-  $edit['name'] = $node->get('uname')->value;
-  $edit['hosting_client'] = hosting_entity_id($node);
-  $edit['mail'] = $node->get('email')->value;
-  $edit['pass'] = $pass;
-  $edit['status'] = 1;
-  $edit['roles'][_hosting_client_get_role()] = TRUE;
-  $user = user_save($user, $edit);
+  $pass = \Drupal::service('password_generator')->generate();
+  $role_id = _hosting_client_get_role();
+  $user = \Drupal\user\Entity\User::create([
+    'name' => $node->get('uname')->value,
+    'mail' => $node->get('email')->value,
+    'status' => 1,
+  ]);
+  $user->setPassword($pass);
+  if ($role_id) {
+    $user->addRole($role_id);
+  }
+  $user->save();
+  $client_id = hosting_entity_id($node);
+  if ($client_id) {
+    \Drupal::database()->insert('hosting_client_user')
+      ->fields(array(
+        'client' => $client_id,
+        'user' => $user->id(),
+        'contact_type' => '',
+      ))
+      ->execute();
+  }
 
-  if ($user->uid && (\Drupal::config('hosting_client.settings')->get('hosting_client_send_welcome') ?? FALSE)) {
+  if ($user->id() && (\Drupal::config('hosting_client.settings')->get('hosting_client_send_welcome') ?? FALSE)) {
+    $request = \Drupal::request();
+    $base_url = $request->getSchemeAndHttpHost() . $request->getBasePath();
+    $date_formatter = \Drupal::service('date.formatter');
     $email = $node->get('email')->value;
     $label = $node->label();
     $to = $label ? sprintf("%s <%s>", $label, $email) : $email;
 
     $params = array(
-      '!username' => $user->name,
+      '!username' => $user->getAccountName(),
       '!site' => \Drupal::config('system.site')->get('name') ?? 'Drupal',
       '!password' => $pass,
-      '!uri' => $GLOBALS['base_url'],
-      '!uri_brief' => substr($base_url, strlen('http://')),
-      '!date' => format_date(REQUEST_TIME),
+      '!uri' => $base_url,
+      '!uri_brief' => preg_replace('#^https?://#', '', $base_url),
+      '!date' => $date_formatter->format(REQUEST_TIME, 'medium'),
       '!login_uri' => \Drupal\Core\Url::fromUserInput('/user', array('absolute' => TRUE))->toString(),
-      '!edit_uri' => \Drupal\Core\Url::fromUserInput('/user/' . $user->uid . '/edit', array('absolute' => TRUE))->toString(),
+      '!edit_uri' => \Drupal\Core\Url::fromUserInput('/user/' . $user->id() . '/edit', array('absolute' => TRUE))->toString(),
       '!login_url' => user_pass_reset_url($user),
     );
     // No e-mail verification is required.
     // Create new user account, and login user immediately.
-    $language = user_preferred_language($user);
-    $langcode = $language instanceof \Drupal\Core\Language\LanguageInterface ? $language->getId() : $language;
+    $langcode = $user->getPreferredLangcode();
     \Drupal::service('plugin.manager.mail')->mail('hosting_client', 'hosting-client-register-welcome', $to, $langcode, $params);
   }
   return $user;
@@ -602,15 +598,18 @@ function hosting_client_update($node) {
     }
   }
   if ($node->new_user) {
-    $user = user_load_multiple(array(), array('name' => $node->new_user));
-    $user = array_shift($user);
-    $id = \Drupal::database()->insert('hosting_client_user')
-      ->fields(array(
-        'client' => hosting_entity_id($node),
-        'user' => $user->uid,
-        'contact_type' => '',
-      ))
-      ->execute();
+    $user_storage = \Drupal::entityTypeManager()->getStorage('user');
+    $users = $user_storage->loadByProperties(['name' => $node->new_user]);
+    $user = $users ? reset($users) : NULL;
+    if ($user) {
+      $id = \Drupal::database()->insert('hosting_client_user')
+        ->fields(array(
+          'client' => hosting_entity_id($node),
+          'user' => $user->id(),
+          'contact_type' => '',
+        ))
+        ->execute();
+    }
   }
 }
 
@@ -665,20 +664,20 @@ function hosting_client_view(array &$build, \Drupal\Core\Entity\EntityInterface 
   $build['info']['title'] = array(
     '#type' => 'item',
     '#title' => t('Client name'),
-    '#markup' => filter_xss($entity->label()),
+    '#markup' => \Drupal\Component\Utility\Xss::filter($entity->label()),
   );
   $build['info']['uname'] = array(
     '#type' => 'item',
     '#title' => t('Internal name'),
     '#weight' => 1,
-    '#markup' => filter_xss($entity->get('uname')->value),
+    '#markup' => \Drupal\Component\Utility\Xss::filter($entity->get('uname')->value),
   );
 
   if ($view_mode === 'full') {
     $rows = array();
     $users = hosting_client_users($entity);
     foreach ($users as $uid => $uname) {
-      if (\Drupal::currentUser()->hasPermission('access user profiles') || ($uid == $GLOBALS['user']->uid)) {
+      if (\Drupal::currentUser()->hasPermission('access user profiles') || ($uid == \Drupal::currentUser()->id())) {
         $rows[] = array(\Drupal\Core\Link::fromTextAndUrl($uname, \Drupal\Core\Url::fromUserInput('/user/' . $uid))->toString());
       }
       else {
@@ -874,15 +873,15 @@ function hosting_client_platform_access_form_submit($form, \Drupal\Core\Form\For
  */
 function _hosting_client_site_default($node) {
   // Find the right client.
-  global $user;
+  $account_id = \Drupal::currentUser()->id();
   $current_client_id = 0;
   $node_client_id = NULL;
   if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface && $node->hasField('client')) {
     $node_client_id = $node->get('client')->target_id;
   }
 
-  if ($user->uid) {
-    $client_ids = hosting_get_client_from_user($user->uid);
+  if ($account_id) {
+    $client_ids = hosting_get_client_from_user($account_id);
     $clients = array();
     foreach ($client_ids as $client_id => $client_permissions) {
       $client_id = $client_id ? $client_id : HOSTING_DEFAULT_CLIENT;
@@ -967,7 +966,13 @@ function hosting_client_site_form($form, $client) {
 /**
  * Access callback for the site creation tab on a client.
  */
-function hosting_client_menu_access($perm, $client) {
+function hosting_client_menu_access($perm, $client, \Drupal\Core\Session\AccountInterface $account = NULL) {
+  if ($perm instanceof \Drupal\Core\Entity\EntityInterface
+    && $perm->getEntityTypeId() === 'menu'
+    && $account instanceof \Drupal\Core\Session\AccountInterface) {
+    return \Drupal\Core\Access\AccessResult::neutral();
+  }
+
   if (!$client instanceof \Drupal\Core\Entity\EntityInterface || $client->getEntityTypeId() !== 'hosting_client') {
     return FALSE;
   }
@@ -1080,8 +1085,7 @@ function _hosting_get_allowed_platforms($uid = NULL, $reset = FALSE) {
   }
 
   if (is_null($uid)) {
-    global $user;
-    $uid = $user->uid;
+    $uid = \Drupal::currentUser()->id();
   }
 
   if (!isset($platforms[$uid])) {

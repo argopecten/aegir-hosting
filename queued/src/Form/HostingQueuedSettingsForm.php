@@ -21,6 +21,7 @@ class HostingQueuedSettingsForm extends ConfigFormBase {
   }
 
   public function buildForm(array $form, FormStateInterface $form_state) {
+    $date_formatter = \Drupal::service('date.formatter');
     $form['description'] = [
       '#type' => 'markup',
       '#markup' => $this->t('Note that the settings on this form will only apply to the daemon once it has been restarted, which by default happens as least once an hour.'),
@@ -55,7 +56,7 @@ class HostingQueuedSettingsForm extends ConfigFormBase {
     $form['hosting_queued_process_started'] = [
       '#type' => 'item',
       '#title' => $this->t('Runner status'),
-      '#markup' => !empty($last_seen) ? $this->t('Last started: @interval ago.', ['@interval' => format_interval(REQUEST_TIME - $last_seen)]) : $this->t('Never started.'),
+      '#markup' => !empty($last_seen) ? $this->t('Last started: @interval ago.', ['@interval' => $date_formatter->formatInterval(REQUEST_TIME - $last_seen)]) : $this->t('Never started.'),
     ];
 
     $delay_values = range(1, 60);
@@ -75,7 +76,7 @@ class HostingQueuedSettingsForm extends ConfigFormBase {
       60 * 55,
       60 * 60,
     ];
-    $lifetime_options = array_combine($lifetime_values, array_map('format_interval', $lifetime_values));
+    $lifetime_options = array_combine($lifetime_values, array_map([$this, 'formatIntervalOption'], $lifetime_values));
 
     $form['hosting_queued_post_task_delay'] = [
       '#type' => 'select',
@@ -128,6 +129,13 @@ class HostingQueuedSettingsForm extends ConfigFormBase {
    */
   private function formatDelayOption($value) {
     return \Drupal::translation()->formatPlural($value, '1 second', '@count seconds');
+  }
+
+  /**
+   * Format interval options in seconds.
+   */
+  private function formatIntervalOption($value) {
+    return \Drupal::service('date.formatter')->formatInterval($value);
   }
 
 }

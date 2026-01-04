@@ -41,6 +41,7 @@ display:
             uname: uname
             created: created
           default: label
+          empty_table: true
           info:
             label:
               sortable: true
@@ -87,6 +88,14 @@ display:
           entity_field: created
           settings:
             date_format: short
+      empty:
+        area_text_custom:
+          id: area_text_custom
+          table: views
+          field: area_text_custom
+          plugin_id: text_custom
+          empty: true
+          content: 'There are no hosting client entities yet.'
   page_clients:
     display_plugin: page
     id: page_clients

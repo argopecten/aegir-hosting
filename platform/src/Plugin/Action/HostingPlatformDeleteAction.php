@@ -8,7 +8,7 @@ namespace Drupal\hosting_platform\Plugin\Action;
  * @Action(
  *   id = "hosting_platform_delete_action",
  *   label = @Translation("Delete platform"),
- *   type = "node"
+ *   type = "hosting_platform"
  * )
  */
 class HostingPlatformDeleteAction extends HostingPlatformActionBase {

@@ -187,7 +187,7 @@ class hostingService {
       $render['restart_cmd'] = array(
         '#type' => 'item',
         '#title' => t('Restart command'),
-        '#markup' => filter_xss($this->restart_cmd),
+        '#markup' => \Drupal\Component\Utility\Xss::filter($this->restart_cmd),
       );
 
     }
@@ -196,7 +196,7 @@ class hostingService {
       $render['port'] = array(
         '#type' => 'item',
         '#title' => t('Port'),
-        '#markup' => filter_xss($this->port),
+        '#markup' => \Drupal\Component\Utility\Xss::filter($this->port),
       );
     }
   }

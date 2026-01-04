@@ -1,0 +1,14 @@
+create client:
+  title: 'create client'
+view client:
+  title: 'view client'
+edit own client:
+  title: 'edit own client'
+delete own client:
+  title: 'delete own client'
+administer clients:
+  title: 'administer clients'
+edit client users:
+  title: 'edit client users'
+edit client uname:
+  title: 'edit client uname'

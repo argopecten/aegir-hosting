@@ -2,6 +2,8 @@
 
 namespace Drupal\hosting\Commands;
 
+use Consolidation\AnnotatedCommand\CommandData;
+use Consolidation\AnnotatedCommand\Hooks\HookManager;
 use Drush\Attributes as Drush;
 use Drush\Commands\DrushCommands;
 use Drush\Boot\DrupalBootLevels;
@@ -86,31 +88,30 @@ final class HostingCommands extends DrushCommands {
   public function task(string $context_name, ?string $command = NULL, array $task_args, array $options = ['force' => FALSE]): void {
     require_once dirname(__DIR__, 2) . '/task.hosting.inc';
 
-    $arguments = [$context_name];
-    if ($command !== NULL) {
-      $arguments[] = $command;
-    }
-    $arguments = array_merge($arguments, $task_args);
-
-    drush_hosting_task_validate(...$arguments);
-    if (function_exists('drush_get_error') && drush_get_error()) {
-      throw new UserAbortException('Task validation failed.');
-    }
-
     try {
-      drush_hosting_task();
-      if (function_exists('drush_get_error') && drush_get_error()) {
-        drush_hosting_task_rollback();
-        throw new UserAbortException('Task execution failed.');
-      }
-      drush_hosting_post_hosting_task(NULL);
+      hosting_task_execute_current();
+      hosting_post_task_current(NULL);
     }
     catch (\Exception $e) {
-      if (function_exists('drush_hosting_task_rollback')) {
-        drush_hosting_task_rollback();
-      }
+      hosting_task_rollback_current();
       throw $e;
     }
+  }
+
+  #[Drush\Hook(type: HookManager::ARGUMENT_VALIDATOR, target: 'hosting:task')]
+  public function validateHostingTask(CommandData $commandData): void {
+    require_once dirname(__DIR__, 2) . '/task.hosting.inc';
+
+    $input = $commandData->input();
+    $context_name = $input->getArgument('context_name');
+    $command = $input->getArgument('command');
+    $task_args = $input->getArgument('task_args') ?? [];
+    $options = [
+      'force' => (bool) $input->getOption('force'),
+      'debug' => \Drush\Drush::debug(),
+    ];
+
+    hosting_task_validate($context_name, $command, (array) $task_args, $options);
   }
 
   /**

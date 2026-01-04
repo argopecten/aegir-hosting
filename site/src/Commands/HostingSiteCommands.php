@@ -10,7 +10,7 @@ use Consolidation\AnnotatedCommand\Hooks\HookManager;
 final class HostingSiteCommands extends DrushCommands {
   #[Drush\Hook(type: HookManager::PRE_COMMAND_HOOK, target: 'hosting:task')]
   public function preHostingTask(CommandData $commandData): void {
-    $task = &drush_get_context('HOSTING_TASK');
+    $task = hosting_task_get_current();
     if (!$task) {
       return;
     }

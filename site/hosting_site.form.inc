@@ -382,7 +382,10 @@ function hosting_site_available_options($node, $platform = NULL) {
     $return['client'] = NULL;
   }
 
-  $user = user_load($GLOBALS['user']->uid);
+  $account_id = \Drupal::currentUser()->id();
+  $user = $account_id ? \Drupal::entityTypeManager()->getStorage('user')->load($account_id) : NULL;
+  $user_client_ids = ($user && is_array($user->client_id ?? NULL)) ? array_keys($user->client_id) : [];
+  $is_admin = ($account_id == 1);
 
   $profiles = hosting_get_profiles();
   $platform_profiles = array();
@@ -403,7 +406,7 @@ function hosting_site_available_options($node, $platform = NULL) {
                         )
                       );
     if (is_null($platform)) {
-      $allowed_plats = _hosting_get_allowed_platforms($user->uid);
+      $allowed_plats = $account_id ? _hosting_get_allowed_platforms($account_id) : [];
     }
     else {
       $allowed_plats = array($platform => $platform);
@@ -461,7 +464,7 @@ function hosting_site_available_options($node, $platform = NULL) {
 
         if (hosting_entity_status($platform_entity, 'platform') != HOSTING_PLATFORM_LOCKED || \Drupal::currentUser()->hasPermission('create sites on locked platforms')) {
           $platform_client_ids = hosting_platform_client_ids($platform_entity);
-          if (empty($platform_client_ids) || count(array_intersect(array_keys($user->client_id), $platform_client_ids)) || $user->uid == 1) {
+          if (empty($platform_client_ids) || count(array_intersect($user_client_ids, $platform_client_ids)) || $is_admin) {
             $options[] = $platform_id;
           }
         }
@@ -536,7 +539,7 @@ function hosting_site_language_callback($form, &$form_state) {
  * Implements hook_validate().
  */
 function hosting_site_validate($node, &$form, $form_state = NULL) {
-  global $user;
+  $account_id = \Drupal::currentUser()->id();
   $valid_options = hosting_site_available_options($node);
   $set_error = function ($name, $message) use ($form_state) {
     if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
@@ -565,7 +568,7 @@ function hosting_site_validate($node, &$form, $form_state = NULL) {
       $set_error(hosting_site_form_error_name($form, 'client', array('target_id')), t('Please fill in a valid client'));
     }
     $client_id = hosting_entity_id($client);
-    if (!\Drupal::currentUser()->hasPermission('administer clients') && !array_key_exists($client_id, hosting_get_client_from_user($user->uid))) {
+    if (!\Drupal::currentUser()->hasPermission('administer clients') && $account_id && !array_key_exists($client_id, hosting_get_client_from_user($account_id))) {
       $set_error(hosting_site_form_error_name($form, 'client', array('target_id')), t('Access denied to client @client', array('@client' => hosting_entity_label($client))));
     }
     $node->client = $client_id;

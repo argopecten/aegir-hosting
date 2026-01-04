@@ -194,7 +194,7 @@ function hook_hosting_processed_queues_alter(&$queues) {
  *   The node representing the object of the task, e.g. the site that is being
  *   verified is available in the $task->ref property.
  *
- * @see drush_hosting_task()
+ * @see hosting_task_execute_current()
  * @see hook_drush_context_import()
  * @see hook_hosting_tasks()
  */
@@ -213,26 +213,25 @@ function hook_hosting_TASK_OBJECT_context_options(&$task) {
  * @param object $task
  *   The hosting task that has failed and has been rolled back.
  * @param array $data
- *   An associative array of the drush output of the backend task from
- *   drush_backend_output(). The array should contain at least the following:
- *   - "output": The raw output from the drush command executed.
+ *   An associative array of the backend task output. The array should contain
+ *   at least the following:
+ *   - "output": The raw output from the backend command executed.
  *   - "error_status": The error status of the command run on the backend.
- *   - "log": The drush log messages.
+ *   - "log": The log messages.
  *   - "error_log": The list of errors that occurred when running the command.
- *   - "context": The drush options for the backend command, this may contain
+ *   - "context": The options for the backend command, this may contain
  *     options that were set when the command ran, or options that were set by
  *     the command itself.
  *
- * @see drush_hosting_hosting_task_rollback()
- * @see drush_backend_output()
+ * @see hosting_task_rollback_current()
  */
 function hook_hosting_TASK_TYPE_task_rollback($task, $data) {
   // From hosting_site_hosting_install_task_rollback().
 
   // @TODO : we need to check the returned list of errors, not the code.
-  if (drush_cmp_error('PROVISION_DRUPAL_SITE_INSTALLED')) {
+  if (hosting_output_has_error_code($data, 'PROVISION_DRUPAL_SITE_INSTALLED')) {
     // Site has already been installed. Try to import instead.
-    drush_log(dt("This site appears to be installed already. Generating an import task."));
+    hosting_log(t('This site appears to be installed already. Generating an import task.'));
     hosting_add_task($task->rid, 'import');
   }
   else {
@@ -277,19 +276,18 @@ function hook_hosting_client_delete(\Drupal\Core\Entity\EntityInterface $entity)
  * @param object $task
  *   The hosting task that has completed.
  * @param array $data
- *   An associative array of the drush output of the completed backend task from
- *   drush_backend_output(). The array should contain at least the following:
- *   - "output": The raw output from the drush command executed.
+ *   An associative array of the backend task output. The array should contain
+ *   at least the following:
+ *   - "output": The raw output from the backend command executed.
  *   - "error_status": The error status of the command run on the backend,
- *     should be DRUSH_SUCCESS normally.
- *   - "log": The drush log messages.
+ *     should be 0 normally.
+ *   - "log": The log messages.
  *   - "error_log": The list of errors that occurred when running the command.
- *   - "context": The drush options for the backend command, this may contain
+ *   - "context": The options for the backend command, this may contain
  *     options that were set when the command ran, or options that were set by
  *     the command itself.
  *
- * @see drush_hosting_post_hosting_task()
- * @see drush_backend_output()
+ * @see hosting_post_task_current()
  */
 function hook_post_hosting_TASK_TYPE_task($task, $data) {
   // From hosting_site_post_hosting_backup_task().
@@ -311,10 +309,10 @@ function hook_post_hosting_TASK_TYPE_task($task, $data) {
  * module to determine which items it wishes to process.
  *
  * If you wish to process multiple items at the same time you will need to fork
- * the process by calling drush_invoke_process() with the 'fork' option,
- * specifying a drush command with the arguments required to process your task.
+ * the process by calling hosting_run_drush_command() with the 'fork' option,
+ * specifying a command with the arguments required to process your task.
  * Otherwise you can do all your processing in this function, or similarly call
- * drush_invoke_process() without the 'fork' option.
+ * hosting_run_drush_command() without the 'fork' option.
  *
  * @param int $count
  *   The maximum number of items to process.
@@ -326,10 +324,10 @@ function hosting_QUEUE_TYPE_queue($count = 5) {
   // From hosting_tasks_queue().
   global $provision_errors;
 
-  drush_log(dt("Running tasks queue"));
+  hosting_log(t('Running tasks queue'));
   $tasks = hosting_get_new_tasks($count);
   foreach ($tasks as $task) {
-    drush_invoke_process('@self', "hosting-task", array($task->id()), array(), array('fork' => TRUE));
+    hosting_run_drush_command('@self', 'hosting-task', array($task->id()), array(), array('fork' => TRUE));
   }
 }
 
@@ -367,19 +365,19 @@ function hook_hosting_task_update_status($task, $status) {
   // On error, output a new message.
   if ($status == HOSTING_TASK_ERROR) {
     $label = hosting_entity_label($node) ?? '';
-    drush_log(dt("!title: !task task ended in an Error", array(
-      '!task' => $task->task_type,
-      '!title' => $label,
-    )), 'error');
+    hosting_log(t('@title: @task task ended in an error', [
+      '@task' => $task->task_type,
+      '@title' => $label,
+    ]), 'error');
   }
   else {
     $label = hosting_entity_label($node) ?? '';
-    drush_log(" Task completed successfully: " . $task->task_type, 'ok');
-    drush_log(dt("!title: !task task ended with !status", array(
-      '!task' => $task->task_type,
-      '!title' => $label,
-      '!status' => _hosting_parse_error_code($status),
-    )), 'ok');
+    hosting_log(t('Task completed successfully: @task', ['@task' => $task->task_type]), 'ok');
+    hosting_log(t('@title: @task task ended with @status', [
+      '@task' => $task->task_type,
+      '@title' => $label,
+      '@status' => _hosting_parse_error_code($status),
+    ]), 'ok');
   }
 }
 

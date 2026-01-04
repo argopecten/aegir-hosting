@@ -5,17 +5,6 @@
  */
 
 /**
- * Implements hook_permission().
- */
-function hosting_signup_permission() {
-  return array(
-    'access hosting signup form' => array(
-      'title' => t('access hosting signup form'),
-    ),
-  );
-}
-
-/**
  * Prefix form element parents for embedded sub-forms.
  */
 function hosting_signup_prefix_form_parents(array &$element, array $prefix) {
@@ -34,4 +23,3 @@ function hosting_signup_prefix_form_parents(array &$element, array $prefix) {
     }
   }
 }
-

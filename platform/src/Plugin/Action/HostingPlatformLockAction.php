@@ -8,7 +8,7 @@ namespace Drupal\hosting_platform\Plugin\Action;
  * @Action(
  *   id = "hosting_platform_lock_action",
  *   label = @Translation("Lock platform"),
- *   type = "node"
+ *   type = "hosting_platform"
  * )
  */
 class HostingPlatformLockAction extends HostingPlatformActionBase {

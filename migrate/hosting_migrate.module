@@ -7,17 +7,6 @@
 include_once 'hosting_migrate.batch.inc';
 
 /**
- * Implements hook_permission().
- */
-function hosting_migrate_permission() {
-  return array(
-    'create migrate task' => array(
-      'title' => t('create migrate task'),
-    ),
-  );
-}
-
-/**
  * Implements hook_hosting_tasks().
  */
 function hosting_migrate_hosting_tasks() {

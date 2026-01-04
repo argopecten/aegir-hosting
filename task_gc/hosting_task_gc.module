@@ -33,11 +33,12 @@ function hosting_task_gc_hosting_queues() {
  * The main queue callback task_gc.
  */
 function hosting_task_gc_queue() {
-  global $user;
-
   // Switch to the super user.
-  $old_user = $user;
-  $user = user_load(1);
+  $account_switcher = \Drupal::service('account_switcher');
+  $admin = \Drupal::entityTypeManager()->getStorage('user')->load(1);
+  if ($admin) {
+    $account_switcher->switchTo($admin);
+  }
 
   $result = hosting_task_gc_list_sites();
   while ($site = $result->fetchObject()) {
@@ -53,7 +54,9 @@ function hosting_task_gc_queue() {
   }
 
   // Restore the user.
-  $user = $old_user;
+  if ($admin) {
+    $account_switcher->switchBack();
+  }
   // Look for orphaned task log entries.
   $query = "SELECT DISTINCT h.task_id
               FROM {hosting_task_log} h

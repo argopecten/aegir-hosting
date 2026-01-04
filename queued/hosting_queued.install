@@ -25,3 +25,9 @@ function hosting_queued_disable() {
   \Drupal::state()->set('hosting_queue_tasks_enabled', TRUE);
 }
 
+/**
+ * Implements hook_uninstall().
+ */
+function hosting_queued_uninstall() {
+  \Drupal::configFactory()->getEditable('hosting_queued.settings')->delete();
+}

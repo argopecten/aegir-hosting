@@ -6,48 +6,26 @@
  */
 
 /**
- * Log a message to the current task's node if possible, the screen otherwise.
- */
-function _hosting_task_log($entry) {
-  $task = drush_get_context('HOSTING_TASK');
-  $task_id = $task instanceof \Drupal\Core\Entity\EntityInterface ? $task->id() : NULL;
-  if ($task_id) {
-    hosting_task_log($task_id, $entry['type'], $entry['message'], isset($entry['error']) ? $entry['error'] : '', $entry['timestamp']);
-  }
-  else {
-    _hosting_task_log_print($entry);
-  }
-  if (drush_get_option('debug', FALSE)) {
-    _hosting_task_log_print($entry);
-  }
-}
-
-/**
- * Switch between Drush 8's OO logging and the older private function.
- */
-function _hosting_task_log_print($entry) {
-  if (function_exists('_drush_print_log')) {
-    // Remove after dropping Drush 6 comaptibility.
-    return _drush_print_log($entry);
-  }
-  else {
-    $logger = new Drush\Log\Logger();
-    return $logger->log($entry['type'], $entry['message'], $entry);
-  }
-}
-
-/**
  * Validate hook for the hosting-task Drush command.
  *
  * We do some magic in this command to allow the user to run either a specifc
  * task by specifying a node id or chosen task type by specifying the type of
  * task, e.g. 'verify' or 'migrate'.
  *
- * @see drush_hosting_task()
+ * @see hosting_task_execute_current()
  */
-function drush_hosting_task_validate($id, $type = NULL) {
-  drush_set_option('user', 1);
-  drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_LOGIN);
+function hosting_task_validate($id, $type = NULL, array $task_args = [], array $options = []) {
+  hosting_task_clear_errors();
+  hosting_task_set_options($options);
+  hosting_task_set_output([]);
+
+  if (\Drupal::hasService('account_switcher')) {
+    $user = \Drupal::entityTypeManager()->getStorage('user')->load(1);
+    if ($user) {
+      \Drupal::service('account_switcher')->switchTo($user);
+    }
+  }
+
   if (is_numeric($id)) {
     $task = hosting_task_load_entity($id);
   }
@@ -57,17 +35,15 @@ function drush_hosting_task_validate($id, $type = NULL) {
     if ($ref_id) {
 
       // Get additional arguments to the drush command and convert them to "task_args" as expected by the task node.
-      $task_args = array();
-
-      // Parse task_arguments passed to drush in the format "name=value"
-      // phpcs:ignore PHPCompatibility.FunctionUse.ArgumentFunctionsReportCurrentValue.NeedsInspection
-      $arguments = func_get_args();
-      $drush_args = array_splice($arguments, 2);
-      foreach ($drush_args as $i => $arg) {
-        list($name, $value) = explode('=', $arg);
-        $task_args[$name] = $value;
+      $parsed_args = [];
+      foreach ($task_args as $arg) {
+        if (strpos($arg, '=') === FALSE) {
+          continue;
+        }
+        [$name, $value] = explode('=', $arg, 2);
+        $parsed_args[$name] = $value;
       }
-      $task = hosting_add_task($ref, $type, $task_args);
+      $task = hosting_add_task($ref, $type, $parsed_args);
     }
   }
 
@@ -87,25 +63,26 @@ function drush_hosting_task_validate($id, $type = NULL) {
     $task->set('executed', REQUEST_TIME);
     if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface) {
       if ($task->ref->getEntityTypeId() === 'hosting_platform' && $task->get('task_type')->value === 'verify') {
-        hosting_platform_validate_runtime($task->ref);
-        if (drush_get_error()) {
-          return;
+        if (!hosting_platform_validate_runtime($task->ref)) {
+          $message = hosting_task_get_last_error() ?? t('Platform validation failed.');
+          throw new \Drush\Exceptions\UserAbortException((string) $message);
         }
       }
     }
     /* if not already running, remove the task from the queue
      * this is to avoid concurrent task runs */
-    if ((int) $task->get('task_status')->value == HOSTING_TASK_PROCESSING && !drush_get_option('force', FALSE)) {
-      return drush_set_error('HOSTING_TASK_RUNNING', dt("This task is already running, use --force"));
+    if ((int) $task->get('task_status')->value == HOSTING_TASK_PROCESSING && !hosting_task_get_option('force', FALSE)) {
+      throw new \Drush\Exceptions\UserAbortException((string) t('This task is already running, use --force.'));
     }
-    if ((int) $task->get('task_status')->value != HOSTING_TASK_QUEUED && !drush_get_option('force', FALSE)) {
-      return drush_set_error('HOSTING_TASK_NOT_QUEUED', dt("This task is not queued, use --force"));
+    if ((int) $task->get('task_status')->value != HOSTING_TASK_QUEUED && !hosting_task_get_option('force', FALSE)) {
+      throw new \Drush\Exceptions\UserAbortException((string) t('This task is not queued, use --force.'));
     }
     $task->set('task_status', HOSTING_TASK_PROCESSING);
     $task->save();
-    drush_set_context('HOSTING_TASK', $task);
-    drush_set_context('DRUSH_LOG_CALLBACK', '_hosting_task_log');
-    drush_log(dt("Task starts processing") . ': ' . $task->label(), 'queue');
+    hosting_task_set_current($task);
+    $message = t('Task starts processing: @label', ['@label' => $task->label()]);
+    hosting_task_log($task->id(), 'queue', (string) $message);
+    hosting_log($message, 'queue', [], 'hosting_task');
 
     // Load Task Info.
     $tasks_info = hosting_available_tasks($ref_type);
@@ -116,7 +93,7 @@ function drush_hosting_task_validate($id, $type = NULL) {
     }
   }
   else {
-    drush_set_error('HOSTING_INVALID_TASK', t("Could not find or create a '!type' task for hosting context '!context'.", array(
+    throw new \Drush\Exceptions\UserAbortException((string) t("Could not find or create a '!type' task for hosting context '!context'.", array(
       '!type' => $type,
       '!context' => $id,
     )));
@@ -130,13 +107,16 @@ function drush_hosting_task_validate($id, $type = NULL) {
  * correspond to backend drush commands, and the results and log of the command
  * are attached to the task for reference.
  *
- * @see drush_hosting_task_validate()
+ * @see hosting_task_validate()
  * @see hook_hosting_TASK_OBJECT_context_options()
  */
-function drush_hosting_task() {
-  $task = &drush_get_context('HOSTING_TASK');
+function hosting_task_execute_current() {
+  $task = hosting_task_get_current();
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface) {
+    throw new \Drush\Exceptions\UserAbortException('No hosting task context is available.');
+  }
   $output = array();
-  $mode = drush_get_option('debug', FALSE) ? 'GET' : 'POST';
+  $mode = hosting_task_get_option('debug', FALSE) ? 'GET' : 'POST';
   $ref_type = hosting_entity_task_scope($task->ref);
   $ref_status = hosting_entity_status($task->ref, $ref_type);
 
@@ -149,12 +129,12 @@ function drush_hosting_task() {
     // We copy module_invoke_all() here because it doesn't pass by
     // reference and it breaks under PHP 5.3
     $hook = 'hosting_' . hosting_entity_task_scope($task->ref) . '_context_options';
-    foreach (module_implements($hook) as $module) {
+    foreach (\Drupal::moduleHandler()->getImplementations($hook) as $module) {
       $function = $module . '_' . $hook;
       call_user_func_array($function, array(&$task));
     }
 
-    drush_invoke_process('@none', 'provision-save', array('@' . $task->ref->hosting_name), $task->context_options, array('method' => $mode, 'integrate' => TRUE));
+    hosting_run_drush_command('@none', 'provision-save', array('@' . $task->ref->hosting_name), $task->context_options, array('method' => $mode, 'integrate' => TRUE));
   }
 
   if (($ref_type == 'site' && $ref_status == HOSTING_SITE_DELETED)
@@ -175,15 +155,29 @@ function drush_hosting_task() {
   $output = provision_backend_invoke($alias, $task->task_command, $task->args, $task->options, $mode);
   // Pass the drush output back to the HOOK_post_hosting_TASK_task() and
   // HOOK_hosting_TASK_task_rollback() hooks, as the $data argument.
-  drush_set_context('HOSTING_DRUSH_OUTPUT', $output);
+  hosting_task_set_output($output);
+
+  $has_error = !empty($output['error_status']);
+  if ($has_error) {
+    $message = t('Task execution failed with status @status.', ['@status' => $output['error_status']]);
+    hosting_task_set_error('HOSTING_TASK_FAILED', (string) $message);
+    hosting_log($message, 'error', [], 'hosting_task');
+    if ($task->id()) {
+      hosting_task_log($task->id(), 'error', (string) $message);
+    }
+  }
 
   // On succesful delete, remove the named context.
-  if ($task->get('task_type')->value === 'delete' && !drush_get_error()) {
-    drush_invoke_process('@none', 'provision-save', array('@' . $task->ref->hosting_name), array('delete' => TRUE), array('method' => $mode, 'integrate' => TRUE));
+  if ($task->get('task_type')->value === 'delete' && !$has_error) {
+    hosting_run_drush_command('@none', 'provision-save', array('@' . $task->ref->hosting_name), array('delete' => TRUE), array('method' => $mode, 'integrate' => TRUE));
   }
 
   $task->set('delta', microtime(TRUE) - $task->get('executed')->value);
   $task->save();
+
+  if ($has_error) {
+    throw new \Drush\Exceptions\UserAbortException((string) $message);
+  }
 }
 
 /**
@@ -191,11 +185,18 @@ function drush_hosting_task() {
  *
  * @see hook_hosting_TASK_TYPE_task_rollback()
  */
-function drush_hosting_task_rollback() {
-  $task = &drush_get_context('HOSTING_TASK');
+function hosting_task_rollback_current() {
+  $task = hosting_task_get_current();
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface) {
+    return;
+  }
   $hook = sprintf("hosting_%s_task_rollback", str_replace('-', '_', $task->get('task_type')->value));
-  drush_log(dt('Invoking :hook hooks.', array(':hook' => $hook)));
-  module_invoke_all($hook, $task, drush_get_context('HOSTING_DRUSH_OUTPUT'));
+  $message = t('Invoking @hook hooks.', ['@hook' => $hook]);
+  hosting_log($message, 'notice', [], 'hosting_task');
+  if ($task->id()) {
+    hosting_task_log($task->id(), 'notice', (string) $message);
+  }
+  \Drupal::moduleHandler()->invokeAll($hook, [$task, hosting_task_get_output()]);
 }
 
 /**
@@ -203,10 +204,17 @@ function drush_hosting_task_rollback() {
  *
  * @see hook_post_hosting_TASK_TYPE_task()
  */
-function drush_hosting_post_hosting_task($task) {
-  $task = &drush_get_context('HOSTING_TASK');
+function hosting_post_task_current($task) {
+  $task = hosting_task_get_current();
+  if (!$task instanceof \Drupal\Core\Entity\EntityInterface) {
+    return;
+  }
 
   $hook = sprintf("post_hosting_%s_task", str_replace('-', '_', $task->get('task_type')->value));
-  drush_log(dt('Invoking :hook hooks.', array(':hook' => $hook)));
-  module_invoke_all($hook, $task, drush_get_context('HOSTING_DRUSH_OUTPUT'));
+  $message = t('Invoking @hook hooks.', ['@hook' => $hook]);
+  hosting_log($message, 'notice', [], 'hosting_task');
+  if ($task->id()) {
+    hosting_task_log($task->id(), 'notice', (string) $message);
+  }
+  \Drupal::moduleHandler()->invokeAll($hook, [$task, hosting_task_get_output()]);
 }

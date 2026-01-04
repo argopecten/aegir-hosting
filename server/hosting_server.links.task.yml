@@ -1,9 +1,11 @@
 hosting_server.list:
-  route_name: entity.hosting_server.collection
+  route_name: view.hosting_server_list.page
   title: 'List'
-  base_route: entity.hosting_server.collection
+  base_route: view.hosting_server_list.page
+  weight: 0
 
 hosting_server.add:
   route_name: entity.hosting_server.add_form
   title: 'Add server'
-  base_route: entity.hosting_server.collection
+  base_route: view.hosting_server_list.page
+  weight: 10

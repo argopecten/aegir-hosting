@@ -39,23 +39,25 @@ display:
         options:
           row_class: '[status]'
           default: '-1'
+          empty_table: true
           columns:
-            bulk_form: bulk_form
+            hosting_site_bulk_form: hosting_site_bulk_form
             status: status
             canonical: canonical
+            profile: profile
             created: created
-            verified: verified
+            platform: platform
       row:
         type: fields
       fields:
-        bulk_form:
-          id: bulk_form
+        hosting_site_bulk_form:
+          id: hosting_site_bulk_form
           table: hosting_site
-          field: bulk_form
+          field: hosting_site_bulk_form
           label: ''
           plugin_id: bulk_form
           entity_type: hosting_site
-          action_title: Action
+          action_title: Operations
           include_exclude: include
           selected_actions:
             - hosting_site_backup_action
@@ -78,6 +80,16 @@ display:
           label: 'Site'
           plugin_id: hosting_site_canonical
           element_class: 'hosting-status'
+        profile:
+          id: profile
+          table: hosting_site
+          field: profile
+          label: 'Profile'
+          plugin_id: field
+          entity_type: hosting_site
+          entity_field: profile
+          settings:
+            link_to_entity: false
         created:
           id: created
           table: hosting_site
@@ -88,13 +100,16 @@ display:
           entity_field: created
           settings:
             date_format: short
-        verified:
-          id: verified
+        platform:
+          id: platform
           table: hosting_site
-          field: verified
-          label: 'Verified'
-          plugin_id: hosting_interval
-          date_format: short
+          field: platform
+          label: 'Platform'
+          plugin_id: field
+          entity_type: hosting_site
+          entity_field: platform
+          settings:
+            link_to_entity: true
       sorts:
         created:
           id: created
@@ -102,6 +117,92 @@ display:
           field: created
           order: DESC
           plugin_id: date
+      filters:
+        status:
+          id: status
+          table: hosting_site
+          field: status
+          group_type: group
+          admin_label: ''
+          plugin_id: numeric
+          operator: '!='
+          value:
+            value: '-2'
+          group: 1
+          exposed: false
+          expose:
+            operator_id: ''
+            label: ''
+            description: ''
+            use_operator: false
+            operator: ''
+            operator_limit_selection: false
+            operator_list: {  }
+            identifier: ''
+            required: false
+            remember: false
+            multiple: false
+            remember_roles:
+              authenticated: authenticated
+          is_grouped: false
+          group_info:
+            label: ''
+            description: ''
+            identifier: ''
+            optional: true
+            widget: select
+            multiple: false
+            remember: false
+            default_group: All
+            default_group_multiple: {  }
+            group_items: {  }
+      empty:
+        area_text_custom:
+          id: area_text_custom
+          table: views
+          field: area_text_custom
+          plugin_id: text_custom
+          empty: true
+          content: 'There are no hosting site entities yet.'
+        label:
+          id: label
+          table: hosting_site
+          field: label
+          group_type: group
+          admin_label: ''
+          entity_type: hosting_site
+          entity_field: label
+          plugin_id: string
+          operator: contains
+          value: ''
+          group: 1
+          exposed: true
+          expose:
+            operator_id: label_op
+            label: 'Site'
+            description: ''
+            use_operator: false
+            operator: label_op
+            operator_limit_selection: false
+            operator_list: {  }
+            identifier: label
+            required: false
+            remember: false
+            multiple: false
+            remember_roles:
+              authenticated: authenticated
+          is_grouped: false
+          group_info:
+            label: ''
+            description: ''
+            identifier: ''
+            optional: true
+            widget: select
+            multiple: false
+            remember: false
+            default_group: All
+            default_group_multiple: {  }
+            group_items: {  }
   page_sites:
     display_plugin: page
     id: page_sites
@@ -111,7 +212,7 @@ display:
       access:
         type: perm
         options:
-          perm: 'create site'
+          perm: 'view site'
       path: hosting/sites
       menu:
         type: normal
@@ -124,6 +225,7 @@ display:
     id: block_sites
     display_title: 'Site List Block'
     position: 2
+    display_options: {  }
   block_platform:
     display_plugin: block
     id: block_platform

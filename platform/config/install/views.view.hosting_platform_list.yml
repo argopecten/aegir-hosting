@@ -39,8 +39,9 @@ display:
         type: table
         options:
           row_class: '[status]'
+          empty_table: true
           columns:
-            bulk_form: bulk_form
+            hosting_platform_bulk_form: hosting_platform_bulk_form
             status: status
             title: title
             release: release
@@ -56,14 +57,14 @@ display:
           field: web_server
           plugin_id: standard
       fields:
-        bulk_form:
-          id: bulk_form
+        hosting_platform_bulk_form:
+          id: hosting_platform_bulk_form
           table: hosting_platform
-          field: bulk_form
+          field: hosting_platform_bulk_form
           label: ''
           plugin_id: bulk_form
           entity_type: hosting_platform
-          action_title: Action
+          action_title: Operations
           include_exclude: include
           selected_actions:
             - hosting_platform_verify_action
@@ -135,6 +136,14 @@ display:
           field: label
           order: ASC
           plugin_id: standard
+      empty:
+        area_text_custom:
+          id: area_text_custom
+          table: views
+          field: area_text_custom
+          plugin_id: text_custom
+          empty: true
+          content: 'There are no hosting platform entities yet.'
   page_platforms:
     display_plugin: page
     id: page_platforms

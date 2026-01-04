@@ -78,6 +78,42 @@ function hosting_server_schema() {
   return $schema;
 }
 
+/**
+ * Implements hook_install().
+ */
+function hosting_server_install() {
+  hosting_install_view_configs('hosting_server');
+  hosting_install_form_display_configs('hosting_server');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function hosting_server_uninstall() {
+  \Drupal::configFactory()->getEditable('hosting_server.settings')->delete();
+
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if ($entity_type_manager->hasDefinition('node_type')) {
+    $storage = $entity_type_manager->getStorage('node_type');
+    if ($type = $storage->load('server')) {
+      $type->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('view')) {
+    $storage = $entity_type_manager->getStorage('view');
+    if ($view = $storage->load('hosting_server_list')) {
+      $view->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('entity_form_display')) {
+    $storage = $entity_type_manager->getStorage('entity_form_display');
+    if ($display = $storage->load('hosting_server.hosting_server.default')) {
+      $display->delete();
+    }
+  }
+}
+
+
 
 /**
  * Implements hook_update_N().

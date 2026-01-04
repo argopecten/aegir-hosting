@@ -20,26 +20,6 @@ function _hosting_package_types() {
 }
 
 /**
- * Implements hook_permission().
- */
-function hosting_package_permission() {
-  return array(
-    'create package' => array(
-      'title' => t('create package'),
-    ),
-    'view package' => array(
-      'title' => t('view package'),
-    ),
-    'edit package' => array(
-      'title' => t('edit package'),
-    ),
-    'delete package' => array(
-      'title' => t('delete package'),
-    ),
-  );
-}
-
-/**
  * Return a list of available install profiles.
  *
  * @param null $platform_nid
@@ -265,19 +245,19 @@ function hosting_package_view($node, $view_mode, $langcode = NULL) {
   $node->content['info']['package_type'] = array(
     '#type' => 'item',
     '#title' => t('Package Type'),
-    '#markup' => filter_xss($node->package_type),
+    '#markup' => \Drupal\Component\Utility\Xss::filter($node->package_type),
   );
   $node->content['info']['short_name'] = array(
     '#type' => 'item',
     '#title' => t('Project Name'),
-    '#markup' => filter_xss($node->short_name),
+    '#markup' => \Drupal\Component\Utility\Xss::filter($node->short_name),
   );
 
   if (!empty($node->old_short_name)) {
     $node->content['info']['old_short_name'] = array(
       '#type' => 'item',
       '#title' => t('Previous Project Name'),
-      '#markup' => filter_xss($node->old_short_name),
+      '#markup' => \Drupal\Component\Utility\Xss::filter($node->old_short_name),
     );
   }
   $node->content['info']['#suffix'] = '</div>';
@@ -308,8 +288,7 @@ function _hosting_language_names($languages) {
  */
 function _hosting_language_name($language) {
   $name = $language;
-  include_once DRUPAL_ROOT . '/includes/iso.inc';
-  $locales = _locale_get_predefined_list();
+  $locales = \Drupal\Core\Language\LanguageManager::getStandardLanguageList();
   if (isset($locales[$language])) {
     $name = $locales[$language][0];
     if (isset($locales[$language][1])) {

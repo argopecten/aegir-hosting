@@ -77,7 +77,7 @@ function hosting_site_backup_list($site) {
   $backups = array();
   foreach ($result as $object) {
     #needs to be cleaned up. but i am NOT generating a theme func for this right now.
-    $backups[$object->bid] = '<strong>' . format_date($object->timestamp) . '</strong> - ' . format_size($object->size) . ' - ' . filter_xss($object->description);
+    $backups[$object->bid] = '<strong>' . \Drupal::service('date.formatter')->format($object->timestamp, 'medium') . '</strong> - ' . hosting_format_size($object->size) . ' - ' . \Drupal\Component\Utility\Xss::filter($object->description);
   }
   return $backups;
 }

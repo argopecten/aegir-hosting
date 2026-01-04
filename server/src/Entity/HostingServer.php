@@ -17,6 +17,7 @@ use Drupal\hosting_server\Plugin\Field\HostingServerServicesItemList;
  *   handlers = {
  *     "list_builder" = "Drupal\hosting_server\HostingServerListBuilder",
  *     "access" = "Drupal\hosting_server\HostingServerAccessControlHandler",
+ *     "views_data" = "Drupal\views\EntityViewsData",
  *     "form" = {
  *       "add" = "Drupal\hosting_server\Form\HostingServerForm",
  *       "edit" = "Drupal\hosting_server\Form\HostingServerForm",

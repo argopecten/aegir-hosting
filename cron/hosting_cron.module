@@ -52,7 +52,7 @@ function hosting_cron_queue($count) {
     }
     else {
       $drush_result = provision_backend_invoke($site_name, 'core-status', array('drupal-version'), array('--pipe'));
-      if ($drush_result['error_status'] === DRUSH_SUCCESS) {
+      if ($drush_result['error_status'] === 0) {
         $core_status = json_decode(trim($drush_result['output']), TRUE);
         if (!empty($core_status['drupal-version'])) {
           $version = explode('.', $core_status['drupal-version']);
@@ -72,7 +72,7 @@ function hosting_cron_queue($count) {
           $url .= '?cron_key=' . rawurlencode($site->get('cron_key')->value);
         }
       }
-      drush_log(dt("running cron on URL %url", array('%url' => $url)));
+      hosting_log(t('running cron on URL @url', ['@url' => $url]), 'notice', [], 'hosting_cron');
       $error = '';
       try {
         \Drupal::httpClient()->request('GET', $url, array('timeout' => 30));

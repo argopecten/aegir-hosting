@@ -55,6 +55,9 @@ function hosting_client_schema() {
  * Implements hook_install().
  */
 function hosting_client_install() {
+  hosting_install_view_configs('hosting_client');
+  hosting_install_form_display_configs('hosting_client');
+
   // Add default 'admin' client.
   $insert = \Drupal::database()->insert('hosting_client_user')
     ->fields(array(
@@ -64,4 +67,29 @@ function hosting_client_install() {
     ->execute();
 }
 
+/**
+ * Implements hook_uninstall().
+ */
+function hosting_client_uninstall() {
+  \Drupal::configFactory()->getEditable('hosting_client.settings')->delete();
 
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if ($entity_type_manager->hasDefinition('node_type')) {
+    $storage = $entity_type_manager->getStorage('node_type');
+    if ($type = $storage->load('client')) {
+      $type->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('view')) {
+    $storage = $entity_type_manager->getStorage('view');
+    if ($view = $storage->load('hosting_client_list')) {
+      $view->delete();
+    }
+  }
+  if ($entity_type_manager->hasDefinition('entity_form_display')) {
+    $storage = $entity_type_manager->getStorage('entity_form_display');
+    if ($display = $storage->load('hosting_client.hosting_client.default')) {
+      $display->delete();
+    }
+  }
+}

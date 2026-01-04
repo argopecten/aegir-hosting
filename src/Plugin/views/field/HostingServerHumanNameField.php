@@ -15,7 +15,7 @@ class HostingServerHumanNameField extends FieldPluginBase {
   /**
    * {@inheritdoc}
    */
-  protected $additional_fields = ['label'];
+  public $additional_fields = ['label'];
 
   /**
    * {@inheritdoc}

@@ -324,29 +324,6 @@ function hosting_site_hosting_tasks() {
 }
 
 /**
- * Implements hook_permission().
- */
-function hosting_site_permission() {
-  return array(
-    'create site' => array(
-      'title' => t('create site'),
-    ),
-    'view site' => array(
-      'title' => t('view site'),
-    ),
-    'edit site' => array(
-      'title' => t('edit site'),
-    ),
-    'delete site' => array(
-      'title' => t('delete site'),
-    ),
-    'administer sites' => array(
-      'title' => t('administer sites'),
-    ),
-  );
-}
-
-/**
  * Callback for site backup action.
  *
  * @see: hosting_task_action_info().
@@ -1045,15 +1022,6 @@ function hosting_site_block_view_alter(&$data, $block) {
 
 
 /**
- * Implements hook_action_info_alter().
- */
-function hosting_site_action_info_alter(&$actions) {
-  if (\Drupal::config('hosting.settings')->get('hosting_require_disable_before_delete') ?? TRUE) {
-    unset($actions['hosting_site_delete_action']);
-  }
-}
-
-/**
  * Implements hook_hosting_task_guarded_nodes().
  */
 function hosting_site_hosting_task_guarded_nodes() {
@@ -1626,7 +1594,12 @@ function hosting_site_drush_context_import($context, &$node) {
 
     // Log an error if there is still no profile.
     if (!$profile) {
-      drush_set_error("HOSTING_SITE_IMPORT_ERROR", dt("Could not find the Profile !profile for Platfrom ID !platform", array('!profile' => $context->profile, '!platform' => $node->platform)));
+      $message = t('Could not find the Profile @profile for Platform ID @platform', [
+        '@profile' => $context->profile,
+        '@platform' => $node->platform,
+      ]);
+      hosting_task_set_error('HOSTING_SITE_IMPORT_ERROR', (string) $message);
+      hosting_log($message, 'error', [], 'hosting_site');
     }
     $profile_name = $profile ? $profile->short_name : NULL;
     if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
@@ -1669,7 +1642,7 @@ function hosting_site_post_hosting_install_task($task, $data) {
     $task->ref->save();
 
     if ($context['login_link']) {
-      drush_log($context['login_link']);
+      hosting_log($context['login_link'], 'notice', [], 'hosting_site');
       // we need to store the timestamp too because expire only means it can be deleted
       // after an amount of time, not will be deleted.
       $cache = array(
@@ -1686,9 +1659,9 @@ function hosting_site_post_hosting_install_task($task, $data) {
  */
 function hosting_site_hosting_install_task_rollback($task, $data) {
   // @TODO : we need to check the returned list of errors, not the code.
-  if (drush_cmp_error('PROVISION_DRUPAL_SITE_INSTALLED')) {
+  if (hosting_output_has_error_code($data, 'PROVISION_DRUPAL_SITE_INSTALLED')) {
     // Site has already been installed. Try to import instead.
-    drush_log(dt("This site appears to be installed already. Generating an import task."));
+    hosting_log(t('This site appears to be installed already. Generating an import task.'), 'notice', [], 'hosting_site');
     hosting_add_task($task->get('rid')->value, 'import');
   }
   else {

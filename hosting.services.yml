@@ -1,0 +1,6 @@
+services:
+  _defaults:
+    autoconfigure: true
+
+  hosting.route_subscriber:
+    class: Drupal\hosting\Routing\HostingRouteSubscriber

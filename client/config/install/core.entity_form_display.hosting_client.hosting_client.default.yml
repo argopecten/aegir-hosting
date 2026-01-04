@@ -3,7 +3,7 @@ status: true
 dependencies:
   module:
     - hosting_client
-id: hosting_client.default
+id: hosting_client.hosting_client.default
 targetEntityType: hosting_client
 bundle: hosting_client
 mode: default
@@ -11,27 +11,35 @@ content:
   label:
     type: string_textfield
     weight: -10
+    region: content
     settings:
       size: 60
       placeholder: ''
+    third_party_settings: { }
   organization:
     type: string_textfield
     weight: 0
+    region: content
     settings:
       size: 60
       placeholder: ''
+    third_party_settings: { }
   uname:
     type: hosting_client_uname
     weight: 5
+    region: content
     settings:
       size: 16
       placeholder: ''
+    third_party_settings: { }
   email:
     type: email_default
     weight: 10
+    region: content
     settings:
       size: 60
       placeholder: ''
+    third_party_settings: { }
 hidden:
   created: true
   changed: true

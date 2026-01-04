@@ -55,8 +55,8 @@ function drush_example_provision_install() {
 /**
  * Implementation of drush_hook_provision_install_rollback.
  *
- * All drush invoke hooks allow you to recover if drush_set_error()
- * was set in the previously called hooks.
+ * All invoke hooks allow you to recover if an error was raised
+ * in the previously called hooks.
  *
  * By defining a _rollback variant, you can cleanly handle cases where
  * issues occured, in this case deleting the config file created in the

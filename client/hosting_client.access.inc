@@ -9,7 +9,10 @@
  */
 function hosting_client_user_load($users) {
   foreach ($users as $uid => $user) {
-    $users[$uid]->client_id = hosting_get_client_from_user($user->uid);
+    $account_id = method_exists($user, 'id') ? $user->id() : ($user->uid ?? NULL);
+    if ($account_id !== NULL) {
+      $users[$uid]->client_id = hosting_get_client_from_user((int) $account_id);
+    }
   }
 }
 
@@ -25,23 +28,24 @@ function hosting_client_user_view($account, $view_mode) {
 /**
  * Implements hook_user_presave().
  */
-function hosting_client_user_presave(&$edit, $account, $category) {
-  hosting_client_user_form_submit($edit, $account);
+function hosting_client_user_presave(\Drupal\user\UserInterface $account) {
+  // Relationships are handled by the user form submit handler.
 }
 
 /**
  * Implements hook_user_insert().
  */
-function hosting_client_user_insert(&$edit, $account, $category) {
-  $edit['hosting_client'] = NULL;
+function hosting_client_user_insert(\Drupal\user\UserInterface $account) {
+  // Relationships are handled by the user form submit handler.
 }
 
 /**
  * Implements hook_user_cancel().
  */
 function hosting_client_user_cancel($edit, $account, $method) {
+  $account_id = $account->id();
   \Drupal::database()->delete('hosting_client_user')
-    ->condition('user', $account->uid)
+    ->condition('user', (int) $account_id)
     ->execute();
 }
 
@@ -78,11 +82,14 @@ function hosting_client_view_user($user) {
 function hosting_client_form_user_profile_form_alter(&$form, &$form_state, $form_id) {
   if ($form['#user_category'] == 'account') {
     $user = $form['#user'];
+    $account_id = method_exists($user, 'id') ? $user->id() : ($user->uid ?? NULL);
 
     // In Aegir 3.x the admin account does not have the client_id array and sometimes a normal user
     // is missing it, as well.  If it isn't on the user object, add it.
     if (!is_array($user->client_id)) {
-      $user->client_id = hosting_get_client_from_user($user->uid);
+      if ($account_id !== NULL) {
+        $user->client_id = hosting_get_client_from_user((int) $account_id);
+      }
     }
 
     $clients = array();
@@ -120,6 +127,7 @@ function hosting_client_form_user_profile_form_alter(&$form, &$form_state, $form
     }
     $form['client_edit']['#theme'] = 'hosting_client_user_form';
     $form['#validate'][] = 'hosting_client_user_form_validate';
+    $form['#submit'][] = 'hosting_client_user_form_submit';
   }
 }
 
@@ -159,7 +167,7 @@ function theme_hosting_client_user_form($variables) {
  * @see hosting_client_user()
  */
 function hosting_client_user_form_validate($form, \Drupal\Core\Form\FormStateInterface $form_state) {
-  $client_id = $form_state->getValue('hosting_client');
+  $client_id = $form_state->getValue(['client_edit', 'hosting_client']) ?? $form_state->getValue('hosting_client');
   if ($client_id && (!$client = hosting_get_client($client_id))) {
     $form_state->setErrorByName('hosting_client', 'Please fill in a valid client');
   }
@@ -170,21 +178,45 @@ function hosting_client_user_form_validate($form, \Drupal\Core\Form\FormStateInt
  *
  * @see hosting_client_user()
  */
-function hosting_client_user_form_submit($edit, $user) {
+function hosting_client_user_form_submit($form, $form_state = NULL) {
+  if ($form_state instanceof \Drupal\Core\Form\FormStateInterface) {
+    $edit = [];
+    $clients = $form_state->getValue(['client_edit', 'clients']) ?? $form_state->getValue('clients');
+    if (is_array($clients)) {
+      $edit['clients'] = $clients;
+    }
+    $hosting_client = $form_state->getValue(['client_edit', 'hosting_client']) ?? $form_state->getValue('hosting_client');
+    if ($hosting_client) {
+      $edit['hosting_client'] = $hosting_client;
+    }
+    $user = $form['#user'] ?? ($form_state->getFormObject() ? $form_state->getFormObject()->getEntity() : NULL);
+  }
+  else {
+    $edit = is_array($form) ? $form : [];
+    $user = $form_state;
+  }
+
+  if (!$user instanceof \Drupal\user\UserInterface) {
+    return;
+  }
+  $account_id = $user->id();
   if (array_key_exists('clients', $edit)) {
     foreach ($edit['clients'] as $client) {
-      $query = \Drupal::database()->delete('hosting_client_user')
-        ->condition('user', $user->uid)
+      if (!$client) {
+        continue;
+      }
+      \Drupal::database()->delete('hosting_client_user')
+        ->condition('user', (int) $account_id)
         ->condition('client', $client)
         ->execute();
     }
   }
-  if (array_key_exists('hosting_client', $edit) && $edit['hosting_client']) {
+  if (!empty($edit['hosting_client'])) {
     $client = hosting_get_client($edit['hosting_client']);
-    $query = $id = \Drupal::database()->insert('hosting_client_user')
+    \Drupal::database()->insert('hosting_client_user')
       ->fields(array(
         'client' => hosting_entity_id($client),
-        'user' => $user->uid,
+        'user' => (int) $account_id,
         'contact_type' => '',
       ))
       ->execute();

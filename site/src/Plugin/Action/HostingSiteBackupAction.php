@@ -8,7 +8,7 @@ namespace Drupal\hosting_site\Plugin\Action;
  * @Action(
  *   id = "hosting_site_backup_action",
  *   label = @Translation("Backup site"),
- *   type = "node"
+ *   type = "hosting_site"
  * )
  */
 class HostingSiteBackupAction extends HostingSiteActionBase {

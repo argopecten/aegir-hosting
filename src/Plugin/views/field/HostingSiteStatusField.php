@@ -14,7 +14,7 @@ class HostingSiteStatusField extends HostingStatusFieldBase {
   /**
    * {@inheritdoc}
    */
-  protected $additional_fields = ['verified'];
+  public $additional_fields = ['verified'];
 
   /**
    * {@inheritdoc}

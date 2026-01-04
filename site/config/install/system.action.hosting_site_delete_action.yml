@@ -1,0 +1,10 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+id: hosting_site_delete_action
+label: 'Delete site'
+type: hosting_site
+plugin: hosting_site_delete_action
+configuration: {  }

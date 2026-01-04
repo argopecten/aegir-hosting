@@ -8,7 +8,7 @@ namespace Drupal\hosting_platform\Plugin\Action;
  * @Action(
  *   id = "hosting_platform_unlock_action",
  *   label = @Translation("Unlock platform"),
- *   type = "node"
+ *   type = "hosting_platform"
  * )
  */
 class HostingPlatformUnlockAction extends HostingPlatformActionBase {

@@ -8,7 +8,7 @@ namespace Drupal\hosting_site\Plugin\Action;
  * @Action(
  *   id = "hosting_site_enable_action",
  *   label = @Translation("Enable site"),
- *   type = "node"
+ *   type = "hosting_site"
  * )
  */
 class HostingSiteEnableAction extends HostingSiteActionBase {

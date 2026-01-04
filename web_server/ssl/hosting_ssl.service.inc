@@ -60,7 +60,7 @@ class hostingService_http_ssl extends hostingService_http_public {
     $render['ssl_port'] = array(
       '#type' => 'item',
       '#title' => t('SSL Port'),
-      '#markup' => filter_xss($this->ssl_port),
+      '#markup' => \Drupal\Component\Utility\Xss::filter($this->ssl_port),
     );
   }
 

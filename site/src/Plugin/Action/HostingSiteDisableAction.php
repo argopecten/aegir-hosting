@@ -8,7 +8,7 @@ namespace Drupal\hosting_site\Plugin\Action;
  * @Action(
  *   id = "hosting_site_disable_action",
  *   label = @Translation("Disable site"),
- *   type = "node"
+ *   type = "hosting_site"
  * )
  */
 class HostingSiteDisableAction extends HostingSiteActionBase {

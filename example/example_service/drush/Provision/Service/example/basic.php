@@ -126,7 +126,7 @@ class Provision_Service_example_basic extends Provision_Service_example {
     parent::verify();
     if ($this->context->type == 'server') {
       // Create the configuration file directory.
-      provision_file()->create_dir($this->server->example_config_path, dt("Example configuration"), 0700);
+      provision_file()->create_dir($this->server->example_config_path, "Example configuration", 0700);
       // Sync the directory to the remote server if needed.
       $this->sync($this->server->example_config_path);
     }

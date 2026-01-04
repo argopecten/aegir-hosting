@@ -1,0 +1,10 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+id: hosting_site_backup_action
+label: 'Backup site'
+type: hosting_site
+plugin: hosting_site_backup_action
+configuration: {  }

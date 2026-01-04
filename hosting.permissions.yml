@@ -1,0 +1,18 @@
+access hosting wizard:
+  title: 'access hosting wizard'
+  description: "TODO Remove 'access hosting wizard', as it is not checked anywhere."
+administer hosting queues:
+  title: 'administer hosting queues'
+  description: 'Configure the frequency that cron, backup and task events are process.'
+administer hosting features:
+  title: 'administer hosting features'
+  description: 'Configure the exposed functionality of the hosting system.'
+administer hosting:
+  title: 'administer hosting'
+  description: 'Configure and manage the hosting system.'
+access disabled sites:
+  title: 'access disabled sites'
+  description: 'Access disabled sites.'
+administer hosting settings:
+  title: 'administer hosting settings'
+  description: 'Configure general hosting settings.'

@@ -224,7 +224,7 @@ function hosting_ssl_get_ip($cid) {
  * @see http://drupal.org/node/1354
  */
 function hosting_ssl_output_key($cid) {
-  return filter_xss(hosting_ssl_get_key($cid));
+  return \Drupal\Component\Utility\Xss::filter(hosting_ssl_get_key($cid));
 }
 
 /**

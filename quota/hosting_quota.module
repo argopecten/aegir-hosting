@@ -5,29 +5,15 @@
  */
 
 /**
- * Implements hook_permission().
+ * Provide dynamic quota permissions.
  */
-function hosting_quota_permission() {
-  $permissions = array(
-    'edit all quotas' => array(
-      'title' => t('edit all quotas'),
-    ),
-    'view all quotas' => array(
-      'title' => t('view all quotas'),
-    ),
-    'view own quota' => array(
-      'title' => t('view own quota'),
-    ),
-    'bypass all quotas' => array(
-      'title' => t('bypass all quotas'),
-    ),
-  );
-  $all_resources = module_invoke_all('hosting_quota_resource');
+function hosting_quota_permissions() {
+  $permissions = [];
+  $all_resources = \Drupal::moduleHandler()->invokeAll('hosting_quota_resource');
   foreach ($all_resources as $resource => $data) {
-    $permissions["bypass resource $resource limit"] = array(
-      'title' => t('bypass resource !resource limit',
-        array('!resource' => $resource)),
-    );
+    $permissions["bypass resource $resource limit"] = [
+      'title' => t('bypass resource @resource limit', ['@resource' => $resource]),
+    ];
   }
   return $permissions;
 }
@@ -43,7 +29,7 @@ function hosting_quota_permission() {
  *   A multidimensional array containing the resource, or false if the provided resource does not validate
  */
 function hosting_quota_get($resource) {
-  $all_resources = module_invoke_all('hosting_quota_resource');
+  $all_resources = \Drupal::moduleHandler()->invokeAll('hosting_quota_resource');
 
   if (in_array($resource, array_keys($all_resources))) {
     return $all_resources[$resource];
@@ -96,7 +82,7 @@ function hosting_quota_get_usage($client, $resource, $start = NULL, $end = NULL)
   $resource = $resource[$resource_name];
   // We're finally ready to fetch the usage info!
   if ($resource['module']) {
-    $quota_usage = module_invoke($resource['module'], 'hosting_quota_get_usage', $client, $resource_name, $start, $end);
+    $quota_usage = \Drupal::moduleHandler()->invoke($resource['module'], 'hosting_quota_get_usage', [$client, $resource_name, $start, $end]);
   }
 
   return $quota_usage;
@@ -120,7 +106,7 @@ function hosting_quota_resource_render($resource, $usage) {
   $resource_name = key($resource);
   $resource = $resource[$resource_name];
   if ($resource['module']) {
-    $rendered_usage = module_invoke($resource['module'], 'hosting_quota_resource_render', $resource_name, $usage);
+    $rendered_usage = \Drupal::moduleHandler()->invoke($resource['module'], 'hosting_quota_resource_render', [$resource_name, $usage]);
   }
 
   return $rendered_usage;
@@ -191,7 +177,7 @@ function hosting_quota_check($client, $resource, $start = NULL, $end = NULL) {
     if (\Drupal::currentUser()->hasPermission("bypass resource $resource_name limit")) {
       return TRUE;
     }
-    $resource_usage = module_invoke($resource['module'], 'hosting_quota_get_usage', $client, $resource_name, $start, $end);
+    $resource_usage = \Drupal::moduleHandler()->invoke($resource['module'], 'hosting_quota_get_usage', [$client, $resource_name, $start, $end]);
     $resource_limit = \Drupal::database()->query('SELECT value FROM {hosting_client_quota} WHERE client = :client AND resource = :resource', array(':client' => $client, ':resource' => $resource_name))->fetchField();
     // Return the appropriate values
     if ($resource_limit > $resource_usage) {
@@ -233,7 +219,7 @@ function hosting_quota_get_all_info($client, $start = NULL, $end = NULL) {
       $start = date('Y-m-d', mktime(0, 0, 0, date("m") -1, 1,    date("Y")));
     }
 
-    $all_resources = module_invoke_all('hosting_quota_resource');
+    $all_resources = \Drupal::moduleHandler()->invokeAll('hosting_quota_resource');
 
     foreach ($all_resources as $resource_name => $resource_data) {
 
@@ -337,7 +323,7 @@ function hosting_quota_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $
     $config = \Drupal::config('hosting_quota.settings');
 
     if (!isset($entity->quota)) {
-      $quota_info = module_invoke_all('hosting_quota_resource');
+      $quota_info = \Drupal::moduleHandler()->invokeAll('hosting_quota_resource');
     }
     else{
       $quota_info = $entity->quota;
