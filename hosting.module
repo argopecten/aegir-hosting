@@ -291,38 +291,6 @@ function hosting_site_maintenance() {
   return t("This site is currently in maintenance. Check back later.");
 }
 
-
-/**
- * Implements hook_init().
- */
-function hosting_init() {
-  static $already_called = FALSE;
-  if ($already_called) {
-    return;
-  }
-  $already_called = TRUE;
-
-  // Definitions for the default platforms, clients etc.
-  // Done to avoid using 'magic numbers'
-  $config = \Drupal::config('hosting.settings');
-  define('HOSTING_DEFAULT_CLIENT', (int) ($config->get('hosting_default_client') ?? 1));
-  define('HOSTING_DEFAULT_DB_SERVER', (int) ($config->get('hosting_default_db_server') ?? 4));
-  define('HOSTING_DEFAULT_WEB_SERVER', (int) ($config->get('hosting_default_web_server') ?? 3));
-
-  // This client has access to everything, see hosting_client.access.inc
-  define('HOSTING_ADMIN_CLIENT', (int) ($config->get('hosting_admin_client') ?? 1));
-
-  define('HOSTING_OWN_DB_SERVER', (int) ($config->get('hosting_own_db_server') ?? 2));
-  define('HOSTING_OWN_WEB_SERVER', (int) ($config->get('hosting_own_web_server') ?? 3));
-  define('HOSTING_OWN_PLATFORM', (int) ($config->get('hosting_own_platform') ?? 6));
-
-  // Find the base URL, this is used by the initial 'hosting-setup' Drush
-  // command. This gets defined in the bootstrap, so just using the global
-  // definition.
-  define('HOSTING_DEFAULT_BASE_URL', $GLOBALS['base_url']);
-
-}
-
 /**
  * Implements hook_page_attachments().
  */
@@ -384,73 +352,6 @@ function _hosting_node_link($entity_or_id, $title = NULL) {
     return $entity->access('view') ? \Drupal\Core\Link::fromTextAndUrl($title, $entity->toUrl('canonical'))->toString() : $title;
   }
   return $title;
-}
-
-/**
- * Implements hook_block_info().
- */
-function hosting_block_info() {
-  $blocks['hosting_summary'] = array(
-    'info' => t('Hosting summary'),
-    'enabled' => 1,
-    'status' => 1,
-    'region' => 'sidebar_second',
-    'weight' => 10,
-  );
-  $blocks['hosting_queues'] = array(
-    'info' => t('Hosting queues'),
-    'enabled' => 1,
-    'status' => 1,
-    'region' => 'sidebar_first',
-    'weight' => 0,
-  );
-  $blocks['hosting_queues_summary'] = array(
-    'info' => t('Hosting queues summary'),
-    'enabled' => 1,
-    'status' => 1,
-    'region' => 'sidebar_first',
-    'weight' => 1,
-    'cache' => 'BLOCK_NO_CACHE',
-  );
-  $blocks['hosting_supporting_aegir'] = array(
-    'info' => t('Support Aegir'),
-    'enabled' => 1,
-    'status' => 1,
-    'region' => 'sidebar_second',
-    'weight' => 1,
-  );
-  return $blocks;
-}
-
-/**
- * Implements hook_block_view().
- */
-function hosting_block_view($delta) {
-  $out = NULL;
-  switch ($delta) {
-    case 'hosting_queues':
-      $out = array(
-        'title' => t('Queues'),
-        'content' => hosting_queue_block(),
-      );
-      break;
-
-    case 'hosting_queues_summary':
-      $out = array(
-        'title' => t('Queues summary'),
-        'content' => hosting_queue_summary_block(),
-      );
-      break;
-
-    case 'hosting_supporting_aegir':
-      $out = array(
-        'title' => t('Support Aegir'),
-        'content' => hosting_supporting_aegir_block(),
-      );
-      break;
-  }
-  return $out;
-  // @todo where is 'hosting_summary'?
 }
 
 /**

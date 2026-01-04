@@ -39,13 +39,13 @@ function hosting_site_theme($existing, $type, $theme, $path) {
   $items = array();
 
   $items['hosting_site_profile'] = array(
-    'arguments' => array(
+    'variables' => array(
       'profile' => NULL,
       'html' => FALSE,
     ),
   );
   $items['hosting_site_goto_link'] = array(
-    'arguments' => array(
+    'variables' => array(
       'title' => NULL,
       'url' => NULL,
     ),
