@@ -484,7 +484,7 @@ function hosting_feature_rebuild_caches($features = array()) {
   \Drupal::service('plugin.manager.menu.link')->rebuild();
 
   // Record enabled features in the Hosting features registry (in
-  // /var/aegir/.drush/drushrc.php)
+  // /var/aegir/.drush/drush.yml)
 
   // Allow scripts to skip automatic verify tasks by passing '--no-verify'
   if (hosting_get_cli_option('no-verify', FALSE)) {

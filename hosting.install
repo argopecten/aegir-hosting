@@ -37,25 +37,25 @@ function hosting_uninstall() {
  * Implements hook_schema().
  */
 function hosting_schema() {
-  $schema['hosting_context'] = array(
-    'fields' => array(
-      'entity_id' => array(
+  $schema['hosting_context'] = [
+    'fields' => [
+      'entity_id' => [
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
         'default' => 0,
-      ),
-      'name' => array(
+      ],
+      'name' => [
         'type' => 'varchar',
         'length' => HOSTING_MAX_ALIAS_LENGTH,
         'not null' => TRUE,
-      ),
-    ),
-    'primary key' => array('entity_id'),
-    'unique keys' => array(
-      'name' => array('name'),
-    ),
-  );
+      ],
+    ],
+    'primary key' => ['entity_id'],
+    'unique keys' => [
+      'name' => ['name'],
+    ],
+  ];
   return $schema;
 }
 
@@ -66,7 +66,7 @@ function hosting_install() {
   hosting_create_roles();
 
   \Drupal::configFactory()->getEditable('system.logging')
-    ->set('error_level', ERROR_REPORTING_HIDE)
+    ->set('error_level', 'hide')
     ->save();
 
   hosting_install_hostmaster_site();
@@ -113,12 +113,12 @@ function hosting_install_hostmaster_site() {
 
   if (!$hostmaster_id) {
     $label = hosting_install_hostmaster_label();
-    $values = array(
+    $values = [
       'label' => $label,
       'hosting_name' => 'hostmaster',
       'status' => 1,
       'profile' => 'hostmaster',
-    );
+    ];
 
     $config = \Drupal::config('hosting.settings');
     $client_id = (int) $config->get('hosting_admin_client');
