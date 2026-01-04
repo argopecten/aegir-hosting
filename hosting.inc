@@ -72,7 +72,8 @@ function _hosting_valid_fqdn_wildcard($fqdn) {
  * @see format_interval()
  */
 function hosting_format_interval($ts) {
-  if ($ts == REQUEST_TIME) {
+  $request_time = \Drupal::time()->getRequestTime();
+  if ($ts == $request_time) {
     return t('Now');
   }
   if ($ts <= 1) {
@@ -80,7 +81,7 @@ function hosting_format_interval($ts) {
     return t('Never');
   }
 
-  return t("@interval ago", array("@interval" => \Drupal::service('date.formatter')->formatInterval(REQUEST_TIME - $ts, 1)));
+  return t("@interval ago", array("@interval" => \Drupal::service('date.formatter')->formatInterval($request_time - $ts, 1)));
 }
 
 /**

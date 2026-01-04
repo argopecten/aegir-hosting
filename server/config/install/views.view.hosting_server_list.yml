@@ -61,9 +61,7 @@ display:
           label: Name
           plugin_id: hosting_server_human_name
           alter:
-            make_link: true
-            path: 'hosting/server/[id]'
-            alt: '[label]'
+            make_link: false
         services:
           id: services
           table: hosting_server

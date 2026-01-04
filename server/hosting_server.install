@@ -84,6 +84,9 @@ function hosting_server_schema() {
 function hosting_server_install() {
   hosting_install_view_configs('hosting_server');
   hosting_install_form_display_configs('hosting_server');
+  if (function_exists('hosting_server_create_localhost_split_servers')) {
+    hosting_server_create_localhost_split_servers();
+  }
 }
 
 /**

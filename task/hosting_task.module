@@ -1589,7 +1589,7 @@ function hosting_task_table($node) {
 
     $actions['log'] = _hosting_task_button(t('View'), isset($info['id']) ? 'hosting/task/' . $info['id'] : '<front>', t("Display the task log"), 'hosting-button-log', isset($info['id']) &&  \Drupal::currentUser()->hasPermission('access task logs'), TRUE, FALSE);
     $row['actions'] = array(
-      'data' => implode('', $actions),
+      'data' => \Drupal\Core\Render\Markup::create(implode('', $actions)),
       'class' => array('hosting-actions'),
     );
 
@@ -1599,7 +1599,12 @@ function hosting_task_table($node) {
     );
   }
   $build['table'] = array(
-    '#markup' => \Drupal::service('theme.manager')->render('table', array('header' => $headers, 'rows' => $rows, 'attributes' => array('class' => array('hosting-table')))),
+    '#type' => 'table',
+    '#header' => $headers,
+    '#rows' => $rows,
+    '#attributes' => array(
+      'class' => array('hosting-table'),
+    ),
   );
 
   if ($entity_type_id && $entity_id) {

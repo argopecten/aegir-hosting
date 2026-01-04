@@ -264,6 +264,19 @@ function hook_hosting_client_delete(\Drupal\Core\Entity\EntityInterface $entity)
 }
 
 /**
+ * Act after the hostmaster site has been installed and registered.
+ *
+ * This hook runs once after the hostmaster site exists. It is invoked during
+ * hosting module install.
+ *
+ * @param \Drupal\Core\Entity\EntityInterface $hostmaster
+ *   The hostmaster hosting_site entity.
+ */
+function hook_hosting_post_install(\Drupal\Core\Entity\EntityInterface $hostmaster) {
+  // Example: create a default server or seed config based on hostmaster.
+}
+
+/**
  * Perform actions when a task has completed succesfully.
  *
  * Replace TASK_TYPE with the type of task that if completed you will be

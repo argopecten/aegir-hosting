@@ -18,9 +18,6 @@ class HostingServerAccessControlHandler extends EntityAccessControlHandler {
   protected function checkAccess(EntityInterface $entity, $operation, AccountInterface $account) {
     $use_client_access = \Drupal::config('hosting_server.settings')
       ->get('hosting_server_use_hosting_client_access') ?? TRUE;
-    if ($use_client_access && hosting_feature('client') && $operation !== 'create') {
-      return AccessResult::neutral();
-    }
 
     if ($account->hasPermission('administer servers')) {
       return AccessResult::allowed()->cachePerPermissions();
@@ -35,6 +32,10 @@ class HostingServerAccessControlHandler extends EntityAccessControlHandler {
 
       case 'delete':
         return AccessResult::allowedIfHasPermission($account, 'delete server');
+    }
+
+    if ($use_client_access && hosting_feature('client') && $operation !== 'create') {
+      return AccessResult::neutral();
     }
 
     return AccessResult::neutral();

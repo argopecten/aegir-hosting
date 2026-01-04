@@ -41,6 +41,45 @@ class HostingServerServicesField extends FieldPluginBase {
       $types[$record->service] = $record->type ?: 'yes';
     }
 
+    $label = trim((string) $this->label());
+    if ($label !== '' && str_contains($label, ',')) {
+      $labels = array_map('trim', explode(',', $label));
+      $http_type = $types['http'] ?? '';
+      $has_ssl = $http_type && str_contains($http_type, 'ssl');
+      if (!$has_ssl) {
+        $has_ssl = (bool) \Drupal::database()->select('hosting_ssl_server', 'ssl')
+          ->fields('ssl', ['server_id'])
+          ->condition('server_id', $server_id)
+          ->range(0, 1)
+          ->execute()
+          ->fetchField();
+      }
+
+      $ordered = [];
+      foreach ($labels as $label_text) {
+        $key = strtolower($label_text);
+        if (str_contains($key, 'database')) {
+          $ordered[] = $types['db'] ?? 'no';
+          continue;
+        }
+        if (str_contains($key, 'web')) {
+          $ordered[] = $types['http'] ?? 'no';
+          continue;
+        }
+        if (str_contains($key, 'certificate') || str_contains($key, 'ssl')) {
+          $ordered[] = $has_ssl ? ($http_type ?: 'yes') : 'no';
+          continue;
+        }
+        if (str_contains($key, 'remote')) {
+          $ordered[] = $types['remote'] ?? 'no';
+          continue;
+        }
+        $ordered[] = 'no';
+      }
+
+      return implode(',', $ordered);
+    }
+
     return implode(',', $types);
   }
 

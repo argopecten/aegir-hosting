@@ -4,6 +4,10 @@
  * Define Hosting service class for SSL.
  */
 
+if (!class_exists('hostingService_http_public')) {
+  \Drupal::moduleHandler()->loadInclude('hosting_web_server', 'service.inc');
+}
+
 class hostingService_http_ssl extends hostingService_http_public {
 
   function load() {

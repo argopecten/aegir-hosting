@@ -230,6 +230,26 @@ final class HostingCommands extends DrushCommands {
   }
 
   /**
+   * Create a default local hosting server entity when none exist.
+   */
+  #[Drush\Command(name: 'hosting:server-localhost', aliases: ['hosting-server-localhost'])]
+  #[Drush\Bootstrap(level: DrupalBootLevels::FULL)]
+  public function createLocalhostServer(): void {
+    if (!function_exists('hosting_server_create_localhost_split_servers')) {
+      $this->logger()->error('Hosting server helpers are unavailable.');
+      return;
+    }
+
+    $server_ids = hosting_server_create_localhost_split_servers();
+    if ($server_ids) {
+      $this->logger()->notice('Created local hosting server entities: @ids.', ['@ids' => implode(', ', $server_ids)]);
+    }
+    else {
+      $this->logger()->notice('No hosting server entity changes were needed.');
+    }
+  }
+
+  /**
    * Set up initial configuration settings.
    */
   #[Drush\Command(name: 'hosting:setup', aliases: ['hosting-setup'])]

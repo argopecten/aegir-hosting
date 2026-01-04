@@ -70,11 +70,8 @@ function _hosting_server_status_codes_labels() {
 function _hosting_server_status($status) {
   static $labels;
   $labels = _hosting_server_status_codes();
-  if (is_object($status)) {
-    $value = $status->server_status ?? $status->status ?? HOSTING_SERVER_QUEUED;
-    return $labels[$value]['label'];
-  }
-  return $labels[$status]['label'];
+  $value = _hosting_server_status_value($status);
+  return $labels[$value]['label'];
 }
 
 /**
@@ -83,11 +80,36 @@ function _hosting_server_status($status) {
 function _hosting_server_list_class($status) {
   static $labels;
   $labels = _hosting_server_status_codes();
+  $value = _hosting_server_status_value($status);
+  return $labels[$value]['class'];
+}
+
+/**
+ * Normalize hosting server status values.
+ */
+function _hosting_server_status_value($status) {
+  if ($status instanceof \Drupal\Core\Entity\EntityInterface) {
+    if ($status->hasField('server_status') && !$status->get('server_status')->isEmpty()) {
+      return (int) $status->get('server_status')->value;
+    }
+    if ($status->hasField('status') && !$status->get('status')->isEmpty()) {
+      return (int) $status->get('status')->value;
+    }
+  }
+
+  if ($status instanceof \Drupal\Core\Field\FieldItemListInterface) {
+    return (int) ($status->value ?? HOSTING_SERVER_QUEUED);
+  }
+
   if (is_object($status)) {
     $value = $status->server_status ?? $status->status ?? HOSTING_SERVER_QUEUED;
-    return $labels[$value]['class'];
+    if ($value instanceof \Drupal\Core\Field\FieldItemListInterface) {
+      return (int) ($value->value ?? HOSTING_SERVER_QUEUED);
+    }
+    return is_numeric($value) ? (int) $value : HOSTING_SERVER_QUEUED;
   }
-  return $labels[$status]['class'];
+
+  return is_numeric($status) ? (int) $status : HOSTING_SERVER_QUEUED;
 }
 
 /**
@@ -140,6 +162,191 @@ function hosting_server_services() {
   }
 
   return $services;
+}
+
+/**
+ * Implements hook_hosting_post_install().
+ */
+function hosting_server_hosting_post_install(\Drupal\Core\Entity\EntityInterface $hostmaster) {
+  hosting_server_create_localhost_split_servers();
+}
+
+/**
+ * Create default local servers for database and web services.
+ *
+ * @return int[]
+ *   The created server IDs.
+ */
+function hosting_server_create_localhost_split_servers() {
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_server');
+  $services = hosting_server_services();
+  $host = hosting_server_default_hostname();
+  $created = [];
+
+  $existing_ids = $storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('label', $host)
+    ->execute();
+  $existing_services = [];
+  $server_services = [];
+  if ($existing_ids) {
+    $rows = \Drupal::database()->query(
+      'SELECT server_id, service FROM {hosting_service} WHERE server_id IN (:ids[]) AND available = :available',
+      [
+        ':ids[]' => $existing_ids,
+        ':available' => 1,
+      ]
+    )->fetchAll();
+    foreach ($rows as $row) {
+      $service = (string) $row->service;
+      $server_id = (int) $row->server_id;
+      $existing_services[$service] = TRUE;
+      $server_services[$server_id][$service] = TRUE;
+    }
+  }
+
+  if (count($server_services) === 1) {
+    $server_id = (int) array_key_first($server_services);
+    if (!empty($server_services[$server_id]['db']) && !empty($server_services[$server_id]['http'])) {
+      \Drupal::database()->delete('hosting_service')
+        ->condition('server_id', $server_id)
+        ->condition('service', 'http')
+        ->execute();
+      unset($existing_services['http']);
+      if ($existing = $storage->load($server_id)) {
+        $existing->set('human_name', $host . ' (Database)');
+        $existing->save();
+      }
+    }
+  }
+
+  $db_type = hosting_server_select_service_type($services, 'db', ['mysql']);
+  if ($db_type && empty($existing_services['db'])) {
+    $values = [
+      'label' => $host,
+      'human_name' => $host . ' (Database)',
+      'status' => 1,
+    ];
+    $server = $storage->create($values);
+    if ($server->hasField('hosting_name')) {
+      $server->set('hosting_name', hosting_server_default_alias($host, 'db'));
+    }
+    hosting_server_assign_service($server, 'db', $db_type);
+    $server->save();
+    $created[] = (int) $server->id();
+  }
+
+  $http_type = hosting_server_select_service_type($services, 'http', ['apache_ssl', 'nginx_ssl', 'apache', 'nginx']);
+  if ($http_type && empty($existing_services['http'])) {
+    $label_suffix = str_contains($http_type, 'ssl') ? ' (Web + SSL)' : ' (Web)';
+    $values = [
+      'label' => $host,
+      'human_name' => $host . $label_suffix,
+      'status' => 1,
+    ];
+    $server = $storage->create($values);
+    if ($server->hasField('hosting_name')) {
+      $server->set('hosting_name', hosting_server_default_alias($host, 'web'));
+    }
+    hosting_server_assign_service($server, 'http', $http_type);
+    $server->save();
+    $created[] = (int) $server->id();
+  }
+
+  return $created;
+}
+
+/**
+ * Pick a default service type for a service group.
+ */
+function hosting_server_select_service_type(array $services, $service_name, array $preferred = []) {
+  if (empty($services[$service_name]['types'])) {
+    return NULL;
+  }
+
+  foreach ($preferred as $candidate) {
+    if (isset($services[$service_name]['types'][$candidate])) {
+      return $candidate;
+    }
+  }
+
+  $types = array_keys($services[$service_name]['types']);
+  return $types ? $types[0] : NULL;
+}
+
+/**
+ * Set a service selection on a server entity before save.
+ */
+function hosting_server_assign_service(\Drupal\Core\Entity\EntityInterface $server, $service, $type) {
+  $values = hosting_server_default_service_values($server, $service, $type);
+  $server->services = $server->services ?? [];
+  $server->services[$service] = [
+    'type' => $type,
+    $type => $values,
+  ];
+}
+
+/**
+ * Provide default values for a service entry.
+ */
+function hosting_server_default_service_values(\Drupal\Core\Entity\EntityInterface $server, $service, $type) {
+  $values = [];
+  $service_object = hosting_services_new_object($service, $type, $server);
+  if ($service_object) {
+    if ($service_object->has_port()) {
+      $values['port'] = $service_object->default_port();
+    }
+    if ($service_object->has_restart_cmd()) {
+      $values['restart_cmd'] = $service_object->default_restart_cmd();
+    }
+    if (property_exists($service_object, 'ssl_port') && !isset($values['ssl_port'])) {
+      $values['ssl_port'] = 443;
+    }
+  }
+  return $values;
+}
+
+/**
+ * Determine a default hostname for the local server.
+ */
+function hosting_server_default_hostname() {
+  $host = '';
+  try {
+    $request = \Drupal::request();
+    if ($request) {
+      $host = $request->getHost();
+    }
+  }
+  catch (\Exception $e) {
+    $host = '';
+  }
+
+  $host = trim((string) $host);
+  if ($host === '' || $host === 'default') {
+    $host = function_exists('gethostname') ? gethostname() : '';
+  }
+  $host = trim((string) $host);
+  if ($host === '') {
+    $host = 'localhost';
+  }
+
+  return $host;
+}
+
+/**
+ * Build a default hosting alias name for the server.
+ */
+function hosting_server_default_alias($host, $suffix = NULL) {
+  $alias = preg_replace('/[^a-z0-9_]+/i', '_', (string) $host);
+  $alias = trim($alias, '_');
+  if ($alias === '') {
+    $alias = 'server';
+  }
+  $prefix = 'server_' . $alias;
+  if ($suffix) {
+    $prefix .= '_' . preg_replace('/[^a-z0-9_]+/i', '_', (string) $suffix);
+  }
+  return $prefix;
 }
 
 /**
@@ -215,6 +422,7 @@ function hosting_server_service_objects($server, $reset = FALSE) {
       foreach ($result as $record) {
         $name = $record->service;
         if ($service_object = hosting_services_new_object($name, $record->type, $server)) {
+          $service_object->load();
           $services[$name] = $service_object;
         }
       }
@@ -330,10 +538,6 @@ function hosting_server_apply_form_overrides(array &$form, &$form_state, $node) 
     $form['actions']['delete']['#type'] = 'hidden';
   }
 
-  $form['services'] = $form['services'] ?? array();
-  $form['services']['#weight'] = $form['services']['#weight'] ?? 5;
-  $form['services']['#tree'] = TRUE;
-
   $active_services = hosting_server_service_objects($node);
 
   $form['ips_wrapper'] = array(
@@ -375,13 +579,17 @@ function hosting_server_apply_form_overrides(array &$form, &$form_state, $node) 
 
   $form['services_tabs'] = array(
     '#type' => 'vertical_tabs',
+    '#weight' => 5,
   );
   foreach (hosting_server_services() as $name => $service) {
-    $form['services'][$name] = array(
-      '#type' => 'fieldset',
+    $service_key = 'service_' . $name;
+    $form[$service_key] = array(
+      '#type' => 'details',
       '#group' => 'services_tabs',
       '#title' => \Drupal\Component\Utility\Html::escape($service['title']),
       '#weight' => isset($service['weight']) ? $service['weight'] : 0,
+      '#tree' => TRUE,
+      '#parents' => array('services', $name),
     );
     if (array_key_exists('types', $service)) {
       $options = array(
@@ -392,7 +600,7 @@ function hosting_server_apply_form_overrides(array &$form, &$form_state, $node) 
         $options[$type] = $service_objects[$name][$type]->getName();
       }
 
-      $form['services'][$name]['type'] = array(
+      $form[$service_key]['type'] = array(
         '#type' => 'radios',
         '#weight' => -99,
         '#options' => $options,
@@ -400,7 +608,7 @@ function hosting_server_apply_form_overrides(array &$form, &$form_state, $node) 
       );
 
       foreach ($service['types'] as $type => $class) {
-        $form['services'][$name][$type] = array(
+        $form[$service_key][$type] = array(
           '#states' => array(
             'visible' => array(
               ":input[name='services[{$name}][type]']" => array('value' => $type),
@@ -409,11 +617,11 @@ function hosting_server_apply_form_overrides(array &$form, &$form_state, $node) 
           '#type' => 'container',
         );
         if (isset($active_services[$name]) && $active_services[$name]->type === $type) {
-          $active_services[$name]->form($form['services'][$name][$type]);
+          $active_services[$name]->form($form[$service_key][$type]);
         }
         else {
           $service_object = $service_objects[$name][$type];
-          $service_object->form($form['services'][$name][$type]);
+          $service_object->form($form[$service_key][$type]);
         }
       }
     }
@@ -447,6 +655,43 @@ function hosting_server_form_error_name(array $form, $field_name, array $value_k
 }
 
 /**
+ * Extract selected service names from a server form submission.
+ */
+function hosting_server_selected_services($node) {
+  if (!isset($node->services) || !is_array($node->services)) {
+    return [];
+  }
+
+  $selected = [];
+  foreach ($node->services as $service => $values) {
+    if (isset($values['type']) && $values['type'] !== 'null') {
+      $selected[] = $service;
+    }
+  }
+
+  return $selected;
+}
+
+/**
+ * Check if selected services overlap with existing servers.
+ */
+function hosting_server_services_overlap(array $selected_services, array $server_ids) {
+  if (!$selected_services || !$server_ids) {
+    return TRUE;
+  }
+
+  $existing = \Drupal::database()->query(
+    'SELECT DISTINCT service FROM {hosting_service} WHERE server_id IN (:ids[]) AND available = :available',
+    [
+      ':ids[]' => $server_ids,
+      ':available' => 1,
+    ]
+  )->fetchCol();
+
+  return (bool) array_intersect($selected_services, $existing);
+}
+
+/**
  * Implements hook_ENTITY_TYPE_presave().
  *
  * We notice the operator if no IP was given. We do not set any to allow
@@ -474,22 +719,26 @@ function hosting_server_validate(&$node, &$form, \Drupal\Core\Form\FormStateInte
   if ($node->op != t('Delete')) {
     // Make sure the server name is unique, to avoid context clashes.
     $server_id = hosting_entity_id($node);
-    $result = \Drupal::database()->query("SELECT label AS name
+    $duplicates = \Drupal::database()->query("SELECT id
                           FROM {hosting_server}
                          WHERE label = :title
                            AND id <> :id
                            AND status >= :status",
-      array(
+      [
         ':title' => hosting_entity_label($node),
         ':id' => $server_id ?: 0,
         ':status' => HOSTING_SERVER_LOCKED,
-      )
-    )->fetchField();
-    if ($result) {
-      $form_state->setErrorByName(hosting_server_form_error_name($form, 'label', array('value')),
-        t('The hostname `%name` is already in use. Server names must be unique.',
-        array('%name' => $result))
-      );
+      ]
+    )->fetchCol();
+    if ($duplicates) {
+      $selected_services = hosting_server_selected_services($node);
+      $overlap = $selected_services ? hosting_server_services_overlap($selected_services, $duplicates) : TRUE;
+      if ($overlap) {
+        $form_state->setErrorByName(hosting_server_form_error_name($form, 'label', array('value')),
+          t('The hostname `%name` is already in use. Server names must be unique.',
+          array('%name' => hosting_entity_label($node)))
+        );
+      }
     }
 
     _hosting_ip_validate($node, $form_state);
@@ -708,6 +957,224 @@ function hosting_server_view($node, $view_mode, $langcode = NULL) {
 }
 
 /**
+ * Implements hook_ENTITY_TYPE_view() for hosting_server entities.
+ */
+function hosting_server_hosting_server_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  if ($entity->getEntityTypeId() !== 'hosting_server') {
+    return;
+  }
+
+  $build['info'] = hosting_server_build_info($entity);
+  $build['info']['#weight'] = 0;
+
+  if ($view_mode === 'full' && hosting_entity_id($entity)) {
+    $tasks_view = hosting_task_table($entity);
+    $tasks_view['#prefix'] = '<div id="hosting-task-list">';
+    $tasks_view['#suffix'] = '</div>';
+    $tasks_view['#weight'] = 10;
+    $build['tasks_view'] = $tasks_view;
+    $build['#attached']['library'][] = 'hosting_task/task';
+  }
+}
+
+/**
+ * Build the info block render array for hosting_server entities.
+ */
+function hosting_server_build_info(\Drupal\Core\Entity\EntityInterface $server) {
+  hosting_server_ensure_service_rows($server);
+
+  $info = [
+    '#theme' => 'item_info_listing',
+    '#items' => [],
+    '#prefix' => '<div id="hosting-server-info">',
+    '#suffix' => '</div>',
+  ];
+
+  $info['#items'][] = [
+    'title' => 'hostname',
+    'value' => hosting_entity_label($server),
+    'weight' => -50,
+  ];
+  $info['#items'][] = [
+    'title' => t('Verified'),
+    'value' => hosting_format_interval((int) ($server->get('verified')->value ?? 0)),
+    'weight' => -10,
+  ];
+  $info['#items'][] = [
+    'title' => t('Status'),
+    'value' => _hosting_server_status($server),
+    'weight' => -5,
+  ];
+
+  $ip_list = hosting_server_ip_address_values($server);
+  if (!empty($ip_list)) {
+    $escaped = array_map([Drupal\Component\Utility\Html::class, 'escape'], $ip_list);
+    $info['#items'][] = [
+      'title' => t('IP addresses'),
+      'value' => \Drupal\Core\Render\Markup::create(implode('<br />', $escaped)),
+      'weight' => -30,
+    ];
+  }
+
+  $service_objects = hosting_server_service_objects($server);
+  if (!empty($service_objects)) {
+    $services = hosting_server_services();
+    foreach ($service_objects as $name => $service) {
+      $service_render = [];
+      $service_render['title'] = [
+        '#title' => $services[$name]['title'] ?? $name,
+        '#markup' => (string) ($service->type ?? ''),
+        '#type' => 'item',
+        '#weight' => -20,
+      ];
+      $service->view($service_render);
+      hosting_server_info_collect_items($service_render);
+      $base_weight = $services[$name]['weight'] ?? 0;
+      foreach ($service_render['#items'] ?? [] as $item) {
+        if (isset($item['weight'])) {
+          $item['weight'] = $base_weight + $item['weight'];
+        }
+        else {
+          $item['weight'] = $base_weight;
+        }
+        $info['#items'][] = $item;
+      }
+    }
+  }
+
+  return $info;
+}
+
+/**
+ * Ensure hosting_service rows exist for servers that have legacy data.
+ */
+function hosting_server_ensure_service_rows(\Drupal\Core\Entity\EntityInterface $server) {
+  $server_id = hosting_entity_id($server);
+  if (!$server_id) {
+    return;
+  }
+
+  $existing = \Drupal::database()->select('hosting_service', 'hs')
+    ->fields('hs', ['service'])
+    ->condition('server_id', $server_id)
+    ->range(0, 1)
+    ->execute()
+    ->fetchField();
+  if ($existing) {
+    return;
+  }
+
+  $services = hosting_server_services();
+  $service_types = [];
+
+  $has_db = (bool) \Drupal::database()->select('hosting_db_server', 'db')
+    ->fields('db', ['server_id'])
+    ->condition('server_id', $server_id)
+    ->range(0, 1)
+    ->execute()
+    ->fetchField();
+  if ($has_db) {
+    $type = hosting_server_select_service_type($services, 'db', ['mysql']);
+    if ($type) {
+      $service_types['db'] = $type;
+    }
+  }
+
+  $has_ssl = (bool) \Drupal::database()->select('hosting_ssl_server', 'ssl')
+    ->fields('ssl', ['server_id'])
+    ->condition('server_id', $server_id)
+    ->range(0, 1)
+    ->execute()
+    ->fetchField();
+  if ($has_ssl) {
+    $type = hosting_server_select_service_type($services, 'http', ['apache_ssl', 'nginx_ssl']);
+    if ($type) {
+      $service_types['http'] = $type;
+    }
+  }
+
+  $label = strtolower((string) $server->label());
+  $human = strtolower((string) ($server->get('human_name')->value ?? ''));
+  if (empty($service_types['db']) && (str_contains($label, 'database') || str_contains($human, 'database'))) {
+    $type = hosting_server_select_service_type($services, 'db', ['mysql']);
+    if ($type) {
+      $service_types['db'] = $type;
+    }
+  }
+
+  if (empty($service_types['http']) && (str_contains($label, 'web') || str_contains($label, 'http') || str_contains($human, 'web') || str_contains($human, 'http'))) {
+    $type = hosting_server_select_service_type($services, 'http', ['apache', 'nginx', 'apache_ssl', 'nginx_ssl']);
+    if ($type) {
+      $service_types['http'] = $type;
+    }
+  }
+
+  foreach ($service_types as $service => $type) {
+    hosting_server_insert_service_row($server, $service, $type);
+  }
+}
+
+/**
+ * Insert a hosting_service row with defaults for a server.
+ */
+function hosting_server_insert_service_row(\Drupal\Core\Entity\EntityInterface $server, $service, $type) {
+  $server_id = hosting_entity_id($server);
+  if (!$server_id) {
+    return;
+  }
+
+  $service_object = hosting_services_new_object($service, $type, $server);
+  if (!$service_object) {
+    return;
+  }
+
+  $port = $service_object->has_port() ? $service_object->default_port() : 0;
+  $restart_cmd = $service_object->has_restart_cmd() ? $service_object->default_restart_cmd() : '';
+
+  \Drupal::database()->insert('hosting_service')
+    ->fields([
+      'server_id' => $server_id,
+      'service' => $service,
+      'type' => $type,
+      'port' => $port,
+      'restart_cmd' => $restart_cmd,
+      'available' => 1,
+    ])
+    ->execute();
+}
+
+/**
+ * Convert item render elements into item_info_listing items.
+ */
+function hosting_server_info_collect_items(array &$element) {
+  $element['#items'] = $element['#items'] ?? [];
+  foreach (\Drupal\Core\Render\Element::children($element) as $child) {
+    if (($element[$child]['#type'] ?? NULL) !== 'item') {
+      continue;
+    }
+    if (!isset($element[$child]['#title']) || !isset($element[$child]['#markup'])) {
+      continue;
+    }
+    $value = $element[$child]['#markup'];
+    if (is_string($value)) {
+      $value = \Drupal\Core\Render\Markup::create($value);
+    }
+    $item = [
+      'title' => $element[$child]['#title'],
+      'value' => $value,
+    ];
+    if (isset($element[$child]['#weight'])) {
+      $item['weight'] = $element[$child]['#weight'];
+    }
+    if (isset($element[$child]['#description'])) {
+      $item['description'] = $element[$child]['#description'];
+    }
+    $element['#items'][] = $item;
+    unset($element[$child]);
+  }
+}
+
+/**
  * Implements hook_field_extra_fields().
  */
 function hosting_server_field_extra_fields() {
@@ -825,6 +1292,10 @@ function hosting_server_views_data() {
     'help' => t('A human-readable name for the server.'),
     'field' => [
       'id' => 'hosting_server_human_name',
+      'additional fields' => [
+        'label' => 'label',
+        'id' => 'id',
+      ],
     ],
   ];
 
@@ -899,6 +1370,22 @@ function hosting_server_views_data() {
   ];
 
   return $data;
+}
+
+/**
+ * Implements hook_views_data_alter().
+ */
+function hosting_server_views_data_alter(array &$data) {
+  if (!isset($data['hosting_server']['human_name']['field'])) {
+    return;
+  }
+
+  // Force the custom handler; core's entity field provider overwrites this.
+  $data['hosting_server']['human_name']['field']['id'] = 'hosting_server_human_name';
+  $data['hosting_server']['human_name']['field']['additional fields'] = [
+    'label' => 'label',
+    'id' => 'id',
+  ];
 }
 
 /**

@@ -205,6 +205,30 @@ function hosting_entity_label($entity) {
 }
 
 /**
+ * Run post-install hooks once the hostmaster site exists.
+ */
+function hosting_post_install_if_ready($hostmaster_id = NULL) {
+  $state = \Drupal::state();
+  if ($state->get('hosting_post_install_complete')) {
+    return FALSE;
+  }
+
+  $hostmaster_id = $hostmaster_id ?: (int) $state->get('aegir_hostmaster_site_id');
+  if (!$hostmaster_id) {
+    return FALSE;
+  }
+
+  $hostmaster = \Drupal::entityTypeManager()->getStorage('hosting_site')->load($hostmaster_id);
+  if (!$hostmaster instanceof \Drupal\Core\Entity\EntityInterface) {
+    return FALSE;
+  }
+
+  \Drupal::moduleHandler()->invokeAll('hosting_post_install', [$hostmaster]);
+  $state->set('hosting_post_install_complete', $hostmaster_id);
+  return TRUE;
+}
+
+/**
  * Return a normalized status value for a hosting entity.
  */
 function hosting_entity_status($entity, $scope = NULL) {
@@ -230,6 +254,7 @@ function hosting_entity_status($entity, $scope = NULL) {
   }
   return NULL;
 }
+
 
 
 /**
