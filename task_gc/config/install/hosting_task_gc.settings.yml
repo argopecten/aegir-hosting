@@ -1,0 +1,11 @@
+enabled: true
+frequency: '86400'
+retention_success: 30
+retention_failed: 90
+retention_cancelled: 7
+clean_verify_tasks: true
+clean_backup_tasks: true
+clean_migrate_tasks: true
+batch_size: 100
+preserve_latest: 10
+log_deletions: true

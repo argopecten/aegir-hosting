@@ -1,0 +1,5 @@
+hosting_web_server.settings:
+  title: 'Web server settings'
+  route_name: hosting_web_server.settings
+  parent: hosting.admin
+  weight: 40

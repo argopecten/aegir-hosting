@@ -1,0 +1,7 @@
+hosting_db_server.settings:
+  path: '/admin/hosting/db_server/settings'
+  defaults:
+    _form: '\Drupal\hosting_db_server\Form\HostingDbServerSettingsForm'
+    _title: 'Database Server Settings'
+  requirements:
+    _permission: 'administer hosting'

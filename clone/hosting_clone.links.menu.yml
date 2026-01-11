@@ -1,0 +1,5 @@
+hosting_clone.settings:
+  title: 'Clone settings'
+  route_name: hosting_clone.settings
+  parent: hosting.admin
+  weight: 80

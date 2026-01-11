@@ -1,0 +1,5 @@
+hosting_subdirs.settings:
+  title: 'Subdirectories settings'
+  route_name: hosting_subdirs.settings
+  parent: hosting.admin
+  weight: 30

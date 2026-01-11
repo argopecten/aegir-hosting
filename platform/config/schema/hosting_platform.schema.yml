@@ -5,3 +5,57 @@ hosting_platform.settings:
     hosting_platform_base_path:
       type: string
       label: 'Platform base path'
+    hosting_platform_composer_cache_dir:
+      type: string
+      label: 'Composer cache directory'
+    hosting_platform_default_deployment_method:
+      type: string
+      label: 'Default deployment method'
+    hosting_platform_composer_memory_limit:
+      type: string
+      label: 'Composer memory limit'
+    hosting_platform_composer_timeout:
+      type: integer
+      label: 'Composer timeout'
+    hosting_platform_git_timeout:
+      type: integer
+      label: 'Git clone timeout'
+    hosting_platform_validate_drupal:
+      type: boolean
+      label: 'Validate Drupal installation'
+    hosting_platform_require_composer_json:
+      type: boolean
+      label: 'Require composer.json'
+    hosting_platform_check_disk_space:
+      type: boolean
+      label: 'Check disk space'
+    hosting_platform_min_disk_space:
+      type: integer
+      label: 'Minimum disk space'
+    hosting_platform_lock_by_default:
+      type: boolean
+      label: 'Lock platforms by default'
+    hosting_platform_auto_unlock_after_verify:
+      type: boolean
+      label: 'Auto-unlock after verification'
+    hosting_platform_automatic_site_import:
+      type: boolean
+      label: 'Automatically import sites'
+    hosting_platform_import_ignore_patterns:
+      type: text
+      label: 'Import ignore patterns'
+    hosting_platform_auto_verify_frequency:
+      type: string
+      label: 'Auto-verify frequency'
+    hosting_platform_cleanup_old_releases:
+      type: boolean
+      label: 'Cleanup old releases'
+    hosting_platform_keep_releases:
+      type: integer
+      label: 'Number of releases to keep'
+    hosting_platform_default_dir_mode:
+      type: string
+      label: 'Default directory permissions'
+    hosting_platform_default_file_mode:
+      type: string
+      label: 'Default file permissions'

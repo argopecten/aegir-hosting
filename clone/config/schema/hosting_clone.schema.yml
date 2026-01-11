@@ -1,0 +1,37 @@
+hosting_clone.settings:
+  type: config_object
+  label: 'Hosting Clone settings'
+  mapping:
+    uri_validation:
+      type: boolean
+      label: 'Validate clone URI'
+    copy_database:
+      type: boolean
+      label: 'Copy database by default'
+    copy_files:
+      type: boolean
+      label: 'Copy files by default'
+    copy_private_files:
+      type: boolean
+      label: 'Copy private files'
+    preserve_client:
+      type: boolean
+      label: 'Preserve client ownership'
+    preserve_platform:
+      type: boolean
+      label: 'Preserve platform'
+    naming_pattern:
+      type: string
+      label: 'Default naming pattern'
+    timeout:
+      type: integer
+      label: 'Clone operation timeout'
+    concurrent_limit:
+      type: integer
+      label: 'Concurrent clone limit'
+    create_backup:
+      type: boolean
+      label: 'Create backup before cloning'
+    notification_enabled:
+      type: boolean
+      label: 'Enable clone notifications'

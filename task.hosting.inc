@@ -49,21 +49,27 @@ function hosting_task_validate($id, $type = NULL, array $task_args = [], array $
 
   if ($task instanceof \Drupal\Core\Entity\EntityInterface && $task->getEntityTypeId() === 'hosting_task') {
     $task = hosting_task_load_arguments($task);
-    $task->ref = hosting_entity_load_from_context_id($task->get('rid')->value);
-    $task->options = array();
-    $ref_type = hosting_entity_task_scope($task->ref);
-    $task->context_options = array(
+    
+    // Create execution context for the task.
+    $context = new \Drupal\hosting\TaskExecutionContext($task);
+    $context->setRef(hosting_entity_load_from_context_id($task->get('rid')->value));
+    $context->setOptions([]);
+    
+    $ref_type = hosting_entity_task_scope($context->getRef());
+    $context->setContextOptions([
       'context_type' => $ref_type,
       'master_url' => \Drupal\Core\Url::fromRoute('<front>', array('absolute' => TRUE))->toString(),
       'root' => NULL,
       'uri' => NULL,
-    );
-    $task->args = array();
+    ]);
+    $context->setArgs([]);
+    
     $task->set('changed', REQUEST_TIME);
     $task->set('executed', REQUEST_TIME);
-    if ($task->ref instanceof \Drupal\Core\Entity\ContentEntityInterface) {
-      if ($task->ref->getEntityTypeId() === 'hosting_platform' && $task->get('task_type')->value === 'verify') {
-        if (!hosting_platform_validate_runtime($task->ref)) {
+    
+    if ($context->getRef() instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+      if ($context->getRef()->getEntityTypeId() === 'hosting_platform' && $task->get('task_type')->value === 'verify') {
+        if (!hosting_platform_validate_runtime($context->getRef())) {
           $message = hosting_task_get_last_error() ?? t('Platform validation failed.');
           throw new \Drush\Exceptions\UserAbortException((string) $message);
         }
@@ -79,7 +85,7 @@ function hosting_task_validate($id, $type = NULL, array $task_args = [], array $
     }
     $task->set('task_status', HOSTING_TASK_PROCESSING);
     $task->save();
-    hosting_task_set_current($task);
+    hosting_task_set_current($context);
     $message = t('Task starts processing: @label', ['@label' => $task->label()]);
     hosting_task_log($task->id(), 'queue', (string) $message);
     hosting_log($message, 'queue', [], 'hosting_task');
@@ -89,7 +95,7 @@ function hosting_task_validate($id, $type = NULL, array $task_args = [], array $
 
     // Find task type and pass through if it needs provision_save.
     if (isset($tasks_info[$task->get('task_type')->value])) {
-      $task->task_info = $tasks_info[$task->get('task_type')->value];
+      $context->setTaskInfo($tasks_info[$task->get('task_type')->value]);
     }
   }
   else {
@@ -111,30 +117,36 @@ function hosting_task_validate($id, $type = NULL, array $task_args = [], array $
  * @see hook_hosting_TASK_OBJECT_context_options()
  */
 function hosting_task_execute_current() {
-  $task = hosting_task_get_current();
-  if (!$task instanceof \Drupal\Core\Entity\EntityInterface) {
+  $context = hosting_task_get_current();
+  if (!$context instanceof \Drupal\hosting\TaskExecutionContext) {
     throw new \Drush\Exceptions\UserAbortException('No hosting task context is available.');
   }
+  
+  $task = $context->getTask();
   $output = array();
   $mode = hosting_task_get_option('debug', FALSE) ? 'GET' : 'POST';
-  $ref_type = hosting_entity_task_scope($task->ref);
-  $ref_status = hosting_entity_status($task->ref, $ref_type);
+  $ref = $context->getRef();
+  $ref_type = hosting_entity_task_scope($ref);
+  $ref_status = hosting_entity_status($ref, $ref_type);
 
+  $args = $context->getArgs();
   // Make sure argument order is correct.
-  ksort($task->args);
+  ksort($args);
+  $context->setArgs($args);
 
+  $task_info = $context->getTaskInfo();
   // If this task type needs it, run provision-save to create the named context.
-  if (!empty($task->task_info['provision_save'])) {
+  if (!empty($task_info['provision_save'])) {
     // Invoke hook_hosting_TASK_OBJECT_context_options()
     // We copy module_invoke_all() here because it doesn't pass by
     // reference and it breaks under PHP 5.3
-    $hook = 'hosting_' . hosting_entity_task_scope($task->ref) . '_context_options';
+    $hook = 'hosting_' . hosting_entity_task_scope($ref) . '_context_options';
     foreach (\Drupal::moduleHandler()->getImplementations($hook) as $module) {
       $function = $module . '_' . $hook;
-      call_user_func_array($function, array(&$task));
+      call_user_func_array($function, array(&$context));
     }
 
-    hosting_run_drush_command('@none', 'provision-save', array('@' . $task->ref->hosting_name), $task->context_options, array('method' => $mode, 'integrate' => TRUE));
+    hosting_run_drush_command('@none', 'provision-save', array('@' . $ref->hosting_name), $context->getContextOptions(), array('method' => $mode, 'integrate' => TRUE));
   }
 
   if (($ref_type == 'site' && $ref_status == HOSTING_SITE_DELETED)
@@ -145,16 +157,19 @@ function hosting_task_execute_current() {
     $alias = '@none';
   }
   else {
-    $alias = $task->ref->hosting_name;
+    $alias = $ref->hosting_name;
   }
 
-  if (!isset($task->task_command)) {
-    $task->task_command = 'provision-' . $task->get('task_type')->value;
+  $task_command = $context->getTaskCommand();
+  if (!isset($task_command)) {
+    $task_command = 'provision-' . $task->get('task_type')->value;
+    $context->setTaskCommand($task_command);
   }
   // Run the actual command. Adding alias here to work around Drush API.
-  $output = provision_backend_invoke($alias, $task->task_command, $task->args, $task->options, $mode);
+  $output = provision_backend_invoke($alias, $task_command, $context->getArgs(), $context->getOptions(), $mode);
   // Pass the drush output back to the HOOK_post_hosting_TASK_task() and
   // HOOK_hosting_TASK_task_rollback() hooks, as the $data argument.
+  $context->setOutput($output);
   hosting_task_set_output($output);
 
   $has_error = !empty($output['error_status']);
@@ -169,7 +184,7 @@ function hosting_task_execute_current() {
 
   // On succesful delete, remove the named context.
   if ($task->get('task_type')->value === 'delete' && !$has_error) {
-    hosting_run_drush_command('@none', 'provision-save', array('@' . $task->ref->hosting_name), array('delete' => TRUE), array('method' => $mode, 'integrate' => TRUE));
+    hosting_run_drush_command('@none', 'provision-save', array('@' . $ref->hosting_name), array('delete' => TRUE), array('method' => $mode, 'integrate' => TRUE));
   }
 
   $task->set('delta', microtime(TRUE) - $task->get('executed')->value);
@@ -186,17 +201,18 @@ function hosting_task_execute_current() {
  * @see hook_hosting_TASK_TYPE_task_rollback()
  */
 function hosting_task_rollback_current() {
-  $task = hosting_task_get_current();
-  if (!$task instanceof \Drupal\Core\Entity\EntityInterface) {
+  $context = hosting_task_get_current();
+  if (!$context instanceof \Drupal\hosting\TaskExecutionContext) {
     return;
   }
+  $task = $context->getTask();
   $hook = sprintf("hosting_%s_task_rollback", str_replace('-', '_', $task->get('task_type')->value));
   $message = t('Invoking @hook hooks.', ['@hook' => $hook]);
   hosting_log($message, 'notice', [], 'hosting_task');
   if ($task->id()) {
     hosting_task_log($task->id(), 'notice', (string) $message);
   }
-  \Drupal::moduleHandler()->invokeAll($hook, [$task, hosting_task_get_output()]);
+  \Drupal::moduleHandler()->invokeAll($hook, [$context, hosting_task_get_output()]);
 }
 
 /**
@@ -205,10 +221,11 @@ function hosting_task_rollback_current() {
  * @see hook_post_hosting_TASK_TYPE_task()
  */
 function hosting_post_task_current($task) {
-  $task = hosting_task_get_current();
-  if (!$task instanceof \Drupal\Core\Entity\EntityInterface) {
+  $context = hosting_task_get_current();
+  if (!$context instanceof \Drupal\hosting\TaskExecutionContext) {
     return;
   }
+  $task = $context->getTask();
 
   $hook = sprintf("post_hosting_%s_task", str_replace('-', '_', $task->get('task_type')->value));
   $message = t('Invoking @hook hooks.', ['@hook' => $hook]);
@@ -216,5 +233,5 @@ function hosting_post_task_current($task) {
   if ($task->id()) {
     hosting_task_log($task->id(), 'notice', (string) $message);
   }
-  \Drupal::moduleHandler()->invokeAll($hook, [$task, hosting_task_get_output()]);
+  \Drupal::moduleHandler()->invokeAll($hook, [$context, hosting_task_get_output()]);
 }

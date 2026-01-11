@@ -1,0 +1,5 @@
+hosting_web_pack.settings:
+  title: 'Web pack settings'
+  route_name: hosting_web_pack.settings
+  parent: hosting.admin
+  weight: 60

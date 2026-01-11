@@ -1,0 +1,7 @@
+hosting_subdirs.settings:
+  path: '/admin/hosting/subdirs/settings'
+  defaults:
+    _form: '\Drupal\hosting_subdirs\Form\HostingSubdirsSettingsForm'
+    _title: 'Subdirectories Settings'
+  requirements:
+    _permission: 'administer hosting'

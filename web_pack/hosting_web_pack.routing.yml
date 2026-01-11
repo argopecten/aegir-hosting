@@ -1,0 +1,7 @@
+hosting_web_pack.settings:
+  path: '/admin/hosting/web_pack/settings'
+  defaults:
+    _form: '\Drupal\hosting_web_pack\Form\HostingWebPackSettingsForm'
+    _title: 'Web Pack Settings'
+  requirements:
+    _permission: 'administer hosting'

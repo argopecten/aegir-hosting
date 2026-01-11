@@ -56,10 +56,27 @@ class HostingPlatform extends HostingEntityBase {
       ->setDisplayConfigurable('form', TRUE)
       ->setDisplayConfigurable('view', TRUE);
 
+    $fields['deployment_method'] = BaseFieldDefinition::create('list_string')
+      ->setLabel(t('Deployment method'))
+      ->setDescription(t('Choose how to deploy this platform.'))
+      ->setSetting('allowed_values', [
+        'manual' => 'Manual deployment',
+        'composer' => 'Composer create-project',
+      ])
+      ->setDefaultValue('manual')
+      ->setRequired(TRUE)
+      ->setDisplayConfigurable('form', TRUE)
+      ->setDisplayConfigurable('view', TRUE);
+
+    $fields['repository_url'] = BaseFieldDefinition::create('string_long')
+      ->setLabel(t('Repository URL'))
+      ->setDescription(t('The Composer repository URL (e.g., drupal/recommended-project or git repository URL with composer.json).'))
+      ->setDisplayConfigurable('form', TRUE)
+      ->setDisplayConfigurable('view', TRUE);
+
     $fields['publish_path'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Publish path'))
       ->setDescription(t('The absolute path where sites will be hosted. This should exist and be unique across all servers.'))
-      ->setRequired(TRUE)
       ->setDisplayConfigurable('form', TRUE)
       ->setDisplayConfigurable('view', TRUE);
 
@@ -67,13 +84,15 @@ class HostingPlatform extends HostingEntityBase {
       ->setLabel(t('Web server'))
       ->setDescription(t('The web server the sites will be hosted on.'))
       ->setSetting('target_type', 'hosting_server')
+      ->setSetting('handler', 'default:hosting_server:web')
       ->setRequired(TRUE)
       ->setDisplayConfigurable('form', TRUE)
       ->setDisplayConfigurable('view', TRUE);
 
-    $fields['php_path'] = BaseFieldDefinition::create('string')
-      ->setLabel(t('PHP binary path'))
-      ->setDescription(t('Absolute path to the PHP binary used by this platform.'))
+    $fields['php_version'] = BaseFieldDefinition::create('string')
+      ->setLabel(t('PHP version'))
+      ->setDescription(t('The PHP version used by this platform (e.g., 8.3, 8.2, 8.1).'))
+      ->setSetting('max_length', 10)
       ->setRequired(TRUE)
       ->setDisplayConfigurable('form', TRUE)
       ->setDisplayConfigurable('view', TRUE);

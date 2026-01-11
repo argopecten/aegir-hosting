@@ -1,0 +1,5 @@
+hosting_task_gc.settings:
+  title: 'Task garbage collection settings'
+  route_name: hosting_task_gc.settings
+  parent: hosting.admin
+  weight: 90

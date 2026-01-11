@@ -1,3 +1,11 @@
+hosting_platform.settings:
+  path: '/admin/hosting/platform/settings'
+  defaults:
+    _form: '\Drupal\hosting_platform\Form\HostingPlatformSettingsForm'
+    _title: 'Platform Settings'
+  requirements:
+    _permission: 'administer hosting'
+
 hosting_platform.edit:
   path: '/hosting/site/{hosting_site}/platform-edit'
   defaults:

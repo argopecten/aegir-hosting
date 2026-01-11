@@ -1,0 +1,7 @@
+hosting_web_server.settings:
+  path: '/admin/hosting/web_server/settings'
+  defaults:
+    _form: '\Drupal\hosting_web_server\Form\HostingWebServerSettingsForm'
+    _title: 'Web Server Settings'
+  requirements:
+    _permission: 'administer hosting'

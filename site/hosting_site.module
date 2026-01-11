@@ -24,6 +24,11 @@ define('HOSTING_SITE_QUEUED', 0);
  */
 define('HOSTING_SITE_ENABLED', 1);
 
+/**
+ * Default database server ID (system default).
+ */
+define('HOSTING_DEFAULT_DB_SERVER', 1);
+
 include_once 'hosting_site.form.inc';
 include_once 'hosting_site.backups.inc';
 

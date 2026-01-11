@@ -1,0 +1,28 @@
+hosting_web_server.settings:
+  type: config_object
+  label: 'Hosting Web Server settings'
+  mapping:
+    default_type:
+      type: string
+      label: 'Default web server type'
+    default_port:
+      type: integer
+      label: 'Default HTTP port'
+    default_ssl_port:
+      type: integer
+      label: 'Default HTTPS port'
+    restart_cmd:
+      type: string
+      label: 'Default restart command'
+    config_path:
+      type: string
+      label: 'Configuration path'
+    script_user:
+      type: string
+      label: 'Script user'
+    backup_enabled:
+      type: boolean
+      label: 'Enable configuration backups'
+    backup_retention:
+      type: integer
+      label: 'Backup retention days'

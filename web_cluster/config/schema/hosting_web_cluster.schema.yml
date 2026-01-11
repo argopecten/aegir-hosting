@@ -1,0 +1,25 @@
+hosting_web_cluster.settings:
+  type: config_object
+  label: 'Hosting Web Cluster settings'
+  mapping:
+    enabled:
+      type: boolean
+      label: 'Enable web clustering'
+    load_balancing:
+      type: string
+      label: 'Load balancing method'
+    session_affinity:
+      type: boolean
+      label: 'Enable session affinity'
+    health_check_interval:
+      type: integer
+      label: 'Health check interval'
+    health_check_timeout:
+      type: integer
+      label: 'Health check timeout'
+    sync_method:
+      type: string
+      label: 'File synchronization method'
+    auto_failover:
+      type: boolean
+      label: 'Enable automatic failover'

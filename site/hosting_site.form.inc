@@ -233,7 +233,9 @@ function hosting_site_apply_form_overrides(array &$form, &$form_state, $entity) 
   }
 
   $apply_filters = $entity->isNew();
-  $valid_options = $apply_filters ? hosting_site_available_options($node, $platform_query) : array();
+  // Use selected platform value for filtering, not just query parameter
+  $filter_platform = $platform_value ? $platform_value : $platform_query;
+  $valid_options = $apply_filters ? hosting_site_available_options($node, $filter_platform) : array();
   if ($apply_filters && !empty($valid_options['profile'])) {
     $allowed_profiles = array_map('strval', $valid_options['profile']);
     if (!$profile_value || !in_array((string) $profile_value, $allowed_profiles, TRUE)) {
@@ -247,7 +249,8 @@ function hosting_site_apply_form_overrides(array &$form, &$form_state, $entity) 
       }
     }
     $node->profile = $profile_id;
-    $valid_options = hosting_site_available_options($node, $platform_query);
+    // Re-fetch options with updated profile
+    $valid_options = hosting_site_available_options($node, $filter_platform);
   }
 
   if ($apply_filters && !empty($valid_options['profile']) && isset($form['profile'])) {
@@ -275,8 +278,12 @@ function hosting_site_apply_form_overrides(array &$form, &$form_state, $entity) 
         }
       }
       $node->profile = $profile_id;
-      $valid_options = hosting_site_available_options($node, $platform_query);
+      $valid_options = hosting_site_available_options($node, $filter_platform);
     }
+  }
+  elseif ($apply_filters && $filter_platform && isset($form['profile'])) {
+    // If platform is selected but no profiles found, show empty message
+    hosting_site_form_set_widget_options($form, 'profile', ['_none' => t('- No profiles available on selected platform -')], '_none');
   }
 
   if ($apply_filters) {
@@ -319,13 +326,11 @@ function hosting_site_apply_form_overrides(array &$form, &$form_state, $entity) 
   $profile_element = &hosting_site_form_get_widget_element($form, 'profile', array('value'));
   if ($profile_element !== NULL) {
     $profile_element['#attributes']['class'][] = 'hosting-site-form-profile-options';
-    $profile_element['#ajax'] = array(
-      'callback' => 'hosting_site_platform_callback',
-      'wrapper' => 'hosting-site-platform-wrapper',
-      'effect' => 'fade',
-      'event' => 'change',
-      'method' => 'replace',
-    );
+  }
+
+  if (isset($form['profile'])) {
+    $form['profile']['#prefix'] = '<div id="hosting-site-profile-wrapper">';
+    $form['profile']['#suffix'] = '</div>';
   }
 
   if (isset($form['platform'])) {
@@ -336,8 +341,8 @@ function hosting_site_apply_form_overrides(array &$form, &$form_state, $entity) 
   $platform_element = &hosting_site_form_get_widget_element($form, 'platform', array('target_id'));
   if ($platform_element !== NULL) {
     $platform_element['#ajax'] = array(
-      'callback' => 'hosting_site_language_callback',
-      'wrapper' => 'hosting-site-language-wrapper',
+      'callback' => 'hosting_site_profile_callback',
+      'wrapper' => 'hosting-site-profile-wrapper',
       'effect' => 'fade',
       'event' => 'change',
       'method' => 'replace',
@@ -620,4 +625,11 @@ function hosting_site_form_alter(&$form, &$form_state, $form_id) {
       '#value' => 1,
     );
   }
+}
+
+/**
+ * AJAX callback to update profile options when platform changes.
+ */
+function hosting_site_profile_callback(array &$form, \Drupal\Core\Form\FormStateInterface $form_state) {
+  return $form['profile'];
 }

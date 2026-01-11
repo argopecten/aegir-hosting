@@ -1,0 +1,5 @@
+hosting_cron.settings:
+  title: 'Cron settings'
+  route_name: hosting_cron.settings
+  parent: hosting.admin
+  weight: 20

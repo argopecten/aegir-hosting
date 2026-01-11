@@ -18,6 +18,24 @@ function hosting_platform_install() {
   hosting_install_view_configs('hosting_platform');
   hosting_install_form_display_configs('hosting_platform');
   hosting_install_action_configs('hosting_platform');
+  
+  // Create necessary directories for platform deployment
+  $base_path = \Drupal::config('hosting_platform.settings')->get('hosting_platform_base_path') ?? '/var/aegir/platforms/';
+  $composer_home = '/var/aegir/.composer';
+  
+  // Create platforms directory
+  if (!is_dir($base_path)) {
+    if (!mkdir($base_path, 0755, TRUE)) {
+      \Drupal::logger('hosting_platform')->warning('Failed to create platforms directory: @path', ['@path' => $base_path]);
+    }
+  }
+  
+  // Create composer cache directory
+  if (!is_dir($composer_home)) {
+    if (!mkdir($composer_home, 0755, TRUE)) {
+      \Drupal::logger('hosting_platform')->warning('Failed to create composer cache directory: @path', ['@path' => $composer_home]);
+    }
+  }
 }
 
 /**

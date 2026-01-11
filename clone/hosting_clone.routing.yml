@@ -1,0 +1,7 @@
+hosting_clone.settings:
+  path: '/admin/hosting/clone/settings'
+  defaults:
+    _form: '\Drupal\hosting_clone\Form\HostingCloneSettingsForm'
+    _title: 'Clone Settings'
+  requirements:
+    _permission: 'administer hosting'

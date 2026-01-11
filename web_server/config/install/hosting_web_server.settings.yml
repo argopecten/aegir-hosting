@@ -1,0 +1,8 @@
+default_type: 'apache'
+default_port: 80
+default_ssl_port: 443
+restart_cmd: 'sudo /etc/init.d/apache2 reload'
+config_path: '/var/aegir/config/server_master/apache/vhost.d'
+script_user: 'aegir'
+backup_enabled: true
+backup_retention: 30

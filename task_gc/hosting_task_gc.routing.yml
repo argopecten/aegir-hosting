@@ -1,0 +1,7 @@
+hosting_task_gc.settings:
+  path: '/admin/hosting/task_gc/settings'
+  defaults:
+    _form: '\Drupal\hosting_task_gc\Form\HostingTaskGcSettingsForm'
+    _title: 'Task Garbage Collection Settings'
+  requirements:
+    _permission: 'administer hosting'

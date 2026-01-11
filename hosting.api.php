@@ -481,3 +481,88 @@ function example_create_site($name, $publish_path) {
   $site = \Drupal::entityTypeManager()->getStorage('hosting_site')->create($site_values);
   $site->save();
 }
+
+/**
+ * @} End of "addtogroup hostinghooks".
+ */
+
+/**
+ * @defgroup taskhooks Task Execution Context
+ * @{
+ *
+ * Task execution context and hooks.
+ *
+ * As of Aegir 4.x (Drupal 11, PHP 8.3+), task execution uses a dedicated
+ * TaskExecutionContext class instead of dynamic properties on task entities.
+ * This improves compatibility with PHP 8.2+ which deprecated dynamic properties.
+ *
+ * When implementing hooks that interact with tasks during execution, you will
+ * receive a TaskExecutionContext object instead of the task entity directly.
+ *
+ * @section accessing_context Accessing the Task Execution Context
+ *
+ * @code
+ * // Get the current task execution context
+ * $context = hosting_task_get_current();
+ *
+ * // Access the task entity
+ * $task = $context->getTask();
+ *
+ * // Access the reference entity (site, platform, server, etc.)
+ * $ref = $context->getRef();
+ *
+ * // Get or set task arguments
+ * $args = $context->getArgs();
+ * $args[2] = '@example.com';
+ * $context->setArgs($args);
+ *
+ * // Get or set task options
+ * $options = $context->getOptions();
+ * $options['profile'] = 'standard';
+ * $context->setOptions($options);
+ *
+ * // Get or set context options (for provision backend)
+ * $context_options = $context->getContextOptions();
+ * $context_options['uri'] = 'example.com';
+ * $context->setContextOptions($context_options);
+ * @endcode
+ *
+ * @section hooks_with_context Hooks that receive TaskExecutionContext
+ *
+ * The following hooks now receive a TaskExecutionContext object:
+ * - hook_hosting_TASK_TYPE_task_rollback($context, $data)
+ * - hook_post_hosting_TASK_TYPE_task($context, $data)
+ * - hook_hosting_TASK_OBJECT_context_options(&$context)
+ *
+ * @section migrating_code Migrating Existing Code
+ *
+ * Old code that accessed dynamic properties:
+ * @code
+ * function mymodule_hosting_migrate_task_rollback($task, $data) {
+ *   $task->args[2] = '@example.com';
+ *   $task->options['profile'] = 'standard';
+ *   $site = $task->ref;
+ * }
+ * @endcode
+ *
+ * New code using TaskExecutionContext:
+ * @code
+ * function mymodule_hosting_migrate_task_rollback($context, $data) {
+ *   $args = $context->getArgs();
+ *   $args[2] = '@example.com';
+ *   $context->setArgs($args);
+ *
+ *   $options = $context->getOptions();
+ *   $options['profile'] = 'standard';
+ *   $context->setOptions($options);
+ *
+ *   $site = $context->getRef();
+ * }
+ * @endcode
+ *
+ * @see \Drupal\hosting\TaskExecutionContext
+ * @see hosting_task_get_current()
+ * @see hosting_task_set_current()
+ *
+ * @} End of "addtogroup taskhooks".
+ */

@@ -1,0 +1,7 @@
+hosting_web_cluster.settings:
+  path: '/admin/hosting/web_cluster/settings'
+  defaults:
+    _form: '\Drupal\hosting_web_cluster\Form\HostingWebClusterSettingsForm'
+    _title: 'Web Cluster Settings'
+  requirements:
+    _permission: 'administer hosting'

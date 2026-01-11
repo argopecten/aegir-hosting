@@ -1,0 +1,5 @@
+hosting_platform.settings:
+  title: 'Platform settings'
+  route_name: hosting_platform.settings
+  parent: hosting.admin
+  weight: 25

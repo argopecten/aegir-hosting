@@ -1,0 +1,8 @@
+enabled: false
+default_pack: 'standard'
+allow_custom: true
+inheritance: true
+enable_caching: true
+cache_ttl: 3600
+enable_security_headers: true
+enable_rate_limiting: false

@@ -1,0 +1,28 @@
+hosting_web_pack.settings:
+  type: config_object
+  label: 'Hosting Web Pack settings'
+  mapping:
+    enabled:
+      type: boolean
+      label: 'Enable web packs'
+    default_pack:
+      type: string
+      label: 'Default web pack'
+    allow_custom:
+      type: boolean
+      label: 'Allow custom web packs'
+    inheritance:
+      type: boolean
+      label: 'Enable pack inheritance'
+    enable_caching:
+      type: boolean
+      label: 'Enable caching'
+    cache_ttl:
+      type: integer
+      label: 'Cache TTL'
+    enable_security_headers:
+      type: boolean
+      label: 'Enable security headers'
+    enable_rate_limiting:
+      type: boolean
+      label: 'Enable rate limiting'

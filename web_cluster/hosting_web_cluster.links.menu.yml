@@ -1,0 +1,5 @@
+hosting_web_cluster.settings:
+  title: 'Web cluster settings'
+  route_name: hosting_web_cluster.settings
+  parent: hosting.admin
+  weight: 50

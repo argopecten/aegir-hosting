@@ -1,0 +1,5 @@
+hosting_db_server.settings:
+  title: 'Database server settings'
+  route_name: hosting_db_server.settings
+  parent: hosting.admin
+  weight: 70

@@ -1,0 +1,19 @@
+hosting_cron.settings:
+  type: config_object
+  label: 'Hosting Cron settings'
+  mapping:
+    default_interval:
+      type: string
+      label: 'Default cron interval'
+    use_backend:
+      type: boolean
+      label: 'Use backend cron'
+    queue_enabled:
+      type: boolean
+      label: 'Enable cron queue'
+    queue_frequency:
+      type: integer
+      label: 'Queue frequency'
+    queue_items:
+      type: integer
+      label: 'Queue items per run'

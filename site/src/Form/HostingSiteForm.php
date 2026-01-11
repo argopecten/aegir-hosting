@@ -29,6 +29,9 @@ class HostingSiteForm extends ContentEntityForm {
       hosting_site_form_disable_widget($form, 'language', array('value'));
       hosting_site_form_disable_widget($form, 'db_server', array('target_id'));
     }
+    
+    // Add AJAX callback handlers
+    $form['#attached']['library'][] = 'core/drupal.ajax';
 
     return $form;
   }

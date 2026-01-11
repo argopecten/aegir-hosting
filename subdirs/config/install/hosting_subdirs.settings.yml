@@ -1,0 +1,10 @@
+enabled: false
+max_depth: 3
+allowed_chars: '[a-z0-9\-_]'
+validate_uniqueness: true
+reserved_names: |
+  admin
+  api
+  app
+  wp-admin
+  wp-content

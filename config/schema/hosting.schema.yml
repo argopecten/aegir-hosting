@@ -23,12 +23,6 @@ hosting.settings:
     hosting_own_platform:
       type: integer
       label: 'Own platform node ID'
-    hosting_default_profile:
-      type: string
-      label: 'Default install profile'
-    hosting_ignore_default_profiles:
-      type: boolean
-      label: 'Hide platforms with non-default profiles'
     hosting_lock_platforms_by_default:
       type: boolean
       label: 'Lock platforms by default'

@@ -1,0 +1,8 @@
+platform-form:
+  version: 1.x
+  js:
+    js/platform-form.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/once

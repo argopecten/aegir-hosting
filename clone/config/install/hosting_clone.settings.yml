@@ -1,0 +1,11 @@
+uri_validation: true
+copy_database: true
+copy_files: true
+copy_private_files: true
+preserve_client: true
+preserve_platform: true
+naming_pattern: '%original-clone-%date'
+timeout: 3600
+concurrent_limit: 3
+create_backup: false
+notification_enabled: true

@@ -1,0 +1,40 @@
+hosting_db_server.settings:
+  type: config_object
+  label: 'Hosting Database Server settings'
+  mapping:
+    default_type:
+      type: string
+      label: 'Default database server type'
+    default_port:
+      type: integer
+      label: 'Default database port'
+    connection_timeout:
+      type: integer
+      label: 'Connection timeout'
+    max_connections:
+      type: integer
+      label: 'Maximum connections'
+    backup_enabled:
+      type: boolean
+      label: 'Enable automatic database backups'
+    backup_schedule:
+      type: string
+      label: 'Backup schedule'
+    backup_retention:
+      type: integer
+      label: 'Backup retention days'
+    backup_compression:
+      type: boolean
+      label: 'Compress backups'
+    require_ssl:
+      type: boolean
+      label: 'Require SSL connections'
+    password_complexity:
+      type: boolean
+      label: 'Enforce password complexity'
+    monitor_performance:
+      type: boolean
+      label: 'Monitor database performance'
+    slow_query_threshold:
+      type: float
+      label: 'Slow query threshold'

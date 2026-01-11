@@ -1,0 +1,37 @@
+hosting_task_gc.settings:
+  type: config_object
+  label: 'Hosting Task Garbage Collection settings'
+  mapping:
+    enabled:
+      type: boolean
+      label: 'Enable task garbage collection'
+    frequency:
+      type: string
+      label: 'Collection frequency'
+    retention_success:
+      type: integer
+      label: 'Successful tasks retention days'
+    retention_failed:
+      type: integer
+      label: 'Failed tasks retention days'
+    retention_cancelled:
+      type: integer
+      label: 'Cancelled tasks retention days'
+    clean_verify_tasks:
+      type: boolean
+      label: 'Clean verify tasks'
+    clean_backup_tasks:
+      type: boolean
+      label: 'Clean backup tasks'
+    clean_migrate_tasks:
+      type: boolean
+      label: 'Clean migrate tasks'
+    batch_size:
+      type: integer
+      label: 'Batch size'
+    preserve_latest:
+      type: integer
+      label: 'Preserve latest tasks per site'
+    log_deletions:
+      type: boolean
+      label: 'Log task deletions'

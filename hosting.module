@@ -1177,20 +1177,6 @@ function hosting_settings($form, &$form_state) {
     }
   }
   natcasesort($profiles);
-  $default_value = hosting_package_instance_load(array('p.id' => hosting_get_default_profile()))->short_name;
-  $form['hosting_default_profile'] = array(
-    '#type' => 'select',
-    '#title' => t('Default profile'),
-    '#options' => $profiles,
-    '#description' => t('The default install profile to use when creating new sites.'),
-    '#default_value' => $default_value,
-  );
-  $form['hosting_ignore_default_profiles'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Hide platforms with non-default profiles'),
-    '#description' => t('When selecting a Drupal core profile, hide platforms that also contain other profiles (i.e intended as distributions). Warning: requires a platform other than the Hostmaster platform.'),
-    '#default_value' => $config->get('hosting_ignore_default_profiles') ?? FALSE,
-  );
   $form['hosting_lock_platforms_by_default'] = array(
     '#type' => 'checkbox',
     '#title' => t('Lock platforms by default on initial creation'),
@@ -1247,8 +1233,6 @@ function hosting_settings_submit($form, &$form_state) {
     : $form_state['values'];
   $config = \Drupal::configFactory()->getEditable('hosting.settings');
   $keys = array(
-    'hosting_default_profile',
-    'hosting_ignore_default_profiles',
     'hosting_lock_platforms_by_default',
     'hosting_platform_automatic_site_import',
     'hosting_require_disable_before_delete',
@@ -1481,7 +1465,7 @@ function hosting_run_drush_command($site_alias, $command, array $args = [], arra
  */
 function &hosting_task_context_storage() {
   static $store = [
-    'task' => NULL,
+    'context' => NULL,
     'output' => [],
     'options' => [],
     'errors' => [],
@@ -1490,14 +1474,14 @@ function &hosting_task_context_storage() {
   return $store;
 }
 
-function hosting_task_set_current($task) {
+function hosting_task_set_current($context) {
   $store = &hosting_task_context_storage();
-  $store['task'] = $task;
+  $store['context'] = $context instanceof \Drupal\hosting\TaskExecutionContext ? $context : NULL;
 }
 
 function hosting_task_get_current() {
   $store = &hosting_task_context_storage();
-  return $store['task'];
+  return $store['context'];
 }
 
 function hosting_task_set_output(array $output) {

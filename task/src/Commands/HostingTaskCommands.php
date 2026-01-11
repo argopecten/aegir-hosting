@@ -18,8 +18,9 @@ final class HostingTaskCommands extends DrushCommands {
    * Shutdown function to catch any task status.
    */
   public static function updateStatus(): void {
-    $task = hosting_task_get_current();
-    if (!empty($task)) {
+    $context = hosting_task_get_current();
+    if (!empty($context) && $context instanceof \Drupal\hosting\TaskExecutionContext) {
+      $task = $context->getTask();
       $message = _hosting_parse_error_code(hosting_task_update_status($task));
       \Drush\Drush::logger()->info((string) t('Updated task status to "@log"', ['@log' => $message]));
     }

@@ -366,6 +366,22 @@ function hosting_platform_apply_form_overrides(array &$form, &$form_state, $node
   $verified = $node->hasField('verified') ? (int) $node->get('verified')->value : (isset($node->verified) ? (int) $node->verified : 0);
   $editable = (!$platform_id || !$verified);
 
+  // Get deployment method - for existing platforms, always treat as manual
+  $deployment_method = 'manual';
+  if (!$platform_id && isset($form['deployment_method'])) {
+    // Only show deployment method selector for new platforms
+    $form['deployment_method']['widget']['#weight'] = -10;
+  }
+  elseif ($platform_id) {
+    // Hide deployment method for existing platforms
+    if (isset($form['deployment_method'])) {
+      $form['deployment_method']['#access'] = FALSE;
+    }
+    if (isset($form['repository_url'])) {
+      $form['repository_url']['#access'] = FALSE;
+    }
+  }
+
   $base_path = \Drupal::config('hosting_platform.settings')->get('hosting_platform_base_path') ?? '/var/aegir/platforms/';
   $field_prefix = $base_path;
   $default_path = '';

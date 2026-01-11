@@ -1,0 +1,7 @@
+hosting_cron.settings:
+  path: '/admin/hosting/cron/settings'
+  defaults:
+    _form: '\Drupal\hosting_cron\Form\HostingCronSettingsForm'
+    _title: 'Cron Settings'
+  requirements:
+    _permission: 'administer hosting'

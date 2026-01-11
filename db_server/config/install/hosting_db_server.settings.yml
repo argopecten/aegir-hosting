@@ -1,0 +1,12 @@
+default_type: 'mysql'
+default_port: 3306
+connection_timeout: 30
+max_connections: 100
+backup_enabled: true
+backup_schedule: 'daily'
+backup_retention: 30
+backup_compression: true
+require_ssl: false
+password_complexity: true
+monitor_performance: true
+slow_query_threshold: 1.0
