@@ -14,6 +14,7 @@ use Drupal\hosting_platform\Plugin\Field\HostingPlatformClientsItemList;
  *   id = "hosting_platform",
  *   label = @Translation("Hosting platform"),
  *   handlers = {
+ *     "view_builder" = "Drupal\Core\Entity\EntityViewBuilder",
  *     "list_builder" = "Drupal\hosting_platform\HostingPlatformListBuilder",
  *     "access" = "Drupal\hosting_platform\HostingPlatformAccessControlHandler",
  *     "views_data" = "Drupal\views\EntityViewsData",
@@ -97,9 +98,11 @@ class HostingPlatform extends HostingEntityBase {
       ->setDisplayConfigurable('form', TRUE)
       ->setDisplayConfigurable('view', TRUE);
 
-    $fields['verified'] = BaseFieldDefinition::create('integer')
+    $fields['verified'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Verified'))
-      ->setDefaultValue(0);
+      ->setDescription(t('The last time this platform was verified.'))
+      ->setDefaultValue(0)
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['clients'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Clients'))

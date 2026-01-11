@@ -6,3 +6,15 @@ platform-form:
     - core/jquery
     - core/drupal
     - core/once
+
+platform-list:
+  version: 1.x
+  css:
+    theme:
+      css/platform-list.css: {}
+
+platform-view:
+  version: 1.x
+  css:
+    theme:
+      css/platform-view.css: {}

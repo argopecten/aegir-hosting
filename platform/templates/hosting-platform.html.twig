@@ -1,0 +1,102 @@
+{#
+/**
+ * @file
+ * Theme implementation for hosting platform entity.
+ *
+ * Available variables:
+ * - platform: The full platform entity.
+ * - content: The rendered content fields.
+ * - attributes: HTML attributes for the containing element.
+ */
+#}
+<article{{ attributes.addClass('hosting-platform') }}>
+  <div class="platform-header">
+    <div class="platform-tabs">
+      <span class="tab">Platform</span>
+      <span class="platform-name">{{ platform.label.value }}</span>
+    </div>
+    <div class="platform-meta">
+      Submitted by {{ platform.getOwner().getDisplayName() }} on {{ platform.created.value|format_date('custom', 'D, m/d/Y - H:i') }}
+    </div>
+  </div>
+  
+  <div class="platform-layout">
+    <div class="platform-main">
+      <div class="platform-details">
+        <table class="platform-info-table">
+          <tbody>
+            {% if content.verified %}
+            <tr>
+              <td class="label">{{ 'Verified'|t }}</td>
+              <td class="value">{{ content.verified }}</td>
+            </tr>
+            {% endif %}
+            
+            {% if content.publish_path %}
+            <tr>
+              <td class="label">{{ 'Publish path'|t }}</td>
+              <td class="value">{{ content.publish_path }}</td>
+            </tr>
+            {% endif %}
+            
+            {% if content.web_server %}
+            <tr>
+              <td class="label">{{ 'Web server'|t }}</td>
+              <td class="value">{{ content.web_server }}</td>
+            </tr>
+            {% endif %}
+            
+            {% if content.php_version %}
+            <tr>
+              <td class="label">{{ 'Release'|t }}</td>
+              <td class="value">{{ content.php_version }}</td>
+            </tr>
+            {% endif %}
+            
+            {% if content.status %}
+            <tr>
+              <td class="label">{{ 'Status'|t }}</td>
+              <td class="value">{{ content.status }}</td>
+            </tr>
+            {% endif %}
+            
+            {% if content.deployment_method %}
+            <tr>
+              <td class="label">{{ 'Deployment strategy'|t }}</td>
+              <td class="value">{{ content.deployment_method }}</td>
+            </tr>
+            {% endif %}
+            
+            {% if content.repository_url %}
+            <tr>
+              <td class="label">{{ 'Repository URL'|t }}</td>
+              <td class="value">{{ content.repository_url }}</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="platform-sites">
+        <h2>{{ 'Sites installed on this platform'|t }}</h2>
+        <div class="sites-list">
+          {% if content.sites_view %}
+            {{ content.sites_view }}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    
+    <div class="platform-sidebar">
+      <div class="task-actions">
+        <h3>{{ 'Task'|t }}</h3>
+        <div class="actions-header">{{ 'Actions'|t }}</div>
+        <div class="task-list">
+          {% if content.tasks %}
+            {{ content.tasks }}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</article>

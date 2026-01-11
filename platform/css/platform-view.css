@@ -1,0 +1,144 @@
+/**
+ * Platform entity display styles
+ */
+
+.hosting-platform {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.platform-header {
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.platform-tabs {
+  background: #5a5a5a;
+  color: #fff;
+  padding: 8px 15px;
+  margin: 0 0 10px 0;
+  display: inline-block;
+}
+
+.platform-tabs .tab {
+  background: #5a5a5a;
+  padding: 5px 10px;
+  display: inline-block;
+}
+
+.platform-tabs .platform-name {
+  margin-left: 10px;
+  font-weight: normal;
+}
+
+.platform-meta {
+  color: #666;
+  font-size: 13px;
+  padding: 5px 0;
+}
+
+.platform-layout {
+  display: flex;
+  gap: 20px;
+}
+
+.platform-main {
+  flex: 1;
+}
+
+.platform-sidebar {
+  width: 250px;
+  flex-shrink: 0;
+}
+
+.platform-details {
+  margin-bottom: 30px;
+}
+
+.platform-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+}
+
+.platform-info-table tr {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.platform-info-table tr:last-child {
+  border-bottom: none;
+}
+
+.platform-info-table td {
+  padding: 10px 15px;
+}
+
+.platform-info-table td.label {
+  width: 200px;
+  font-weight: 600;
+  background: #f0f0f0;
+  vertical-align: top;
+}
+
+.platform-info-table td.value {
+  background: #fff;
+}
+
+.platform-info-table td.value a {
+  color: #0073aa;
+  text-decoration: none;
+}
+
+.platform-info-table td.value a:hover {
+  text-decoration: underline;
+}
+
+.platform-sites {
+  margin-top: 30px;
+}
+
+.platform-sites h2 {
+  font-size: 18px;
+  font-weight: normal;
+  margin: 0 0 15px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.task-actions {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+}
+
+.task-actions h3 {
+  background: #5a5a5a;
+  color: #fff;
+  margin: 0;
+  padding: 10px 15px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.actions-header {
+  background: #5a5a5a;
+  color: #fff;
+  padding: 8px 15px;
+  font-weight: 600;
+  text-align: right;
+  font-size: 13px;
+}
+
+.task-actions .block-content {
+  padding: 10px;
+}
+
+/* Remove field labels since we're using table headers */
+.hosting-platform .field__label {
+  display: none;
+}
+
+.hosting-platform .field__item {
+  margin: 0;
+}

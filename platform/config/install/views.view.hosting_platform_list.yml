@@ -20,6 +20,9 @@ display:
     display_options:
       title: Platforms
       use_ajax: true
+      css_class: view-hosting-platform-list
+      attached_library:
+        - hosting_platform/platform-list
       access:
         type: perm
         options:

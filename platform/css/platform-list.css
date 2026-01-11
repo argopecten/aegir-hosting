@@ -1,0 +1,77 @@
+/**
+ * Platform list styling for Views-based display
+ */
+
+/* Table structure */
+.view-hosting-platform-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.view-hosting-platform-list th {
+  text-align: left;
+  padding: 8px 12px;
+  background-color: #5a5a5a;
+  color: #fff;
+  font-weight: 600;
+  border-bottom: 2px solid #333;
+}
+
+.view-hosting-platform-list td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+/* Row styling based on status */
+.view-hosting-platform-list tbody tr {
+  background-color: #f9f9f9;
+}
+
+.view-hosting-platform-list tbody tr:hover {
+  background-color: #f0f0f0;
+}
+
+.view-hosting-platform-list tbody tr.hosting-status-enabled {
+  background-color: #d4edda;
+}
+
+.view-hosting-platform-list tbody tr.hosting-status-locked {
+  background-color: #fff3cd;
+}
+
+.view-hosting-platform-list tbody tr.hosting-status-disabled {
+  background-color: #f8d7da;
+}
+
+.view-hosting-platform-list tbody tr.hosting-status-new {
+  background-color: #d1ecf1;
+}
+
+/* Link styling */
+.view-hosting-platform-list a {
+  color: #0073aa;
+  text-decoration: none;
+}
+
+.view-hosting-platform-list a:hover {
+  text-decoration: underline;
+}
+
+/* Column-specific styling */
+.view-hosting-platform-list .views-field-title {
+  font-weight: 600;
+}
+
+.view-hosting-platform-list .views-field-sites {
+  text-align: center;
+}
+
+.view-hosting-platform-list .views-field-verified {
+  white-space: nowrap;
+}
+
+/* Bulk operations checkbox column */
+.view-hosting-platform-list .views-field-hosting-platform-bulk-form {
+  width: 40px;
+  text-align: center;
+}

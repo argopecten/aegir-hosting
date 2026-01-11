@@ -1205,3 +1205,47 @@ function hosting_platform_post_hosting_unlock_task($task, $data) {
     $task->ref->save();
   }
 }
+
+/**
+ * Implements hook_preprocess_HOOK() for views_view.
+ */
+function hosting_platform_preprocess_views_view(&$variables) {
+  $view = $variables['view'];
+  
+  // Attach CSS library to the hosting platform list view.
+  if ($view->id() === 'hosting_platform_list') {
+    $variables['#attached']['library'][] = 'hosting_platform/platform-list';
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function hosting_platform_theme($existing, $type, $theme, $path) {
+  return [
+    'hosting_platform' => [
+      'render element' => 'elements',
+      'template' => 'hosting-platform',
+    ],
+  ];
+}
+
+/**
+ * Prepares variables for hosting platform templates.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - elements: An associative array containing the platform entity and view mode.
+ */
+function template_preprocess_hosting_platform(&$variables) {
+  $variables['platform'] = $variables['elements']['#hosting_platform'];
+  $variables['view_mode'] = $variables['elements']['#view_mode'];
+  
+  // Helpful $content variable for templates.
+  foreach (\Drupal\Core\Render\Element::children($variables['elements']) as $key) {
+    $variables['content'][$key] = $variables['elements'][$key];
+  }
+  
+  // Attach library.
+  $variables['#attached']['library'][] = 'hosting_platform/platform-view';
+}

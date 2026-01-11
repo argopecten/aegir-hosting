@@ -16,12 +16,12 @@ class HostingPlatformAccessControlHandler extends EntityAccessControlHandler {
    * {@inheritdoc}
    */
   protected function checkAccess(EntityInterface $entity, $operation, AccountInterface $account) {
-    if (hosting_feature('client') && $operation !== 'create') {
-      return AccessResult::neutral();
-    }
-
     if ($account->hasPermission('administer platforms')) {
       return AccessResult::allowed()->cachePerPermissions();
+    }
+
+    if (hosting_feature('client') && $operation !== 'create' && $operation !== 'view') {
+      return AccessResult::neutral();
     }
 
     switch ($operation) {
