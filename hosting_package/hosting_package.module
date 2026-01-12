@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ * Hosting package module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_package_hosting_feature() {
+  return [
+    'package' => [
+      'title' => t('Packages'),
+      'description' => t('Package tracking and instances.'),
+      'module' => 'hosting_package',
+      'required' => FALSE,
+      'dependencies' => [],
+    ],
+  ];
+}

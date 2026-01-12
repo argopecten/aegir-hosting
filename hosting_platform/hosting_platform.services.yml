@@ -1,0 +1,4 @@
+services:
+  hosting_platform.manager:
+    class: Drupal\hosting_platform\Service\PlatformManager
+    arguments: ['@entity_type.manager', '@config.factory']

@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ * Hosting DB server module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_db_server_hosting_feature() {
+  return [
+    'db_server' => [
+      'title' => t('Database server'),
+      'description' => t('Database service providers for servers.'),
+      'module' => 'hosting_db_server',
+      'required' => FALSE,
+      'dependencies' => ['hosting_server'],
+    ],
+  ];
+}

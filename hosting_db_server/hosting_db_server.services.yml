@@ -1,0 +1,8 @@
+services:
+  hosting_db_server.resolver:
+    class: Drupal\hosting_db_server\Service\DbServerResolver
+    arguments: ['@entity_type.manager']
+
+  hosting_db_server.credentials:
+    class: Drupal\hosting_db_server\Service\DbCredentialsManager
+    arguments: []

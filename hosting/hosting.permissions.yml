@@ -1,0 +1,18 @@
+administer hosting:
+  title: 'Administer hosting'
+  description: 'Configure and manage the hosting system.'
+administer hosting features:
+  title: 'Administer hosting features'
+  description: 'Enable or disable Hosting features.'
+administer hosting queues:
+  title: 'Administer hosting queues'
+  description: 'Configure queue scheduling and execution.'
+administer hosting settings:
+  title: 'Administer hosting settings'
+  description: 'Configure general Hosting settings.'
+access disabled sites:
+  title: 'Access disabled sites'
+  description: 'View site disabled pages.'
+access hosting queues:
+  title: 'Access hosting queues'
+  description: 'View queue status and listings.'

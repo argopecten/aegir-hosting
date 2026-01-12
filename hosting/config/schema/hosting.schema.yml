@@ -1,0 +1,86 @@
+hosting.settings:
+  type: config_object
+  label: 'Hosting settings'
+  mapping:
+    dispatch_enabled:
+      type: boolean
+      label: 'Dispatch enabled'
+    backend:
+      type: mapping
+      label: 'Backend settings'
+      mapping:
+        drush_path:
+          type: string
+          label: 'Drush path'
+        alias:
+          type: string
+          label: 'Backend alias'
+    queues:
+      type: mapping
+      label: 'Queues'
+      mapping:
+        tasks:
+          type: mapping
+          label: 'Tasks queue'
+          mapping:
+            label:
+              type: label
+            description:
+              type: text
+            type:
+              type: string
+            frequency:
+              type: integer
+            items:
+              type: integer
+            enabled:
+              type: boolean
+            queue_id:
+              type: string
+            max_threads:
+              type: integer
+            min_threads:
+              type: integer
+            threshold:
+              type: integer
+            total_items:
+              type: integer
+    settings:
+      type: mapping
+      label: 'General settings'
+      mapping:
+        default_profile:
+          type: string
+        default_db_server:
+          type: integer
+        ignore_default_profiles:
+          type: boolean
+        blocked_profiles:
+          type: sequence
+          sequence:
+            type: string
+        require_disable_before_delete:
+          type: boolean
+        delete_force:
+          type: boolean
+        lock_platforms_by_default:
+          type: boolean
+        platform_automatic_site_import:
+          type: boolean
+        cron_method:
+          type: string
+        task_logs_types_display:
+          type: sequence
+          label: 'Task log types to display'
+          sequence:
+            type: string
+
+hosting.features:
+  type: config_object
+  label: 'Hosting features'
+  mapping:
+    enabled:
+      type: sequence
+      label: 'Enabled features'
+      sequence:
+        type: string

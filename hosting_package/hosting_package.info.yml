@@ -1,0 +1,8 @@
+name: Hosting Package
+type: module
+description: 'Package tracking for Hosting.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting:hosting
+  - views:views

@@ -1,0 +1,24 @@
+hosting.admin:
+  title: 'Hosting'
+  description: 'Configure and manage the hosting system'
+  route_name: hosting.admin
+  parent: system.admin_config
+  weight: 100
+
+hosting.admin.features:
+  title: 'Features'
+  route_name: hosting.admin.features
+  parent: hosting.admin
+  weight: 0
+
+hosting.admin.queues:
+  title: 'Queues'
+  route_name: hosting.admin.queues
+  parent: hosting.admin
+  weight: 10
+
+hosting.admin.settings:
+  title: 'Settings'
+  route_name: hosting.admin.settings
+  parent: hosting.admin
+  weight: 20

@@ -1,0 +1,16 @@
+services:
+  hosting_package.version_parser:
+    class: Drupal\hosting_package\Service\PackageVersionParser
+    arguments: []
+
+  hosting_package.discovery:
+    class: Drupal\hosting_package\Service\PackageDiscovery
+    arguments: ['@file_system']
+
+  hosting_package.sync:
+    class: Drupal\hosting_package\Service\PackageInstanceSync
+    arguments: ['@entity_type.manager', '@hosting_package.discovery', '@hosting_package.version_parser']
+
+  hosting_package.comparison:
+    class: Drupal\hosting_package\Service\PackageComparison
+    arguments: ['@entity_type.manager']

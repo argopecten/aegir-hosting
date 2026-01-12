@@ -1,0 +1,10 @@
+name: Hosting Platform
+type: module
+description: 'Platform management for Hosting.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting:hosting
+  - hosting_server:hosting_server
+  - hosting_package:hosting_package
+  - views:views

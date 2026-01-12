@@ -1,0 +1,8 @@
+services:
+  hosting_client.manager:
+    class: Drupal\hosting_client\Service\ClientManager
+    arguments: ['@entity_type.manager']
+
+  hosting_client.access_manager:
+    class: Drupal\hosting_client\Service\ClientAccessManager
+    arguments: ['@entity_type.manager', '@current_user']

@@ -1,0 +1,12 @@
+services:
+  hosting_site.domain_validator:
+    class: Drupal\hosting_site\Service\DomainValidator
+    arguments: []
+
+  hosting_site.manager:
+    class: Drupal\hosting_site\Service\SiteManager
+    arguments: ['@entity_type.manager', '@config.factory', '@hosting_site.domain_validator']
+
+  hosting_site.backup_manager:
+    class: Drupal\hosting_site\Service\BackupManager
+    arguments: ['@entity_type.manager']

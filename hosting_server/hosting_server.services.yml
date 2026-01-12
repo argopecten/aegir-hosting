@@ -1,0 +1,20 @@
+services:
+  plugin.manager.hosting_service_type:
+    class: Drupal\hosting_server\Plugin\HostingServiceTypeManager
+    arguments: ['@container.namespaces', '@cache.discovery', '@module_handler']
+
+  plugin.manager.hosting_service_provider:
+    class: Drupal\hosting_server\Plugin\HostingServiceProviderManager
+    arguments: ['@container.namespaces', '@cache.discovery', '@module_handler']
+
+  hosting.service_manager:
+    class: Drupal\hosting_server\Service\ServiceManager
+    arguments: ['@plugin.manager.hosting_service_type', '@plugin.manager.hosting_service_provider']
+
+  hosting.server_manager:
+    class: Drupal\hosting_server\Service\ServerManager
+    arguments: ['@entity_type.manager']
+
+  hosting.ip_manager:
+    class: Drupal\hosting_server\Service\IpManager
+    arguments: []

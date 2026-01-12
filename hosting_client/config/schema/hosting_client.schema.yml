@@ -1,0 +1,13 @@
+hosting_client.settings:
+  type: config_object
+  label: 'Hosting client settings'
+  mapping:
+    client_prefix:
+      type: string
+      label: 'Client prefix'
+    auto_registration:
+      type: boolean
+      label: 'Auto registration'
+    default_client:
+      type: integer
+      label: 'Default client'

@@ -1,0 +1,10 @@
+administer sites:
+  title: 'Administer sites'
+create site:
+  title: 'Create site'
+view site:
+  title: 'View site'
+edit site:
+  title: 'Edit site'
+delete site:
+  title: 'Delete site'

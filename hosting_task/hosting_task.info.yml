@@ -1,0 +1,9 @@
+name: Hosting Task
+type: module
+description: 'Task management for Hosting on Drupal 11.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting:hosting
+  - user:user
+  - views:views

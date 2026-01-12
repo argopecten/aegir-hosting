@@ -1,0 +1,9 @@
+name: Hosting Server
+type: module
+description: 'Server and service management for Hosting.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting:hosting
+  - user:user
+  - views:views

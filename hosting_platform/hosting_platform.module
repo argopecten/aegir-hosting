@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ * Hosting platform module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_platform_hosting_feature() {
+  return [
+    'platform' => [
+      'title' => t('Platforms'),
+      'description' => t('Platform records and tasks.'),
+      'module' => 'hosting_platform',
+      'required' => FALSE,
+      'dependencies' => ['hosting_server', 'hosting_package'],
+    ],
+  ];
+}

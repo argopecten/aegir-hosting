@@ -1,0 +1,10 @@
+administer servers:
+  title: 'Administer servers'
+create server:
+  title: 'Create server'
+view server:
+  title: 'View server'
+edit server:
+  title: 'Edit server'
+delete server:
+  title: 'Delete server'

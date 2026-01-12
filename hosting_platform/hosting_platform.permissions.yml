@@ -1,0 +1,14 @@
+administer platforms:
+  title: 'Administer platforms'
+create platform:
+  title: 'Create platform'
+view platform:
+  title: 'View platform'
+edit platform:
+  title: 'Edit platform'
+delete platform:
+  title: 'Delete platform'
+view locked platforms:
+  title: 'View locked platforms'
+create sites on locked platforms:
+  title: 'Create sites on locked platforms'

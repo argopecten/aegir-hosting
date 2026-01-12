@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ * Hosting web server module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_web_server_hosting_feature() {
+  return [
+    'web_server' => [
+      'title' => t('Web server'),
+      'description' => t('HTTP service providers for servers.'),
+      'module' => 'hosting_web_server',
+      'required' => FALSE,
+      'dependencies' => ['hosting_server'],
+    ],
+  ];
+}

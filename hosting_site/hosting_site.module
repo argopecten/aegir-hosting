@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ * Hosting site module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_site_hosting_feature() {
+  return [
+    'site' => [
+      'title' => t('Sites'),
+      'description' => t('Site records and lifecycle tasks.'),
+      'module' => 'hosting_site',
+      'required' => FALSE,
+      'dependencies' => ['hosting_platform', 'hosting_server', 'hosting_package'],
+    ],
+  ];
+}

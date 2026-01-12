@@ -1,0 +1,12 @@
+administer tasks:
+  title: 'Administer tasks'
+  description: 'Manage all hosting tasks.'
+view task logs:
+  title: 'View task logs'
+  description: 'View hosting task logs.'
+cancel own tasks:
+  title: 'Cancel own tasks'
+  description: 'Cancel tasks you can create.'
+create task:
+  title: 'Create tasks'
+  description: 'Create hosting tasks.'

@@ -1,0 +1,55 @@
+hosting.admin:
+  path: '/admin/hosting'
+  defaults:
+    _form: '\Drupal\hosting\Form\HostingFeaturesForm'
+    _title: 'Hosting'
+  requirements:
+    _permission: 'administer hosting'
+
+hosting.admin.features:
+  path: '/admin/hosting/features'
+  defaults:
+    _form: '\Drupal\hosting\Form\HostingFeaturesForm'
+    _title: 'Features'
+  requirements:
+    _permission: 'administer hosting features'
+
+hosting.admin.queues:
+  path: '/admin/hosting/queues'
+  defaults:
+    _form: '\Drupal\hosting\Form\HostingQueuesForm'
+    _title: 'Queues'
+  requirements:
+    _permission: 'administer hosting queues'
+
+hosting.admin.settings:
+  path: '/admin/hosting/settings'
+  defaults:
+    _form: '\Drupal\hosting\Form\HostingSettingsForm'
+    _title: 'Settings'
+  requirements:
+    _permission: 'administer hosting settings'
+
+hosting.queues:
+  path: '/hosting/queues'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingQueuesController::listing'
+    _title: 'Queues'
+  requirements:
+    _permission: 'access hosting queues'
+
+hosting.disabled:
+  path: '/hosting/disabled'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingQueuesController::disabled'
+    _title: 'Site disabled'
+  requirements:
+    _permission: 'access disabled sites'
+
+hosting.maintenance:
+  path: '/hosting/maintenance'
+  defaults:
+    _controller: '\Drupal\hosting\Controller\HostingQueuesController::maintenance'
+    _title: 'Site maintenance'
+  requirements:
+    _permission: 'access content'

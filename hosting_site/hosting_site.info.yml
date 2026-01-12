@@ -1,0 +1,12 @@
+name: Hosting Site
+type: module
+description: 'Site management for Hosting.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting:hosting
+  - hosting_platform:hosting_platform
+  - hosting_server:hosting_server
+  - hosting_package:hosting_package
+  - hosting_client:hosting_client
+  - views:views

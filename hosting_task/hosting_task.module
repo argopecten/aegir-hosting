@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * @file
+ * Hosting task module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_task_hosting_feature() {
+  return [
+    'task' => [
+      'title' => t('Tasks'),
+      'description' => t('Task queueing and logs.'),
+      'module' => 'hosting_task',
+      'required' => TRUE,
+      'dependencies' => [],
+    ],
+  ];
+}
+
+/**
+ * Implements hook_hosting_queue_info().
+ */
+function hosting_task_hosting_queue_info() {
+  return [
+    'tasks' => [
+      'label' => t('Tasks'),
+      'description' => t('Execute provisioning tasks.'),
+      'type' => 'serial',
+      'frequency' => 300,
+      'items' => 5,
+      'queue_id' => 'hosting_task',
+      'max_threads' => 6,
+      'min_threads' => 1,
+      'threshold' => 100,
+      'enabled' => TRUE,
+    ],
+  ];
+}

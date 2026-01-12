@@ -1,0 +1,8 @@
+name: Hosting
+type: module
+description: 'Hostmaster frontend for Aegir on Drupal 11.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - views:views
+  - path:path

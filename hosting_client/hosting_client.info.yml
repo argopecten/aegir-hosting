@@ -1,0 +1,8 @@
+name: Hosting Client
+type: module
+description: 'Client management for Hosting.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting:hosting
+  - user:user

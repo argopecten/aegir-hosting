@@ -1,0 +1,24 @@
+services:
+  logger.channel.hosting:
+    parent: logger.channel_base
+    arguments: ['hosting']
+
+  hosting.feature_manager:
+    class: Drupal\hosting\Service\FeatureManager
+    arguments: ['@module_handler', '@config.factory', '@module_installer', '@entity_type.manager']
+
+  hosting.backend_invoker:
+    class: Drupal\hosting\Service\BackendInvoker
+    arguments: ['@config.factory', '@logger.channel.hosting']
+
+  hosting.context_registry:
+    class: Drupal\hosting\Service\ContextRegistry
+    arguments: ['@entity_type.manager', '@path_alias.repository', '@path.validator', '@logger.channel.hosting']
+
+  hosting.queue_runner:
+    class: Drupal\hosting\Service\QueueRunner
+    arguments: ['@queue', '@plugin.manager.queue_worker', '@logger.channel.hosting']
+
+  hosting.queue_dispatcher:
+    class: Drupal\hosting\Service\QueueDispatcher
+    arguments: ['@config.factory', '@keyvalue', '@hosting.queue_runner', '@datetime.time', '@logger.channel.hosting', '@database', '@module_handler']

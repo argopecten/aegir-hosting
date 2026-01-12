@@ -1,0 +1,6 @@
+services:
+  hosting_task.commands:
+    class: Drupal\hosting_task\Commands\HostingTaskCommands
+    arguments: ['@hosting.task_manager']
+    tags:
+      - { name: drush.command }

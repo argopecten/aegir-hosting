@@ -1,0 +1,7 @@
+name: Hosting Web Server
+type: module
+description: 'HTTP service providers for Hosting servers.'
+package: Hosting
+core_version_requirement: ^11
+dependencies:
+  - hosting_server:hosting_server

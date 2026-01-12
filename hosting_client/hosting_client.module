@@ -1,0 +1,104 @@
+<?php
+
+/**
+ * @file
+ * Hosting client module.
+ */
+
+/**
+ * Implements hook_hosting_feature().
+ */
+function hosting_client_hosting_feature() {
+  return [
+    'client' => [
+      'title' => t('Clients'),
+      'description' => t('Client records and access rules.'),
+      'module' => 'hosting_client',
+      'required' => FALSE,
+      'dependencies' => [],
+    ],
+  ];
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for user_form.
+ */
+function hosting_client_form_user_form_alter(array &$form, \Drupal\Core\Form\FormStateInterface $form_state): void {
+  if (!\Drupal::currentUser()->hasPermission('edit client users')) {
+    return;
+  }
+
+  $user = $form_state->getFormObject()->getEntity();
+  if (!$user instanceof \Drupal\user\UserInterface) {
+    return;
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_client_user');
+  $relations = $storage->loadByProperties(['user' => $user->id()]);
+  $clients = [];
+  foreach ($relations as $relation) {
+    $client = $relation->get('client')->entity;
+    if ($client) {
+      $clients[] = $client;
+    }
+  }
+
+  $form['hosting_client'] = [
+    '#type' => 'details',
+    '#title' => t('Client memberships'),
+    '#open' => FALSE,
+  ];
+  $form['hosting_client']['clients'] = [
+    '#type' => 'entity_autocomplete',
+    '#target_type' => 'hosting_client',
+    '#tags' => TRUE,
+    '#default_value' => $clients,
+  ];
+  $form['#submit'][] = 'hosting_client_user_form_submit';
+}
+
+/**
+ * Submit handler for user_form to store client memberships.
+ */
+function hosting_client_user_form_submit(array &$form, \Drupal\Core\Form\FormStateInterface $form_state): void {
+  if (!\Drupal::currentUser()->hasPermission('edit client users')) {
+    return;
+  }
+
+  $user = $form_state->getFormObject()->getEntity();
+  if (!$user instanceof \Drupal\user\UserInterface) {
+    return;
+  }
+
+  $values = $form_state->getValue(['hosting_client', 'clients']) ?? [];
+  $selected_ids = [];
+  foreach ($values as $item) {
+    if (is_array($item) && !empty($item['target_id'])) {
+      $selected_ids[] = (int) $item['target_id'];
+    }
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_client_user');
+  $existing = $storage->loadByProperties(['user' => $user->id()]);
+  $existing_map = [];
+  foreach ($existing as $relation) {
+    $client_id = (int) $relation->get('client')->target_id;
+    $existing_map[$client_id] = $relation;
+  }
+
+  foreach ($existing_map as $client_id => $relation) {
+    if (!in_array($client_id, $selected_ids, TRUE)) {
+      $relation->delete();
+    }
+  }
+
+  foreach ($selected_ids as $client_id) {
+    if (!isset($existing_map[$client_id])) {
+      $storage->create([
+        'user' => $user->id(),
+        'client' => $client_id,
+        'contact_type' => '',
+      ])->save();
+    }
+  }
+}

@@ -1,0 +1,5 @@
+hosting_client.settings:
+  title: 'Client settings'
+  route_name: hosting_client.settings
+  parent: hosting.admin
+  weight: 30

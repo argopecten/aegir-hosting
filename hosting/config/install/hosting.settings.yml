@@ -1,0 +1,35 @@
+dispatch_enabled: true
+backend:
+  drush_path: /usr/bin/drush
+  alias: '@hostmaster'
+queues:
+  tasks:
+    label: 'Tasks'
+    description: 'Execute provisioning tasks.'
+    type: 'serial'
+    frequency: 300
+    items: 5
+    enabled: true
+    queue_id: 'hosting_task'
+    max_threads: 6
+    min_threads: 1
+    threshold: 100
+settings:
+  default_profile: ''
+  default_db_server: null
+  ignore_default_profiles: false
+  blocked_profiles: []
+  require_disable_before_delete: true
+  delete_force: false
+  lock_platforms_by_default: false
+  platform_automatic_site_import: true
+  cron_method: 'drush'
+  task_logs_types_display:
+    - error
+    - warning
+    - info
+    - message
+    - notice
+    - ok
+    - status
+    - success
