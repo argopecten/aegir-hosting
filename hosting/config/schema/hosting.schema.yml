@@ -19,9 +19,9 @@ hosting.settings:
       type: mapping
       label: 'Queues'
       mapping:
-        tasks:
+        '*':
           type: mapping
-          label: 'Tasks queue'
+          label: 'Queue definition'
           mapping:
             label:
               type: label

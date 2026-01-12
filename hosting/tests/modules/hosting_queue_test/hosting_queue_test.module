@@ -1,0 +1,23 @@
+<?php
+
+/**
+ * @file
+ * Provides test queue definitions for Hosting.
+ */
+
+/**
+ * Implements hook_hosting_queue_info().
+ */
+function hosting_queue_test_hosting_queue_info(): array {
+  return [
+    'test_queue' => [
+      'label' => t('Test queue'),
+      'description' => t('Queue used for install sync tests.'),
+      'type' => 'serial',
+      'frequency' => 180,
+      'items' => 10,
+      'queue_id' => 'hosting_queue_test_worker',
+      'enabled' => TRUE,
+    ],
+  ];
+}

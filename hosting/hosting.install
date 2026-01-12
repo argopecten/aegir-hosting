@@ -1,0 +1,81 @@
+<?php
+
+/**
+ * @file
+ * Install hooks for the Hosting module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function hosting_install(): void {
+  hosting_sync_queue_definitions();
+}
+
+/**
+ * Implements hook_modules_installed().
+ *
+ * @param string[] $modules
+ *   The modules that were just installed.
+ */
+function hosting_modules_installed(array $modules): void {
+  if (!hosting_modules_include_queue_definitions($modules)) {
+    return;
+  }
+  hosting_sync_queue_definitions();
+}
+
+/**
+ * Determines whether any modules provide Hosting queue definitions.
+ *
+ * @param string[] $modules
+ *   The modules that were just installed.
+ *
+ * @return bool
+ *   TRUE if at least one provided hook implementation, FALSE otherwise.
+ */
+function hosting_modules_include_queue_definitions(array $modules): bool {
+  $module_handler = \Drupal::moduleHandler();
+  foreach ($modules as $module) {
+    if ($module_handler->implementsHook($module, 'hosting_queue_info')) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Synchronizes queue definitions from modules into configuration.
+ */
+function hosting_sync_queue_definitions(): void {
+  $config = \Drupal::configFactory()->getEditable('hosting.settings');
+  $queues = $config->get('queues') ?? [];
+  $definitions = \Drupal::moduleHandler()->invokeAll('hosting_queue_info');
+
+  if (!$definitions) {
+    return;
+  }
+
+  $updated = FALSE;
+  foreach ($definitions as $queue_id => $definition) {
+    $definition += [
+      'enabled' => TRUE,
+    ];
+
+    if (!isset($queues[$queue_id])) {
+      $queues[$queue_id] = $definition;
+      $updated = TRUE;
+      continue;
+    }
+
+    $missing = array_diff_key($definition, $queues[$queue_id]);
+    if (!empty($missing)) {
+      $queues[$queue_id] += $missing;
+      $updated = TRUE;
+    }
+  }
+
+  if ($updated) {
+    $config->set('queues', $queues)->save();
+  }
+}

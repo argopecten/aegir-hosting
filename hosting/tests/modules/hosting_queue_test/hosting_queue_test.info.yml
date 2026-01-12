@@ -1,0 +1,7 @@
+name: 'Hosting queue test'
+type: module
+description: 'Provides a test queue definition for Hosting.'
+package: Testing
+core_version_requirement: ^11
+dependencies:
+  - hosting
