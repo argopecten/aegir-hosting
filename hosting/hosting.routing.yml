@@ -1,5 +1,5 @@
 hosting.admin:
-  path: '/admin/hosting'
+  path: '/hosting'
   defaults:
     _form: '\Drupal\hosting\Form\HostingFeaturesForm'
     _title: 'Hosting'
@@ -7,7 +7,7 @@ hosting.admin:
     _permission: 'administer hosting'
 
 hosting.admin.features:
-  path: '/admin/hosting/features'
+  path: '/hosting/features'
   defaults:
     _form: '\Drupal\hosting\Form\HostingFeaturesForm'
     _title: 'Features'
@@ -15,7 +15,7 @@ hosting.admin.features:
     _permission: 'administer hosting features'
 
 hosting.admin.queues:
-  path: '/admin/hosting/queues'
+  path: '/hosting/queues'
   defaults:
     _form: '\Drupal\hosting\Form\HostingQueuesForm'
     _title: 'Queues'
@@ -23,7 +23,7 @@ hosting.admin.queues:
     _permission: 'administer hosting queues'
 
 hosting.admin.settings:
-  path: '/admin/hosting/settings'
+  path: '/hosting/settings'
   defaults:
     _form: '\Drupal\hosting\Form\HostingSettingsForm'
     _title: 'Settings'
@@ -31,7 +31,7 @@ hosting.admin.settings:
     _permission: 'administer hosting settings'
 
 hosting.queues:
-  path: '/hosting/queues'
+  path: '/hosting/queues/status'
   defaults:
     _controller: '\Drupal\hosting\Controller\HostingQueuesController::listing'
     _title: 'Queues'

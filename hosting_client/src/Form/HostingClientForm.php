@@ -3,7 +3,9 @@
 namespace Drupal\hosting_client\Form;
 
 use Drupal\Core\Entity\ContentEntityForm;
-use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Component\Datetime\TimeInterface;
+use Drupal\Core\Entity\EntityRepositoryInterface;
+use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\hosting_client\Service\ClientManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -12,14 +14,16 @@ class HostingClientForm extends ContentEntityForm {
 
   protected ClientManager $clientManager;
 
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, ClientManager $client_manager) {
-    parent::__construct($entity_type_manager);
+  public function __construct(EntityRepositoryInterface $entity_repository, EntityTypeBundleInfoInterface $entity_type_bundle_info, TimeInterface $time, ClientManager $client_manager) {
+    parent::__construct($entity_repository, $entity_type_bundle_info, $time);
     $this->clientManager = $client_manager;
   }
 
   public static function create(ContainerInterface $container): static {
     return new static(
-      $container->get('entity_type.manager'),
+      $container->get('entity.repository'),
+      $container->get('entity_type.bundle.info'),
+      $container->get('datetime.time'),
       $container->get('hosting_client.manager'),
     );
   }

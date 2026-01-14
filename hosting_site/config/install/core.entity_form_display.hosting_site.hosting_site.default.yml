@@ -1,0 +1,79 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_site
+id: hosting_site.hosting_site.default
+targetEntityType: hosting_site
+bundle: hosting_site
+mode: default
+content:
+  domain:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: { }
+  client:
+    type: entity_reference_autocomplete
+    weight: 1
+    region: content
+    settings:
+      match_operator: CONTAINS
+      size: 60
+      placeholder: ''
+      match_limit: 10
+    third_party_settings: { }
+  platform:
+    type: entity_reference_autocomplete
+    weight: 2
+    region: content
+    settings:
+      match_operator: CONTAINS
+      size: 60
+      placeholder: ''
+      match_limit: 10
+    third_party_settings: { }
+  db_server:
+    type: entity_reference_autocomplete
+    weight: 3
+    region: content
+    settings:
+      match_operator: CONTAINS
+      size: 60
+      placeholder: ''
+      match_limit: 10
+    third_party_settings: { }
+  db_name:
+    type: string_textfield
+    weight: 4
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: { }
+  profile:
+    type: entity_reference_autocomplete
+    weight: 5
+    region: content
+    settings:
+      match_operator: CONTAINS
+      size: 60
+      placeholder: ''
+      match_limit: 10
+    third_party_settings: { }
+  language:
+    type: string_textfield
+    weight: 6
+    region: content
+    settings:
+      size: 12
+      placeholder: ''
+    third_party_settings: { }
+hidden:
+  cron_key: true
+  last_cron: true
+  verified: true
+  status: true

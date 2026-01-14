@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting package instance"),
  *   base_table = "hosting_package_instance",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "add" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "edit" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "add" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "edit" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\Core\\Entity\\EntityAccessControlHandler",
+ *     "access" = "Drupal\Core\Entity\EntityAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "view package",
@@ -33,7 +33,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "version"
  *   },
  *   links = {
- *     "collection" = "/admin/hosting/package-instances"
+ *     "collection" = "/hosting/package-instances"
  *   }
  * )
  */
@@ -45,32 +45,67 @@ class HostingPackageInstance extends ContentEntityBase {
     $fields['platform'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Platform'))
       ->setSetting('target_type', 'hosting_platform')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['platform_ref'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Platform reference'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['package'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Package'))
       ->setSetting('target_type', 'hosting_package')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['filename'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Filename'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['schema_version'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Schema version'))
-      ->setDefaultValue(0);
+      ->setDefaultValue(0)
+      ->setDisplayOptions('form', [
+        'type' => 'number',
+        'weight' => 4,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['version'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Version'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 5,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['version_code'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Version code'))
-      ->setDefaultValue(0);
+      ->setDefaultValue(0)
+      ->setDisplayOptions('form', [
+        'type' => 'number',
+        'weight' => 6,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Status'))
@@ -79,7 +114,12 @@ class HostingPackageInstance extends ContentEntityBase {
     $fields['languages'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Languages'))
       ->setCardinality(BaseFieldDefinition::CARDINALITY_UNLIMITED)
-      ->setDefaultValue([]);
+      ->setDefaultValue([])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 7,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     return $fields;
   }

@@ -3,3 +3,9 @@ hosting_client.settings:
   route_name: hosting_client.settings
   parent: hosting.admin
   weight: 30
+
+hosting_client.collection:
+  title: 'Clients'
+  route_name: entity.hosting_client.collection
+  parent: hosting.admin
+  weight: 25

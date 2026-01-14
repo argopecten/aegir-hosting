@@ -4,20 +4,17 @@ namespace Drupal\hosting\Service;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Path\PathValidatorInterface;
-use Drupal\Core\PathAlias\PathAliasRepositoryInterface;
 use Drupal\Core\Url;
 use Psr\Log\LoggerInterface;
 
 class ContextRegistry {
 
   protected EntityTypeManagerInterface $entityTypeManager;
-  protected PathAliasRepositoryInterface $aliasRepository;
   protected PathValidatorInterface $pathValidator;
   protected LoggerInterface $logger;
 
-  public function __construct(EntityTypeManagerInterface $entityTypeManager, PathAliasRepositoryInterface $aliasRepository, PathValidatorInterface $pathValidator, LoggerInterface $logger) {
+  public function __construct(EntityTypeManagerInterface $entityTypeManager, PathValidatorInterface $pathValidator, LoggerInterface $logger) {
     $this->entityTypeManager = $entityTypeManager;
-    $this->aliasRepository = $aliasRepository;
     $this->pathValidator = $pathValidator;
     $this->logger = $logger;
   }
@@ -90,7 +87,19 @@ class ContextRegistry {
     if (!$this->pathValidator->isValid($path)) {
       return;
     }
-    $this->aliasRepository->save($path, $alias);
+    $storage = $this->entityTypeManager->getStorage('path_alias');
+    $existing = $storage->loadByProperties(['alias' => $alias]);
+    $alias_entity = $existing ? reset($existing) : NULL;
+    if ($alias_entity) {
+      $alias_entity->setPath($path);
+    }
+    else {
+      $alias_entity = $storage->create([
+        'path' => $path,
+        'alias' => $alias,
+      ]);
+    }
+    $alias_entity->save();
   }
 
   protected function deleteAlias(string $context_name): void {

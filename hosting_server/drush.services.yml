@@ -1,0 +1,6 @@
+services:
+  hosting_server.commands:
+    class: Drupal\hosting_server\Commands\HostingServerCommands
+    arguments: ['@entity_type.manager', '@hosting.service_manager']
+    tags:
+      - { name: drush.command }

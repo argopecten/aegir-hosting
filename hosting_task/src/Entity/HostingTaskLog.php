@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting task log"),
  *   base_table = "hosting_task_log",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "add" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "edit" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "add" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "edit" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\Core\\Entity\\EntityAccessControlHandler",
+ *     "access" = "Drupal\Core\Entity\EntityAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "view task logs",
@@ -33,7 +33,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "message"
  *   },
  *   links = {
- *     "collection" = "/admin/hosting/task-logs"
+ *     "collection" = "/hosting/task-logs"
  *   }
  * )
  */
@@ -45,20 +45,40 @@ class HostingTaskLog extends ContentEntityBase {
     $fields['task'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Task'))
       ->setSetting('target_type', 'hosting_task')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['type'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Type'))
       ->setRequired(TRUE)
-      ->setDefaultValue('status');
+      ->setDefaultValue('status')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['message'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Message'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['error'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Error'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['timestamp'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Timestamp'))

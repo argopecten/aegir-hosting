@@ -1,0 +1,9 @@
+hosting_task.collection:
+  route_name: entity.hosting_task.collection
+  title: 'List'
+  base_route: entity.hosting_task.collection
+
+hosting_task.add:
+  route_name: entity.hosting_task.add_form
+  title: 'Add task'
+  base_route: entity.hosting_task.collection

@@ -37,7 +37,7 @@ function hosting_modules_installed(array $modules): void {
 function hosting_modules_include_queue_definitions(array $modules): bool {
   $module_handler = \Drupal::moduleHandler();
   foreach ($modules as $module) {
-    if ($module_handler->implementsHook($module, 'hosting_queue_info')) {
+    if ($module_handler->hasImplementations('hosting_queue_info', $module)) {
       return TRUE;
     }
   }

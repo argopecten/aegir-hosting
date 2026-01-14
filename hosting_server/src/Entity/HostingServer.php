@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting server"),
  *   base_table = "hosting_server",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\hosting_server\Entity\HostingServerListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\hosting_server\\Form\\HostingServerForm",
- *       "add" = "Drupal\\hosting_server\\Form\\HostingServerForm",
- *       "edit" = "Drupal\\hosting_server\\Form\\HostingServerForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\hosting_server\Form\HostingServerForm",
+ *       "add" = "Drupal\hosting_server\Form\HostingServerForm",
+ *       "edit" = "Drupal\hosting_server\Form\HostingServerForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\hosting_server\\Access\\HostingServerAccessControlHandler",
+ *     "access" = "Drupal\hosting_server\Access\HostingServerAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "administer servers",
@@ -33,11 +33,11 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "hostname"
  *   },
  *   links = {
- *     "canonical" = "/admin/hosting/servers/{hosting_server}",
- *     "add-form" = "/admin/hosting/servers/add",
- *     "edit-form" = "/admin/hosting/servers/{hosting_server}/edit",
- *     "delete-form" = "/admin/hosting/servers/{hosting_server}/delete",
- *     "collection" = "/admin/hosting/servers"
+ *     "canonical" = "/hosting/servers/{hosting_server}",
+ *     "add-form" = "/hosting/servers/add",
+ *     "edit-form" = "/hosting/servers/{hosting_server}/edit",
+ *     "delete-form" = "/hosting/servers/{hosting_server}/delete",
+ *     "collection" = "/hosting/servers"
  *   }
  * )
  */
@@ -53,25 +53,70 @@ class HostingServer extends ContentEntityBase {
 
     $fields['hostname'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Hostname'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'type' => 'string',
+        'label' => 'hidden',
+        'weight' => 0,
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['human_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Human-readable name'))
-      ->setRequired(FALSE);
+      ->setRequired(FALSE)
+      ->setDisplayOptions('view', [
+        'type' => 'string',
+        'label' => 'hidden',
+        'weight' => 1,
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Status'))
       ->setRequired(TRUE)
-      ->setDefaultValue(self::STATUS_QUEUED);
+      ->setDefaultValue(self::STATUS_QUEUED)
+      ->setDisplayOptions('view', [
+        'type' => 'number_integer',
+        'label' => 'hidden',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['verified'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Verified'))
-      ->setDefaultValue(0);
+      ->setDefaultValue(0)
+      ->setDisplayOptions('view', [
+        'type' => 'timestamp',
+        'label' => 'hidden',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['ip_addresses'] = BaseFieldDefinition::create('string')
       ->setLabel(t('IP addresses'))
       ->setCardinality(BaseFieldDefinition::CARDINALITY_UNLIMITED)
-      ->setRequired(FALSE);
+      ->setRequired(FALSE)
+      ->setDisplayOptions('view', [
+        'type' => 'string',
+        'label' => 'hidden',
+        'weight' => 4,
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
+      ->setDisplayConfigurable('form', TRUE);
 
     return $fields;
   }

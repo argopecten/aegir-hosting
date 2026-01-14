@@ -11,7 +11,7 @@ abstract class HostingServiceProviderBase extends PluginBase implements HostingS
 
   use StringTranslationTrait;
 
-  protected array $configuration = [];
+  protected $configuration = [];
 
   public function getLabel(): string {
     return (string) ($this->pluginDefinition['label'] ?? $this->getPluginId());

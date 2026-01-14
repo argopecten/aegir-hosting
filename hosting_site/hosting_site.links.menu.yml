@@ -1,0 +1,5 @@
+hosting_site.collection:
+  title: 'Sites'
+  route_name: entity.hosting_site.collection
+  parent: hosting.admin
+  weight: 0

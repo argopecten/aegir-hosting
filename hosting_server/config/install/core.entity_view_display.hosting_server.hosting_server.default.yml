@@ -1,0 +1,41 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - hosting_server
+id: hosting_server.hosting_server.default
+targetEntityType: hosting_server
+bundle: hosting_server
+mode: default
+content:
+  hostname:
+    type: string
+    label: hidden
+    settings: { }
+    weight: 0
+    region: content
+  human_name:
+    type: string
+    label: hidden
+    settings: { }
+    weight: 1
+    region: content
+  status:
+    type: number_integer
+    label: hidden
+    settings: { }
+    weight: 2
+    region: content
+  verified:
+    type: timestamp
+    label: hidden
+    settings: { }
+    weight: 3
+    region: content
+  ip_addresses:
+    type: string
+    label: hidden
+    settings: { }
+    weight: 4
+    region: content
+hidden: { }

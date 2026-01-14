@@ -19,3 +19,42 @@ function hosting_server_hosting_feature() {
     ],
   ];
 }
+
+/**
+ * Implements hook_entity_view().
+ */
+function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, $display, $view_mode): void {
+  if ($entity->getEntityTypeId() !== 'hosting_server') {
+    return;
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_service_instance');
+  $instances = $storage->loadByProperties(['server' => $entity->id()]);
+  if (!$instances) {
+    return;
+  }
+
+  $service_manager = \Drupal::service('hosting.service_manager');
+  $rows = [];
+  foreach ($instances as $instance) {
+    $service_type = (string) $instance->get('service_type')->value;
+    $provider_id = (string) $instance->get('provider')->value;
+    $available = (bool) $instance->get('available')->value;
+    $providers = $service_manager->getProvidersForType($service_type);
+    $provider_label = (string) ($providers[$provider_id] ?? $provider_id);
+    $rows[] = [
+      'data' => [
+        $service_type,
+        $provider_label,
+        $available ? t('Yes') : t('No'),
+      ],
+    ];
+  }
+
+  $build['hosting_services'] = [
+    '#type' => 'table',
+    '#header' => [t('Service type'), t('Provider'), t('Available')],
+    '#rows' => $rows,
+    '#weight' => 50,
+  ];
+}

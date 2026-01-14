@@ -1,0 +1,5 @@
+hosting_platform.collection:
+  title: 'Platforms'
+  route_name: entity.hosting_platform.collection
+  parent: hosting.admin
+  weight: 20

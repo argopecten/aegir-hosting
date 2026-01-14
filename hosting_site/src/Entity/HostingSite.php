@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting site"),
  *   base_table = "hosting_site",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\hosting_site\\Form\\HostingSiteForm",
- *       "add" = "Drupal\\hosting_site\\Form\\HostingSiteForm",
- *       "edit" = "Drupal\\hosting_site\\Form\\HostingSiteForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\hosting_site\Form\HostingSiteForm",
+ *       "add" = "Drupal\hosting_site\Form\HostingSiteForm",
+ *       "edit" = "Drupal\hosting_site\Form\HostingSiteForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\hosting_site\\Access\\HostingSiteAccessControlHandler",
+ *     "access" = "Drupal\hosting_site\Access\HostingSiteAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "administer sites",
@@ -33,11 +33,11 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "domain"
  *   },
  *   links = {
- *     "canonical" = "/admin/hosting/sites/{hosting_site}",
- *     "add-form" = "/admin/hosting/sites/add",
- *     "edit-form" = "/admin/hosting/sites/{hosting_site}/edit",
- *     "delete-form" = "/admin/hosting/sites/{hosting_site}/delete",
- *     "collection" = "/admin/hosting/sites"
+ *     "canonical" = "/hosting/sites/{hosting_site}",
+ *     "add-form" = "/hosting/sites/add",
+ *     "edit-form" = "/hosting/sites/{hosting_site}/edit",
+ *     "delete-form" = "/hosting/sites/{hosting_site}/delete",
+ *     "collection" = "/hosting/sites"
  *   }
  * )
  */
@@ -53,35 +53,70 @@ class HostingSite extends ContentEntityBase {
 
     $fields['domain'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Domain'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['client'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Client'))
       ->setSetting('target_type', 'hosting_client')
-      ->setRequired(FALSE);
+      ->setRequired(FALSE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['platform'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Platform'))
       ->setSetting('target_type', 'hosting_platform')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['db_server'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Database server'))
       ->setSetting('target_type', 'hosting_server')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['db_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Database name'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 4,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['profile'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Profile'))
       ->setSetting('target_type', 'hosting_package')
-      ->setRequired(FALSE);
+      ->setRequired(FALSE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 5,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['language'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Language'))
-      ->setDefaultValue('en');
+      ->setDefaultValue('en')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 6,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['last_cron'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Last cron'))

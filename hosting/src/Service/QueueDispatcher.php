@@ -3,7 +3,7 @@
 namespace Drupal\hosting\Service;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Datetime\TimeInterface;
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\KeyValueStore\KeyValueFactoryInterface;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Extension\ModuleHandlerInterface;

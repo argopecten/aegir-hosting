@@ -4,7 +4,9 @@ namespace Drupal\hosting_server\Form;
 
 use Drupal\Component\Serialization\Json;
 use Drupal\Core\Entity\ContentEntityForm;
-use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Component\Datetime\TimeInterface;
+use Drupal\Core\Entity\EntityRepositoryInterface;
+use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\SubformState;
 use Drupal\hosting_server\Service\IpManager;
@@ -13,15 +15,12 @@ use Drupal\hosting_server\Service\ServiceManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 class HostingServerForm extends ContentEntityForm {
-
-  protected EntityTypeManagerInterface $entityTypeManager;
   protected IpManager $ipManager;
   protected ServerManager $serverManager;
   protected ServiceManager $serviceManager;
 
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, IpManager $ip_manager, ServerManager $server_manager, ServiceManager $service_manager) {
-    parent::__construct($entity_type_manager);
-    $this->entityTypeManager = $entity_type_manager;
+  public function __construct(EntityRepositoryInterface $entity_repository, EntityTypeBundleInfoInterface $entity_type_bundle_info, TimeInterface $time, IpManager $ip_manager, ServerManager $server_manager, ServiceManager $service_manager) {
+    parent::__construct($entity_repository, $entity_type_bundle_info, $time);
     $this->ipManager = $ip_manager;
     $this->serverManager = $server_manager;
     $this->serviceManager = $service_manager;
@@ -29,7 +28,9 @@ class HostingServerForm extends ContentEntityForm {
 
   public static function create(ContainerInterface $container): static {
     return new static(
-      $container->get('entity_type.manager'),
+      $container->get('entity.repository'),
+      $container->get('entity_type.bundle.info'),
+      $container->get('datetime.time'),
       $container->get('hosting.ip_manager'),
       $container->get('hosting.server_manager'),
       $container->get('hosting.service_manager'),

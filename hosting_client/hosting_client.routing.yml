@@ -1,5 +1,5 @@
 hosting_client.settings:
-  path: '/admin/hosting/clients/settings'
+  path: '/hosting/clients/settings'
   defaults:
     _form: '\Drupal\hosting_client\Form\HostingClientSettingsForm'
     _title: 'Client settings'
@@ -7,7 +7,7 @@ hosting_client.settings:
     _permission: 'administer clients'
 
 hosting_client.autocomplete:
-  path: '/admin/hosting/clients/autocomplete'
+  path: '/hosting/clients/autocomplete'
   defaults:
     _controller: '\Drupal\hosting_client\Controller\HostingClientAutocompleteController::handle'
     _title: 'Client autocomplete'

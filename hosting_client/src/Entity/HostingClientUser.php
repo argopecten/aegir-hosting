@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting client user"),
  *   base_table = "hosting_client_user",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "add" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "edit" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "add" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "edit" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\hosting_client\\Access\\HostingClientUserAccessControlHandler",
+ *     "access" = "Drupal\hosting_client\Access\HostingClientUserAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "administer clients",
@@ -33,7 +33,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "contact_type"
  *   },
  *   links = {
- *     "collection" = "/admin/hosting/client-users"
+ *     "collection" = "/hosting/client-users"
  *   }
  * )
  */
@@ -45,16 +45,31 @@ class HostingClientUser extends ContentEntityBase {
     $fields['user'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('User'))
       ->setSetting('target_type', 'user')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['client'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Client'))
       ->setSetting('target_type', 'hosting_client')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['contact_type'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Contact type'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     return $fields;
   }

@@ -1,0 +1,9 @@
+hosting_server.collection:
+  route_name: entity.hosting_server.collection
+  title: 'List'
+  base_route: entity.hosting_server.collection
+
+hosting_server.add:
+  route_name: entity.hosting_server.add_form
+  title: 'Add server'
+  base_route: entity.hosting_server.collection

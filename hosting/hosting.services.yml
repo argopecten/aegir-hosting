@@ -13,7 +13,7 @@ services:
 
   hosting.context_registry:
     class: Drupal\hosting\Service\ContextRegistry
-    arguments: ['@entity_type.manager', '@path_alias.repository', '@path.validator', '@logger.channel.hosting']
+    arguments: ['@entity_type.manager', '@path.validator', '@logger.channel.hosting']
 
   hosting.queue_runner:
     class: Drupal\hosting\Service\QueueRunner

@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting task"),
  *   base_table = "hosting_task",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "add" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "edit" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "add" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "edit" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\Core\\Entity\\EntityAccessControlHandler",
+ *     "access" = "Drupal\Core\Entity\EntityAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "administer tasks",
@@ -33,11 +33,11 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "label"
  *   },
  *   links = {
- *     "canonical" = "/admin/hosting/tasks/{hosting_task}",
- *     "add-form" = "/admin/hosting/tasks/add",
- *     "edit-form" = "/admin/hosting/tasks/{hosting_task}/edit",
- *     "delete-form" = "/admin/hosting/tasks/{hosting_task}/delete",
- *     "collection" = "/admin/hosting/tasks"
+ *     "canonical" = "/hosting/tasks/{hosting_task}",
+ *     "add-form" = "/hosting/tasks/add",
+ *     "edit-form" = "/hosting/tasks/{hosting_task}/edit",
+ *     "delete-form" = "/hosting/tasks/{hosting_task}/delete",
+ *     "collection" = "/hosting/tasks"
  *   }
  * )
  */
@@ -48,32 +48,67 @@ class HostingTask extends ContentEntityBase implements HostingTaskInterface {
 
     $fields['label'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Label'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['task_type'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Task type'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Status'))
       ->setRequired(TRUE)
-      ->setDefaultValue('queued');
+      ->setDefaultValue('queued')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['context_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Context name'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['command'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Command'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 4,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['args'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Arguments'))
-      ->setDefaultValue('[]');
+      ->setDefaultValue('[]')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 5,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['options'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Options'))
-      ->setDefaultValue('[]');
+      ->setDefaultValue('[]')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 6,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['started'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Started'))

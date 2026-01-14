@@ -2,7 +2,7 @@
 
 namespace Drupal\hosting_task\Service;
 
-use Drupal\Core\Datetime\TimeInterface;
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Queue\QueueFactory;
 use Drupal\hosting\Service\BackendInvokerInterface;

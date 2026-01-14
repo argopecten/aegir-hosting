@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting package"),
  *   base_table = "hosting_package",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "add" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "edit" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "add" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "edit" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\Core\\Entity\\EntityAccessControlHandler",
+ *     "access" = "Drupal\Core\Entity\EntityAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "view package",
@@ -33,7 +33,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "short_name"
  *   },
  *   links = {
- *     "collection" = "/admin/hosting/packages"
+ *     "collection" = "/hosting/packages"
  *   }
  * )
  */
@@ -44,19 +44,39 @@ class HostingPackage extends ContentEntityBase {
 
     $fields['package_type'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Package type'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['short_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Short name'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['old_short_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Old short name'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['description'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('Description'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     return $fields;
   }

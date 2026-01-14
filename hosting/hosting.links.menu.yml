@@ -22,3 +22,33 @@ hosting.admin.settings:
   route_name: hosting.admin.settings
   parent: hosting.admin
   weight: 20
+
+hosting.main.sites:
+  title: 'Sites'
+  route_name: entity.hosting_site.collection
+  menu_name: main
+  weight: 10
+
+hosting.main.platforms:
+  title: 'Platforms'
+  route_name: entity.hosting_platform.collection
+  menu_name: main
+  weight: 20
+
+hosting.main.servers:
+  title: 'Servers'
+  route_name: entity.hosting_server.collection
+  menu_name: main
+  weight: 30
+
+hosting.main.tasks:
+  title: 'Tasks'
+  route_name: entity.hosting_task.collection
+  menu_name: main
+  weight: 40
+
+hosting.main.clients:
+  title: 'Clients'
+  route_name: entity.hosting_client.collection
+  menu_name: main
+  weight: 50

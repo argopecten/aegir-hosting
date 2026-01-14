@@ -1,0 +1,5 @@
+hosting_server.collection:
+  title: 'Servers'
+  route_name: entity.hosting_server.collection
+  parent: hosting.admin
+  weight: 10

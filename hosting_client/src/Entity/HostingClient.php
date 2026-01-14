@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting client"),
  *   base_table = "hosting_client",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\hosting_client\\Form\\HostingClientForm",
- *       "add" = "Drupal\\hosting_client\\Form\\HostingClientForm",
- *       "edit" = "Drupal\\hosting_client\\Form\\HostingClientForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\hosting_client\Form\HostingClientForm",
+ *       "add" = "Drupal\hosting_client\Form\HostingClientForm",
+ *       "edit" = "Drupal\hosting_client\Form\HostingClientForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\hosting_client\\Access\\HostingClientAccessControlHandler",
+ *     "access" = "Drupal\hosting_client\Access\HostingClientAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "administer clients",
@@ -33,11 +33,11 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "name"
  *   },
  *   links = {
- *     "canonical" = "/admin/hosting/clients/{hosting_client}",
- *     "add-form" = "/admin/hosting/clients/add",
- *     "edit-form" = "/admin/hosting/clients/{hosting_client}/edit",
- *     "delete-form" = "/admin/hosting/clients/{hosting_client}/delete",
- *     "collection" = "/admin/hosting/clients"
+ *     "canonical" = "/hosting/clients/{hosting_client}",
+ *     "add-form" = "/hosting/clients/add",
+ *     "edit-form" = "/hosting/clients/{hosting_client}/edit",
+ *     "delete-form" = "/hosting/clients/{hosting_client}/delete",
+ *     "collection" = "/hosting/clients"
  *   }
  * )
  */
@@ -48,16 +48,31 @@ class HostingClient extends ContentEntityBase {
 
     $fields['name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Name'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['uname'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Internal name'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['owner'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Owner'))
       ->setSetting('target_type', 'user')
-      ->setRequired(FALSE);
+      ->setRequired(FALSE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 2,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Status'))

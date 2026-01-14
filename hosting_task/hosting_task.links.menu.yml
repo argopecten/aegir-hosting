@@ -1,0 +1,5 @@
+hosting_task.collection:
+  title: 'Tasks'
+  route_name: entity.hosting_task.collection
+  parent: hosting.admin
+  weight: 40

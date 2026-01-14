@@ -14,16 +14,16 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting platform access"),
  *   base_table = "hosting_platform_access",
  *   handlers = {
- *     "list_builder" = "Drupal\\Core\\Entity\\EntityListBuilder",
+ *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
- *       "default" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "add" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "edit" = "Drupal\\Core\\Entity\\ContentEntityForm",
- *       "delete" = "Drupal\\Core\\Entity\\ContentEntityDeleteForm"
+ *       "default" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "add" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "edit" = "Drupal\Core\Entity\ContentEntityForm",
+ *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
- *     "access" = "Drupal\\hosting_client\\Access\\HostingPlatformAccessAccessControlHandler",
+ *     "access" = "Drupal\hosting_client\Access\HostingPlatformAccessAccessControlHandler",
  *     "route_provider" = {
- *       "html" = "Drupal\\Core\\Entity\\Routing\\AdminHtmlRouteProvider"
+ *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider"
  *     }
  *   },
  *   admin_permission = "administer clients",
@@ -33,7 +33,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *     "label" = "id"
  *   },
  *   links = {
- *     "collection" = "/admin/hosting/platform-access"
+ *     "collection" = "/hosting/platform-access"
  *   }
  * )
  */
@@ -45,12 +45,22 @@ class HostingPlatformAccess extends ContentEntityBase {
     $fields['client'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Client'))
       ->setSetting('target_type', 'hosting_client')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     $fields['platform'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Platform'))
       ->setSetting('target_type', 'hosting_platform')
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'entity_reference_autocomplete',
+        'weight' => 1,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
 
     return $fields;
   }
