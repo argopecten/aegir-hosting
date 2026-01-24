@@ -1,0 +1,32 @@
+{
+  "name": "argopecten/aegir-hosting",
+  "description": "Aegir Hosting: Drupal 11 frontend for multi-site hosting management with entity system",
+  "type": "drupal-module",
+  "license": "GPL-2.0-or-later",
+  "homepage": "https://aegir.hu/",
+  "keywords": ["aegir", "hosting", "frontend", "entities", "drupal"],
+  "authors": [
+    {
+      "name": "Aegir D11 Project",
+      "homepage": "https://aegir.hu/"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/argopecten/aegir-hosting/issues",
+    "source": "https://github.com/argopecten/aegir-hosting",
+    "docs": "https://github.com/argopecten/aegir-hosting/wiki"
+  },
+  "require": {
+    "php": ">=8.3",
+    "drupal/core": "^11.2",
+    "argopecten/aegir-provision": "11.x-dev",
+    "argopecten/aegir-eldir": "11.x-dev"
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-main": "11.x-dev"
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
