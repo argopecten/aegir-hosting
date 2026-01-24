@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * @file
+ * Hosting module for Drupal 11.
+ */
+
+/**
+ * Implements hook_cron().
+ */
+function hosting_cron() {
+  \Drupal::service('hosting.queue_dispatcher')->dispatch();
+}
+
+/**
+ * Implements hook_theme().
+ */
+function hosting_theme($existing, $type, $theme, $path): array {
+  return [
+    'hosting_queues_table' => [
+      'variables' => [
+        'table' => NULL,
+        'queues' => NULL,
+        'attributes' => NULL,
+      ],
+      'template' => 'hosting-queues-table',
+    ],
+  ];
+}

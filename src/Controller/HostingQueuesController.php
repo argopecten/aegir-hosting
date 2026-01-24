@@ -42,7 +42,7 @@ class HostingQueuesController extends ControllerBase {
       ];
     }
 
-    return [
+    $table = [
       '#type' => 'table',
       '#header' => [
         $this->t('Queue'),
@@ -56,6 +56,18 @@ class HostingQueuesController extends ControllerBase {
       ],
       '#rows' => $rows,
       '#empty' => $this->t('No queues configured.'),
+    ];
+
+    return [
+      '#theme' => 'hosting_queues_table',
+      '#table' => $table,
+      '#queues' => $queues,
+      '#attributes' => [
+        'class' => ['hosting-queues', 'hosting-queues-table'],
+      ],
+      '#cache' => [
+        'max-age' => 0,
+      ],
     ];
   }
 

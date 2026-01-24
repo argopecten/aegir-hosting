@@ -2,12 +2,11 @@
 
 namespace Drupal\hosting_server\Entity;
 
-use Drupal\Component\Utility\Html;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityListBuilder;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
-use Drupal\Core\Render\Markup;
+use Drupal\Core\Template\Attribute;
 use Drupal\hosting_server\Service\ServiceManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -57,9 +56,9 @@ class HostingServerListBuilder extends EntityListBuilder {
 
     $row = [];
     $row['name'] = $entity->toLink($display_name)->toString();
-    $row['certificate'] = $this->statusCell($this->t('no'), FALSE);
+    $row['certificate'] = $this->statusCell($this->t('no'), FALSE, 'certificate');
     $row['database'] = $this->serviceCell($service_instances, 'db');
-    $row['remote_import'] = $this->statusCell($this->t('no'), FALSE);
+    $row['remote_import'] = $this->statusCell($this->t('no'), FALSE, 'remote_import');
     $row['web'] = $this->serviceCell($service_instances, 'http');
 
     return $row;
@@ -68,7 +67,7 @@ class HostingServerListBuilder extends EntityListBuilder {
   protected function serviceCell(array $service_instances, string $service_type): array {
     $instance = $service_instances[$service_type] ?? NULL;
     if (!$instance) {
-      return $this->statusCell($this->t('no'), FALSE);
+      return $this->statusCell($this->t('no'), FALSE, $service_type);
     }
 
     $providers = $this->serviceManager->getProvidersForType($service_type);
@@ -77,14 +76,43 @@ class HostingServerListBuilder extends EntityListBuilder {
     $available = (bool) $instance->get('available')->value;
 
     $text = $available ? $label : (string) $this->t('no');
-    return $this->statusCell($text, $available);
+    return $this->statusCell($text, $available, $service_type, $provider_id, $label, $instance->getCacheTags());
   }
 
-  protected function statusCell(string $text, bool $available): array {
+  protected function statusCell(string $text, bool $available, string $service_type = '', string $provider_id = '', string $provider_label = '', array $cache_tags = []): array {
     $class = $available ? 'yes' : 'no';
-    $markup = '<span class="hosting-status hosting-status--' . $class . '">' . Html::escape($text) . '</span>';
+    $attributes = [
+      'class' => [
+        'hosting-status',
+        'hosting-status--' . $class,
+        'hosting-status-cell',
+        $available ? 'is-available' : 'is-unavailable',
+      ],
+    ];
+    if ($service_type !== '') {
+      $attributes['data-service-type'] = $service_type;
+    }
+    if ($provider_id !== '') {
+      $attributes['data-provider-id'] = $provider_id;
+    }
+    if ($provider_label !== '') {
+      $attributes['data-provider-label'] = $provider_label;
+    }
+    $cell = [
+      '#theme' => 'hosting_service_status_cell',
+      '#text' => $text,
+      '#available' => $available,
+      '#service_type' => $service_type,
+      '#provider_id' => $provider_id,
+      '#provider_label' => $provider_label,
+      '#attributes' => new Attribute($attributes),
+    ];
+    if ($cache_tags) {
+      $cell['#cache']['tags'] = $cache_tags;
+    }
+
     return [
-      'data' => Markup::create($markup),
+      'data' => $cell,
     ];
   }
 
