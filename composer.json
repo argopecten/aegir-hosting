@@ -18,9 +18,7 @@
   },
   "require": {
     "php": ">=8.3",
-    "drupal/core": "^11.2",
-    "argopecten/aegir-provision": "11.x-dev",
-    "argopecten/aegir-eldir": "11.x-dev"
+    "drupal/core": "^11.2"
   },
   "extra": {
     "branch-alias": {
