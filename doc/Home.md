@@ -2,15 +2,91 @@
 
 Welcome to the Aegir Hosting module documentation. This is the Drupal 11 Hosting/Hostmaster frontend module providing a complete hosting management system with entity-based architecture, service-oriented design, and Drush 13 integration.
 
+## Quick Links
+- [Hosting D11 Architecture](hosting-d11.md): Complete system architecture document
+- [Hosting D7 Reference](hosting-d7.md): Drupal 7 legacy reference
+
+## Directory Structure
+
+```
+aegir-hosting/
+├── src/                          # Core hosting module
+│   ├── Entity/
+│   │   └── HostingContext.php   # Entity ↔ Context registry
+│   ├── Service/
+│   │   ├── ContextRegistry.php  # Context synchronization
+│   │   ├── BackendInvoker.php   # Drush command execution
+│   │   ├── QueueDispatcher.php  # Task queue orchestration
+│   │   └── FeatureManager.php   # Feature discovery/management
+│   ├── Commands/
+│   │   └── HostingCommands.php  # Drush commands (hosting:*)
+│   ├── Form/
+│   │   ├── HostingSettingsForm.php
+│   │   ├── HostingFeaturesForm.php
+│   │   └── HostingQueuesForm.php
+│   └── Controller/
+│       └── HostingController.php
+├── hosting_site/                # Site entity module
+│   ├── src/
+│   │   ├── Entity/HostingSite.php
+│   │   ├── Form/HostingSiteForm.php
+│   │   └── Service/SiteManager.php
+├── hosting_platform/            # Platform entity module
+│   ├── src/
+│   │   ├── Entity/HostingPlatform.php
+│   │   ├── Form/HostingPlatformForm.php
+│   │   └── Service/PlatformManager.php
+├── hosting_server/              # Server entity module
+│   ├── src/
+│   │   ├── Entity/HostingServer.php
+│   │   ├── Entity/HostingServiceInstance.php
+│   │   ├── Form/HostingServerForm.php
+│   │   └── Service/ServerManager.php
+├── hosting_task/                # Task queue module
+│   ├── src/
+│   │   ├── Entity/HostingTask.php
+│   │   ├── Form/HostingTaskForm.php
+│   │   ├── Service/TaskManager.php
+│   │   └── Plugin/QueueWorker/HostingTaskQueueWorker.php
+├── hosting_client/              # Client entity module
+├── hosting_package/             # Package tracking module
+├── hosting_db_server/           # DB server specifics
+└── hosting_web_server/          # Web server specifics
+```
+
 ## Architecture
 
+### Entity ↔ Context Mapping
+
+The hosting system maintains a bidirectional mapping between Drupal entities and Provision contexts:
+
+```
+HostingSite (entity) ↔ @example.com (context)
+HostingPlatform (entity) ↔ @platform_d11 (context)
+HostingServer (entity) ↔ @server_master (context)
+```
+
+**Key Principle**: All data operations go through Drupal entities. Forms NEVER directly manipulate Provision contexts. The ContextRegistry service handles synchronization:
+
+1. Entity is created/updated in Drupal
+2. Entity save triggers context registration
+3. ContextRegistry generates Drush alias YAML
+4. Path alias created at `/hosting/c/{context_name}`
+5. Backend operations queued through task system
+
 ### Core Services
+- **ContextRegistry**: Entity ↔ Context synchronization and registry management
 - **FeatureManager**: Feature discovery, enabling/disabling, and permission management
 - **QueueDispatcher**: Schedule-based queue execution with cron integration
 - **QueueRunner**: Queue worker execution and management
 - **BackendInvoker**: Drush command execution for aegir-provision backend
-- **ContextRegistry**: Context entity management and path alias creation
 - **Logger**: Dedicated `hosting` logging channel
+
+### Manager Services (Business Logic Layer)
+- **SiteManager**: Site entity business logic (domain validation, status management)
+- **PlatformManager**: Platform entity operations and package scanning
+- **ServerManager**: Server entity and service instance management
+- **TaskManager**: Task creation, execution, and lifecycle management
 
 ### Entity System
 - **HostingContext**: Content entity for backend context mapping
@@ -83,6 +159,47 @@ Backend provisioning requires aegir-provision (Drush 13 backend) configured via 
 backend:
   drush_path: /usr/bin/drush
   alias: '@hostmaster'
+```
+
+The BackendInvoker service executes Drush provision commands, translating entity operations into backend tasks. All backend operations are queued through the task system for asynchronous execution.
+
+## Development Guidelines
+
+### Entity-First Architecture
+1. **Always use the entity layer** for data operations
+2. Entities automatically sync to Provision contexts via `ContextRegistry`
+3. Never directly manipulate Provision contexts from forms or controllers
+4. Use manager services for business logic, keeping forms thin
+
+### Service Layer Pattern
+- Business logic belongs in manager services (SiteManager, PlatformManager, etc.)
+- Forms should delegate validation and processing to services
+- Keep controllers focused on routing and rendering
+- Use dependency injection for all services
+
+### Context Naming Convention
+- Context names are stored **without** the `@` prefix in entities
+- The `@` prefix is only used when invoking Drush commands
+- Example: Store `example.com`, invoke as `@example.com`
+
+### Common Anti-Patterns to Avoid
+```php
+// ❌ WRONG: Direct context manipulation
+$contextRepo->save($context->set('domain', $value));
+
+// ✅ CORRECT: Use entity API
+$entity->set('domain', $value);
+$entity->save();  // Triggers context sync
+
+// ❌ WRONG: Business logic in forms
+public function validateForm() {
+  if (!filter_var($domain, FILTER_VALIDATE_DOMAIN)) { ... }
+}
+
+// ✅ CORRECT: Delegate to manager service
+public function validateForm() {
+  if (!$this->siteManager->isDomainValid($domain)) { ... }
+}
 ```
 
 ## Additional Documentation

@@ -205,7 +205,91 @@ enabled: []
 - `hosting_cron()`: Invokes `hosting.queue_dispatcher->dispatch()` on Drupal cron
 - `hosting_theme()`: Registers `hosting_queues_table` template
 
-## 9. Migration from Drupal 7
+## 9. Entity Architecture Details
+
+### 9.1 Entity ↔ Context Synchronization
+The ContextRegistry service handles bidirectional mapping:
+
+**Registration Flow:**
+1. Entity created/updated in Drupal
+2. `postSave()` hook calls `ContextRegistry::register()`
+3. HostingContext entity created/updated
+4. Drush alias YAML generated in backend
+5. Path alias created at `/hosting/c/{context_name}`
+
+**Naming Convention:**
+- Entities store context names **without** `@` prefix
+- Backend invocation adds `@` prefix
+- Example: Store `example.com`, invoke as `@example.com`
+
+### 9.2 Manager Services Pattern
+Business logic is separated into manager services:
+
+**SiteManager** (`hosting_site/src/Service/SiteManager.php`):
+- Domain validation and uniqueness checking
+- Site status management (enabled/disabled/deleted)
+- SSL configuration validation
+- Database credential generation
+
+**PlatformManager** (`hosting_platform/src/Service/PlatformManager.php`):
+- Platform path validation
+- Package discovery and scanning
+- Drupal version detection
+- Platform status transitions
+
+**ServerManager** (`hosting_server/src/Service/ServerManager.php`):
+- Server connectivity testing
+- Service instance management
+- SSH configuration validation
+- Server health monitoring
+
+**TaskManager** (`hosting_task/src/Service/TaskManager.php`):
+- Task creation and queuing
+- Task lifecycle management
+- Task execution coordination
+- Error handling and retry logic
+
+### 9.3 Form Architecture
+Forms delegate to manager services:
+
+```php
+class HostingSiteForm extends ContentEntityForm {
+  public function __construct(
+    EntityTypeManager $entity_type_manager,
+    SiteManager $site_manager  // Injected manager
+  ) { }
+  
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    $domain = $form_state->getValue('domain');
+    
+    // Delegate validation to manager
+    if (!$this->siteManager->isDomainValid($domain)) {
+      $form_state->setErrorByName('domain', 'Invalid domain');
+    }
+  }
+}
+```
+
+## 10. Best Practices and Anti-Patterns
+
+### ✅ DO:
+- Use entity API for all data operations
+- Delegate business logic to manager services
+- Keep forms thin (validation and rendering only)
+- Use dependency injection for services
+- Store context names without `@` prefix
+- Queue backend operations through TaskManager
+- Use ContextRegistry for entity-context sync
+
+### ❌ DON'T:
+- Bypass entity layer to manipulate contexts directly
+- Put business logic in forms or controllers
+- Call BackendInvoker directly from forms
+- Store context names with `@` prefix in entities
+- Skip field definitions (use BaseFieldDefinition)
+- Execute long-running operations synchronously
+
+## 11. Migration from Drupal 7
 - Migrate `hosting_context` table to `hosting_context` content entity
 - Migrate variable settings to `hosting.settings` config
 - Convert feature registry from include files to config-based system
@@ -213,9 +297,17 @@ enabled: []
 - Replace legacy nodeapi hooks with entity hooks
 - Convert Drush commands from Drush 8 to Drush 13 with PHP 8 attributes
 
-## 10. Current Implementation Status
+## 11. Migration from Drupal 7
+- Migrate `hosting_context` table to `hosting_context` content entity
+- Migrate variable settings to `hosting.settings` config
+- Convert feature registry from include files to config-based system
+- Update node-based entities to content entities
+- Replace legacy nodeapi hooks with entity hooks
+- Convert Drush commands from Drush 8 to Drush 13 with PHP 8 attributes
+
+## 12. Current Implementation Status
 ✅ **Completed:**
-- Core service architecture (6 services)
+- Core service architecture (ContextRegistry, BackendInvoker, QueueDispatcher, etc.)
 - HostingContext entity with field definitions
 - Configuration schema for settings and features
 - Drush 13 commands with PHP 8 attributes
@@ -226,12 +318,24 @@ enabled: []
 - Theme template system
 
 ⚠️ **In Progress:**
+- Manager service implementations (SiteManager, PlatformManager, etc.)
 - Feature plugin/registry system
 - Views integration and data handlers
 - Queue worker plugins
 - Task execution flow
+- Entity field validation
+- Advanced form features (AJAX, batch operations)
 
-## 11. Dependencies
+🔮 **Planned:**
+- Complete entity field definitions for all entities
+- SSH-based remote server execution
+- Package entity and tracking system
+- Client entity and permissions
+- Site cloning and migration workflows
+- Platform deployment automation
+- Advanced task features (chaining, progress tracking)
+
+## 13. Dependencies
 - **PHP**: >=8.3
 - **Drupal Core**: ^11.2
 - **Drush**: 13.x
