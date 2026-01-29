@@ -1,0 +1,126 @@
+/**
+ * Hosting Site Entity View Styles
+ */
+
+/* CSS Variables - Standardized Color Scheme */
+:root {
+  --hosting-primary: #0074bd;
+  --hosting-primary-hover: #005a9c;
+  --hosting-success-bg: #d4edda;
+  --hosting-success-text: #155724;
+  --hosting-error-bg: #f8d7da;
+  --hosting-error-text: #721c24;
+  --hosting-warning-bg: #fff3cd;
+  --hosting-warning-text: #856404;
+  --hosting-info-bg: #cce5ff;
+  --hosting-info-text: #004085;
+  --hosting-border: #ddd;
+  --hosting-panel-bg: #f5f5f5;
+  --hosting-panel-border: #ddd;
+  --hosting-text-dark: #333;
+}
+
+/* Hosting Site Layout */
+article.hosting-site {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+}
+
+article.hosting-site h2 {
+  width: 100%;
+}
+
+.hosting-site-content {
+  flex: 1 1 60%;
+  min-width: 300px;
+}
+
+.hosting-site-sidebar {
+  flex: 1 1 30%;
+  min-width: 250px;
+  background: var(--hosting-panel-bg);
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.hosting-panel {
+  margin-bottom: 1.5rem;
+  background: white;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--hosting-panel-border);
+}
+
+.hosting-panel h3 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+  border-bottom: 2px solid var(--hosting-primary);
+  padding-bottom: 0.5rem;
+  color: var(--hosting-text-dark);
+}
+
+.hosting-task-queue ul,
+.hosting-navigation ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hosting-task-queue li,
+.hosting-navigation li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.hosting-task-queue li:last-child,
+.hosting-navigation li:last-child {
+  border-bottom: none;
+}
+
+.hosting-task-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hosting-task-status {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  background: #e0e0e0;
+}
+
+.hosting-task-item--queued .hosting-task-status {
+  background: var(--hosting-warning-bg);
+  color: var(--hosting-warning-text);
+}
+
+.hosting-task-item--processing .hosting-task-status {
+  background: var(--hosting-info-bg);
+  color: var(--hosting-info-text);
+}
+
+.hosting-task-item--success .hosting-task-status {
+  background: var(--hosting-success-bg);
+  color: var(--hosting-success-text);
+}
+
+.hosting-task-item--error .hosting-task-status,
+.hosting-task-item--failed .hosting-task-status {
+  background: var(--hosting-error-bg);
+  color: var(--hosting-error-text);
+}
+
+/* Navigation Links */
+.hosting-navigation a {
+  text-decoration: none;
+  color: var(--hosting-primary);
+  transition: color 0.2s;
+}
+
+.hosting-navigation a:hover {
+  color: var(--hosting-primary-hover);
+  text-decoration: underline;
+}

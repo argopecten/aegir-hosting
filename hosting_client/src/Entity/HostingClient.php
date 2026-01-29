@@ -14,7 +14,8 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting client"),
  *   base_table = "hosting_client",
  *   handlers = {
- *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
+ *     "view_builder" = "Drupal\hosting_client\Entity\HostingClientViewBuilder",
+ *     "list_builder" = "Drupal\hosting_client\Entity\HostingClientListBuilder",
  *     "form" = {
  *       "default" = "Drupal\hosting_client\Form\HostingClientForm",
  *       "add" = "Drupal\hosting_client\Form\HostingClientForm",
@@ -49,34 +50,58 @@ class HostingClient extends ContentEntityBase {
     $fields['name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Name'))
       ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'hidden',
+        'type' => 'string',
+        'weight' => 0,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'string_textfield',
         'weight' => 0,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['uname'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Internal name'))
       ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string',
+        'weight' => 1,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'string_textfield',
         'weight' => 1,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['owner'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Owner'))
       ->setSetting('target_type', 'user')
       ->setRequired(FALSE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'entity_reference_label',
+        'weight' => 2,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'entity_reference_autocomplete',
         'weight' => 2,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Status'))
-      ->setDefaultValue(1);
+      ->setDefaultValue(1)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'number_integer',
+        'weight' => 3,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     return $fields;
   }

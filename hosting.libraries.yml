@@ -1,0 +1,11 @@
+common:
+  css:
+    theme:
+      css/hosting-common.css: {}
+
+queues-table:
+  css:
+    theme:
+      css/hosting-queues-table.css: {}
+  dependencies:
+    - hosting/common

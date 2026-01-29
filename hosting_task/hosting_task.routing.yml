@@ -1,0 +1,34 @@
+hosting_task.queue.dashboard:
+  path: '/admin/hosting/tasks/queue'
+  defaults:
+    _controller: '\Drupal\hosting_task\Controller\TaskQueueController::dashboard'
+    _title: 'Task Queue'
+  requirements:
+    _permission: 'administer tasks'
+
+hosting_task.queue.refresh:
+  path: '/admin/hosting/tasks/queue/refresh'
+  defaults:
+    _controller: '\Drupal\hosting_task\Controller\TaskQueueController::refresh'
+  requirements:
+    _permission: 'administer tasks'
+  options:
+    no_cache: TRUE
+
+hosting_task.queue.cancel:
+  path: '/admin/hosting/tasks/{task}/cancel'
+  defaults:
+    _controller: '\Drupal\hosting_task\Controller\TaskQueueController::cancel'
+    _title: 'Cancel Task'
+  requirements:
+    _permission: 'administer tasks'
+    task: \d+
+
+hosting_task.queue.retry:
+  path: '/admin/hosting/tasks/{task}/retry'
+  defaults:
+    _controller: '\Drupal\hosting_task\Controller\TaskQueueController::retry'
+    _title: 'Retry Task'
+  requirements:
+    _permission: 'administer tasks'
+    task: \d+

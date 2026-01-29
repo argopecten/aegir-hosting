@@ -1,0 +1,6 @@
+hosting_site.entity_view:
+  css:
+    theme:
+      css/hosting-site.css: {}
+  dependencies:
+    - hosting/common

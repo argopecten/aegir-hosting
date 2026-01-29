@@ -14,6 +14,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting site"),
  *   base_table = "hosting_site",
  *   handlers = {
+ *     "view_builder" = "Drupal\hosting_site\Entity\HostingSiteViewBuilder",
  *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
  *     "form" = {
  *       "default" = "Drupal\hosting_site\Form\HostingSiteForm",
@@ -54,85 +55,151 @@ class HostingSite extends ContentEntityBase {
     $fields['domain'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Domain'))
       ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'hidden',
+        'type' => 'string',
+        'weight' => 0,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'string_textfield',
         'weight' => 0,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['client'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Client'))
       ->setSetting('target_type', 'hosting_client')
       ->setRequired(FALSE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'entity_reference_label',
+        'weight' => 1,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'entity_reference_autocomplete',
         'weight' => 1,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['platform'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Platform'))
       ->setSetting('target_type', 'hosting_platform')
       ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'entity_reference_label',
+        'weight' => 2,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'entity_reference_autocomplete',
         'weight' => 2,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['db_server'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Database server'))
       ->setSetting('target_type', 'hosting_server')
       ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'entity_reference_label',
+        'weight' => 3,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'entity_reference_autocomplete',
         'weight' => 3,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['db_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Database name'))
       ->setDefaultValue('')
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string',
+        'weight' => 4,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'string_textfield',
         'weight' => 4,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['profile'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Profile'))
       ->setSetting('target_type', 'hosting_package')
       ->setRequired(FALSE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'entity_reference_label',
+        'weight' => 5,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'entity_reference_autocomplete',
         'weight' => 5,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['language'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Language'))
       ->setDefaultValue('en')
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string',
+        'weight' => 6,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'string_textfield',
         'weight' => 6,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['last_cron'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Last cron'))
-      ->setDefaultValue(0);
+      ->setDefaultValue(0)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'timestamp',
+        'weight' => 7,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['cron_key'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Cron key'))
-      ->setDefaultValue('');
+      ->setDefaultValue('')
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string',
+        'weight' => 8,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['verified'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Verified'))
-      ->setDefaultValue(0);
+      ->setDefaultValue(0)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'timestamp',
+        'weight' => 9,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Status'))
-      ->setDefaultValue(self::STATUS_QUEUED);
+      ->setDefaultValue(self::STATUS_QUEUED)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'number_integer',
+        'weight' => 10,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     return $fields;
   }

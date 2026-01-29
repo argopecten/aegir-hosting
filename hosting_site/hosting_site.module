@@ -19,3 +19,221 @@ function hosting_site_hosting_feature() {
     ],
   ];
 }
+
+/**
+ * Implements hook_ENTITY_TYPE_insert() for hosting_site.
+ */
+function hosting_site_hosting_site_insert(\Drupal\hosting_site\Entity\HostingSite $site) {
+  // Auto-create install task for new sites.
+  $task_manager = \Drupal::service('hosting.task_manager');
+  $task_manager->createTask($site->get('domain')->value, 'install', [], []);
+  \Drupal::messenger()->addStatus(t('Site installation task has been queued.'));
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_update() for hosting_site.
+ */
+function hosting_site_hosting_site_update(\Drupal\hosting_site\Entity\HostingSite $site) {
+  // Auto-create verify task when site is updated.
+  if ($site->isPublished() && !$site->original->isPublished()) {
+    // Site was enabled - run verify.
+    $task_manager = \Drupal::service('hosting.task_manager');
+    $task_manager->createTask($site->get('domain')->value, 'verify', [], []);
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function hosting_site_theme($existing, $type, $theme, $path): array {
+  return [
+    'hosting_site' => [
+      'render element' => 'elements',
+      'template' => 'hosting-site',
+    ],
+    'hosting_site_sidebar' => [
+      'variables' => [
+        'content' => NULL,
+        'attributes' => NULL,
+      ],
+      'template' => 'hosting-sidebar',
+      'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
+    ],
+    'hosting_site_task_queue' => [
+      'variables' => [
+        'title' => NULL,
+        'list' => NULL,
+        'attributes' => NULL,
+      ],
+      'template' => 'hosting-task-queue',
+      'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
+    ],
+    'hosting_site_navigation' => [
+      'variables' => [
+        'title' => NULL,
+        'list' => NULL,
+        'attributes' => NULL,
+      ],
+      'template' => 'hosting-navigation',
+      'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
+    ],
+  ];
+}
+
+/**
+ * Prepares variables for hosting site templates.
+ *
+ * Default template: hosting-site.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - elements: An associative array containing the site information and any
+ *     fields attached to the entity.
+ *   - attributes: HTML attributes for the containing element.
+ */
+function template_preprocess_hosting_site(array &$variables): void {
+  $variables['view_mode'] = $variables['elements']['#view_mode'];
+  $variables['site'] = $variables['elements']['#hosting_site'];
+  $variables['entity'] = $variables['site'];
+  
+  // Helpful $content variable for templates.
+  foreach (\Drupal\Core\Render\Element::children($variables['elements']) as $key) {
+    $variables['content'][$key] = $variables['elements'][$key];
+  }
+  
+  // Add title prefix/suffix.
+  $variables['title_prefix'] = $variables['elements']['#title_prefix'] ?? [];
+  $variables['title_suffix'] = $variables['elements']['#title_suffix'] ?? [];
+  
+  // Set label and title attributes.
+  $variables['label'] = $variables['site']->label();
+  $variables['title_attributes'] = $variables['elements']['#title_attributes'] ?? new \Drupal\Core\Template\Attribute();
+  
+  // Pass sidebar if it exists.
+  $variables['sidebar'] = $variables['content']['hosting_sidebar'] ?? NULL;
+  unset($variables['content']['hosting_sidebar']);
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function hosting_site_entity_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, $display, $view_mode): void {
+  if ($entity->getEntityTypeId() !== 'hosting_site') {
+    return;
+  }
+
+  $context_storage = \Drupal::entityTypeManager()->getStorage('hosting_context');
+  $context_records = $context_storage->loadByProperties([
+    'entity_type' => 'hosting_site',
+    'entity_id' => $entity->id(),
+  ]);
+  $context_record = $context_records ? reset($context_records) : NULL;
+  $context_name = $context_record ? (string) $context_record->get('context_name')->value : '';
+
+  $task_items = [];
+  $task_tags = [];
+  if ($context_name !== '') {
+    $task_query = \Drupal::entityQuery('hosting_task')
+      ->condition('context_name', $context_name)
+      ->sort('id', 'DESC')
+      ->range(0, 5)
+      ->accessCheck(TRUE);
+    $task_ids = $task_query->execute();
+    if ($task_ids) {
+      $task_storage = \Drupal::entityTypeManager()->getStorage('hosting_task');
+      $tasks = $task_storage->loadMultiple($task_ids);
+      foreach ($tasks as $task) {
+        $status = (string) $task->get('status')->value;
+        $task_items[] = [
+          '#type' => 'container',
+          '#attributes' => [
+            'class' => ['hosting-task-item', 'hosting-task-item--' . \Drupal\Component\Utility\Html::getClass($status)],
+          ],
+          'title' => [
+            '#type' => 'link',
+            '#title' => $task->label(),
+            '#url' => $task->toUrl(),
+          ],
+          'status' => [
+            '#type' => 'html_tag',
+            '#tag' => 'span',
+            '#value' => $status,
+            '#attributes' => ['class' => ['hosting-task-status']],
+          ],
+        ];
+        $task_tags = \Drupal\Core\Cache\Cache::mergeTags($task_tags, $task->getCacheTags());
+      }
+    }
+  }
+
+  $build['hosting_sidebar'] = [
+    '#theme' => 'hosting_site_sidebar',
+    '#content' => [
+      'task_queue' => [
+        '#theme' => 'hosting_site_task_queue',
+        '#title' => t('Recent tasks'),
+        '#list' => [
+          '#theme' => 'item_list',
+          '#items' => $task_items,
+          '#empty' => t('No tasks available.'),
+          '#attributes' => ['class' => ['hosting-task-queue']],
+        ],
+        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--task-queue']],
+      ],
+      'navigation' => [
+        '#theme' => 'hosting_site_navigation',
+        '#title' => t('Navigation'),
+        '#list' => [
+          '#theme' => 'item_list',
+          '#items' => [
+            [
+              '#type' => 'link',
+              '#title' => t('All tasks'),
+              '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection'),
+              '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')->access(),
+            ],
+            [
+              '#type' => 'link',
+              '#title' => t('Edit site'),
+              '#url' => $entity->toUrl('edit-form'),
+              '#access' => $entity->toUrl('edit-form')->access(),
+            ],
+            [
+              '#type' => 'link',
+              '#title' => t('All sites'),
+              '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_site.collection'),
+              '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_site.collection')->access(),
+            ],
+          ],
+          '#attributes' => ['class' => ['hosting-navigation']],
+        ],
+        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--navigation']],
+      ],
+    ],
+    '#attributes' => ['class' => ['hosting-sidebar']],
+    '#weight' => 60,
+  ];
+
+  // Add wrapper class to the entire build.
+  $build['#attributes']['class'][] = 'hosting-site-view';
+
+  if ($task_tags) {
+    $build['#cache']['tags'] = \Drupal\Core\Cache\Cache::mergeTags($build['#cache']['tags'] ?? [], $task_tags);
+  }
+}
+
+/**
+ * Implements hook_theme_suggestions_HOOK().
+ */
+function hosting_site_theme_suggestions_hosting_site(array $variables) {
+  $suggestions = [];
+  if (!empty($variables['entity'])) {
+    $entity = $variables['entity'];
+    $suggestions[] = 'hosting_site__' . $entity->id();
+    if (isset($variables['view_mode'])) {
+      $suggestions[] = 'hosting_site__' . $variables['view_mode'];
+    }
+  }
+  return $suggestions;
+}
+

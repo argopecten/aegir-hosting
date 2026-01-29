@@ -1,0 +1,17 @@
+{#
+/**
+ * @file
+ * Template for hosting platform sites list.
+ *
+ * Available variables:
+ * - title: The section title.
+ * - list: The sites list.
+ * - attributes: HTML attributes for the container element.
+ */
+#}
+<section{{ attributes }}>
+  {% if title %}
+    <h3>{{ title }}</h3>
+  {% endif %}
+  {{ list }}
+</section>

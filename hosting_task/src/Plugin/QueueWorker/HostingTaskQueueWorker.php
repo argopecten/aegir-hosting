@@ -12,7 +12,8 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
  *
  * @QueueWorker(
  *   id = "hosting_task",
- *   title = @Translation("Hosting task queue")
+ *   title = @Translation("Hosting task queue"),
+ *   cron = {"time" = 60}
  * )
  */
 class HostingTaskQueueWorker extends QueueWorkerBase implements ContainerFactoryPluginInterface {
@@ -33,10 +34,15 @@ class HostingTaskQueueWorker extends QueueWorkerBase implements ContainerFactory
     );
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function processItem($data): void {
     if (!isset($data['task_id'])) {
       return;
     }
+    
+    // TaskManager now handles retry logic, streaming output, and cancellation.
     $this->taskManager->runTaskId((int) $data['task_id']);
   }
 

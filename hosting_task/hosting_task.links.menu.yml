@@ -3,3 +3,10 @@ hosting_task.collection:
   route_name: entity.hosting_task.collection
   parent: hosting.admin
   weight: 40
+
+hosting_task.queue:
+  title: 'Task Queue'
+  route_name: hosting_task.queue.dashboard
+  parent: hosting.admin
+  weight: 41
+  description: 'Monitor and manage the task queue'

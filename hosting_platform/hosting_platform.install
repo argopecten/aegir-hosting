@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * @file
+ * Install hooks for the Hosting Platform module.
+ */
+
+use Drupal\Core\Field\BaseFieldDefinition;
+
+/**
+ * Add name field to hosting_platform entity.
+ */
+function hosting_platform_update_11001(): void {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  $entity_definition_update_manager = \Drupal::entityDefinitionUpdateManager();
+  
+  // Define the name field
+  $name_field = BaseFieldDefinition::create('string')
+    ->setLabel(t('Platform name'))
+    ->setDescription(t('A descriptive name for this platform (e.g., "Drupal 11.2").'))
+    ->setRequired(TRUE)
+    ->setDisplayOptions('form', [
+      'type' => 'string_textfield',
+      'weight' => -2,
+    ])
+    ->setDisplayConfigurable('form', TRUE);
+  
+  $entity_definition_update_manager->installFieldStorageDefinition('name', 'hosting_platform', 'hosting_platform', $name_field);
+  
+  // Set default name for existing platforms using their publish_path
+  $storage = $entity_type_manager->getStorage('hosting_platform');
+  $platforms = $storage->loadMultiple();
+  foreach ($platforms as $platform) {
+    if (empty($platform->get('name')->value)) {
+      $path = $platform->get('publish_path')->value;
+      $default_name = basename($path);
+      $platform->set('name', $default_name);
+      $platform->save();
+    }
+  }
+}

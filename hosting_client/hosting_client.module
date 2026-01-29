@@ -21,6 +21,72 @@ function hosting_client_hosting_feature() {
 }
 
 /**
+ * Implements hook_theme().
+ */
+function hosting_client_theme($existing, $type, $theme, $path) {
+  return [
+    'hosting_client' => [
+      'render element' => 'elements',
+    ],
+  ];
+}
+
+/**
+ * Prepares variables for hosting client templates.
+ *
+ * Default template: hosting-client.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - elements: An associative array containing the hosting client information and any
+ *     fields attached to the entity.
+ *   - elements['#hosting_client']: A \Drupal\hosting_client\Entity\HostingClient object.
+ */
+function template_preprocess_hosting_client(array &$variables): void {
+  /** @var \Drupal\hosting_client\Entity\HostingClient $client */
+  $client = $variables['elements']['#hosting_client'];
+  $variables['client'] = $client;
+  $variables['view_mode'] = $variables['elements']['#view_mode'];
+  
+  // Extract basic client information.
+  $variables['name'] = $client->get('name')->value;
+  $variables['uname'] = $client->get('uname')->value;
+  $variables['status'] = $client->get('status')->value;
+  
+  // Load owner information if available.
+  $owner = $client->get('owner')->entity;
+  $variables['owner'] = $owner;
+  $variables['owner_name'] = $owner ? $owner->getDisplayName() : NULL;
+  
+  // Load associated users (client members).
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_client_user');
+  $relations = $storage->loadByProperties(['client' => $client->id()]);
+  $users = [];
+  foreach ($relations as $relation) {
+    $user = $relation->get('user')->entity;
+    if ($user) {
+      $users[] = [
+        'user' => $user,
+        'name' => $user->getDisplayName(),
+        'contact_type' => $relation->get('contact_type')->value,
+      ];
+    }
+  }
+  $variables['users'] = $users;
+  
+  // Load associated sites for this client.
+  $site_storage = \Drupal::entityTypeManager()->getStorage('hosting_site');
+  $site_ids = $site_storage->getQuery()
+    ->condition('client', $client->id())
+    ->accessCheck(TRUE)
+    ->sort('changed', 'DESC')
+    ->execute();
+  $sites = $site_storage->loadMultiple($site_ids);
+  $variables['sites'] = $sites;
+  $variables['site_count'] = count($sites);
+}
+
+/**
  * Implements hook_form_FORM_ID_alter() for user_form.
  */
 function hosting_client_form_user_form_alter(array &$form, \Drupal\Core\Form\FormStateInterface $form_state): void {

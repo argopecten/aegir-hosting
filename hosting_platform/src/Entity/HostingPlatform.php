@@ -14,7 +14,8 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting platform"),
  *   base_table = "hosting_platform",
  *   handlers = {
- *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
+ *     "view_builder" = "Drupal\hosting_platform\Entity\HostingPlatformViewBuilder",
+ *     "list_builder" = "Drupal\hosting_platform\Entity\HostingPlatformListBuilder",
  *     "form" = {
  *       "default" = "Drupal\hosting_platform\Form\HostingPlatformForm",
  *       "add" = "Drupal\hosting_platform\Form\HostingPlatformForm",
@@ -30,7 +31,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   entity_keys = {
  *     "id" = "id",
  *     "uuid" = "uuid",
- *     "label" = "publish_path"
+ *     "label" = "name"
  *   },
  *   links = {
  *     "canonical" = "/hosting/platforms/{hosting_platform}",
@@ -51,51 +52,110 @@ class HostingPlatform extends ContentEntityBase {
   public static function baseFieldDefinitions(EntityTypeInterface $entity_type): array {
     $fields = parent::baseFieldDefinitions($entity_type);
 
-    $fields['publish_path'] = BaseFieldDefinition::create('string_long')
-      ->setLabel(t('Publish path'))
+    $fields['name'] = BaseFieldDefinition::create('string')
+      ->setLabel(t('Platform name'))
+      ->setDescription(t('A descriptive name for this platform (e.g., "Drupal 11.2").'))
       ->setRequired(TRUE)
-      ->setDisplayOptions('form', [
-        'type' => 'string_textarea',
-        'weight' => 0,
+      ->setDisplayOptions('view', [
+        'label' => 'hidden',
+        'type' => 'string',
+        'weight' => -10,
       ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => -2,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
-    $fields['makefile'] = BaseFieldDefinition::create('string_long')
-      ->setLabel(t('Makefile'))
-      ->setDefaultValue('')
+    $fields['platform_type'] = BaseFieldDefinition::create('list_string')
+      ->setLabel(t('Platform source'))
+      ->setDescription(t('How the platform will be deployed.'))
+      ->setRequired(TRUE)
+      ->setDefaultValue('manual')
+      ->setSetting('allowed_values', [
+        'manual' => 'Manual (existing directory)',
+        'git' => 'Git repository (GitHub/GitLab)',
+      ])
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'list_default',
+        'weight' => 0,
+      ])
       ->setDisplayOptions('form', [
-        'type' => 'string_textarea',
+        'type' => 'options_buttons',
+        'weight' => -1,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
+      ->setDisplayConfigurable('form', TRUE);
+
+    $fields['git_url'] = BaseFieldDefinition::create('string_long')
+      ->setLabel(t('Git repository URL'))
+      ->setDescription(t('URL of the Git repository (e.g., https://github.com/username/drupal-project).'))
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string',
         'weight' => 1,
       ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
+      ->setDisplayConfigurable('form', TRUE);
+
+    $fields['publish_path'] = BaseFieldDefinition::create('string_long')
+      ->setLabel(t('Publish path'))
+      ->setDescription(t('Absolute path to the Drupal platform root directory within /var/aegir/platforms. Must contain a composer.json file.'))
+      ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string',
+        'weight' => 2,
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 0,
+      ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['web_server'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Web server'))
       ->setSetting('target_type', 'hosting_server')
       ->setRequired(TRUE)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'entity_reference_label',
+        'weight' => 3,
+      ])
       ->setDisplayOptions('form', [
         'type' => 'entity_reference_autocomplete',
         'weight' => 2,
       ])
+      ->setDisplayConfigurable('view', TRUE)
       ->setDisplayConfigurable('form', TRUE);
 
     $fields['verified'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(t('Verified'))
-      ->setDefaultValue(0);
+      ->setDefaultValue(0)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'timestamp',
+        'weight' => 4,
+      ])
+      ->setDisplayConfigurable('view', TRUE);
 
     $fields['status'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Status'))
       ->setRequired(TRUE)
-      ->setDefaultValue(self::STATUS_QUEUED);
-
-    $fields['make_working_copy'] = BaseFieldDefinition::create('boolean')
-      ->setLabel(t('Make working copy'))
-      ->setDefaultValue(FALSE)
-      ->setDisplayOptions('form', [
-        'type' => 'boolean_checkbox',
-        'weight' => 3,
+      ->setDefaultValue(self::STATUS_QUEUED)
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'number_integer',
+        'weight' => 5,
       ])
-      ->setDisplayConfigurable('form', TRUE);
+      ->setDisplayConfigurable('view', TRUE);
 
     return $fields;
   }

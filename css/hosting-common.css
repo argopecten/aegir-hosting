@@ -1,0 +1,291 @@
+/**
+ * @file
+ * Common hosting module styles.
+ *
+ * Provides shared CSS variables, utility classes, and base styles used across
+ * all hosting entity submodules (platform, server, site, task, client).
+ */
+
+/* ============================================
+   CSS Variables - Shared Color Palette
+   ============================================ */
+:root {
+  /* Primary colors */
+  --hosting-primary: #0074bd;
+  --hosting-primary-hover: #005a9c;
+  --hosting-secondary: #5c5c5c;
+  
+  /* Status colors */
+  --hosting-success-bg: #d4edda;
+  --hosting-success-text: #155724;
+  --hosting-error-bg: #f8d7da;
+  --hosting-error-text: #721c24;
+  --hosting-warning-bg: #fff3cd;
+  --hosting-warning-text: #856404;
+  --hosting-info-bg: #cce5ff;
+  --hosting-info-text: #004085;
+  
+  /* Neutral colors */
+  --hosting-border: #ddd;
+  --hosting-bg-light: #f9f9f9;
+  --hosting-panel-bg: #f5f5f5;
+  --hosting-panel-border: #ddd;
+  --hosting-text-dark: #333;
+  --hosting-text-muted: #666;
+  --hosting-shadow: rgba(0, 0, 0, 0.1);
+  
+  /* Link colors */
+  --hosting-link: #0074bd;
+  --hosting-link-hover: #005a94;
+  
+  /* Task status colors */
+  --hosting-task-queued: #ffc107;
+  --hosting-task-processing: #2196f3;
+  --hosting-task-success: #4caf50;
+  --hosting-task-error: #f44336;
+  --hosting-task-warning: #ff9800;
+  
+  /* Client status colors */
+  --hosting-client-active: #4caf50;
+  --hosting-client-inactive: #9e9e9e;
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+/* Status badges */
+.hosting-status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hosting-status-badge--success {
+  background: var(--hosting-success-bg);
+  color: var(--hosting-success-text);
+}
+
+.hosting-status-badge--error {
+  background: var(--hosting-error-bg);
+  color: var(--hosting-error-text);
+}
+
+.hosting-status-badge--warning {
+  background: var(--hosting-warning-bg);
+  color: var(--hosting-warning-text);
+}
+
+.hosting-status-badge--info {
+  background: var(--hosting-info-bg);
+  color: var(--hosting-info-text);
+}
+
+/* ============================================
+   Common Layout Patterns
+   ============================================ */
+
+/* Two-column responsive grid layout */
+.hosting-layout-two-column {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+@media (min-width: 768px) {
+  .hosting-layout-two-column {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* Section styling */
+.hosting-section {
+  background: var(--hosting-bg-light);
+  padding: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--hosting-border);
+}
+
+.hosting-section__title {
+  margin: 0 0 1rem 0;
+  font-size: 1.25rem;
+  color: var(--hosting-secondary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--hosting-primary);
+  padding-bottom: 0.5rem;
+}
+
+/* Details list (dl/dt/dd) */
+.hosting-details {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.hosting-detail-item {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .hosting-detail-item {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}
+
+.hosting-detail-label {
+  font-weight: 600;
+  color: var(--hosting-secondary);
+  margin: 0;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 767px) {
+  .hosting-detail-label {
+    padding-top: 0;
+  }
+}
+
+.hosting-detail-value {
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Code blocks */
+.hosting-code {
+  background: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid var(--hosting-border);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 0.875rem;
+}
+
+.hosting-code-block {
+  background: white;
+  padding: 1rem;
+  border-radius: 3px;
+  border: 1px solid var(--hosting-border);
+  overflow-x: auto;
+  margin: 0;
+}
+
+.hosting-code-block code {
+  background: none;
+  padding: 0;
+  border: none;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* ============================================
+   Navigation Section
+   ============================================ */
+.hosting-navigation-section {
+  background: var(--hosting-bg-light);
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--hosting-border);
+}
+
+.hosting-navigation-section h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: var(--hosting-secondary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--hosting-primary);
+  padding-bottom: 0.5rem;
+}
+
+.hosting-navigation-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hosting-navigation-section li a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border: 1px solid var(--hosting-border);
+  border-radius: 4px;
+  color: var(--hosting-link);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.hosting-navigation-section li a:hover {
+  background: var(--hosting-primary);
+  color: white;
+  border-color: var(--hosting-primary);
+  transform: translateX(4px);
+}
+
+/* ============================================
+   Task Queue Section
+   ============================================ */
+.hosting-task-queue-section {
+  background: var(--hosting-bg-light);
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--hosting-border);
+  margin-bottom: 1.5rem;
+}
+
+.hosting-task-queue-section h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: var(--hosting-secondary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--hosting-primary);
+  padding-bottom: 0.5rem;
+}
+
+/* ============================================
+   Sidebar Component
+   ============================================ */
+.hosting-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ============================================
+   Responsive Utilities
+   ============================================ */
+@media (max-width: 767px) {
+  .hosting-section {
+    padding: 1rem;
+  }
+  
+  .hosting-layout-two-column {
+    gap: 1.5rem;
+  }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+@media print {
+  .hosting-section {
+    box-shadow: none;
+    border: 1px solid #000;
+  }
+  
+  .hosting-navigation-section li a:hover {
+    transform: none;
+    background: white;
+    color: var(--hosting-link);
+  }
+}

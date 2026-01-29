@@ -1,0 +1,19 @@
+{#
+/**
+ * @file
+ * Shared template for hosting entity task queue sections.
+ *
+ * Available variables:
+ * - title: The section title.
+ * - list: The task list render array.
+ * - attributes: HTML attributes for the container element.
+ *
+ * @ingroup themeable
+ */
+#}
+<section{{ attributes.addClass('hosting-task-queue-section') }}>
+  {% if title %}
+    <h3>{{ title }}</h3>
+  {% endif %}
+  {{ list }}
+</section>

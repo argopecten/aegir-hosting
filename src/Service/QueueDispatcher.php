@@ -45,8 +45,56 @@ class QueueDispatcher {
       if ($queue['calc_items'] <= 0) {
         continue;
       }
-      $this->queueRunner->run($queue['queue_id'], (int) $queue['calc_items']);
+      
+      // Use calculated threads for processing.
+      $threads = $queue['calc_threads'] ?? 1;
+      
+      if ($threads > 1) {
+        // Process multiple items in parallel (spawn background processes).
+        $this->runParallel($queue['queue_id'], (int) $queue['calc_items'], $threads);
+      }
+      else {
+        // Serial processing.
+        $this->queueRunner->run($queue['queue_id'], (int) $queue['calc_items']);
+      }
+      
       $this->setLastRun($queue_id, $this->time->getRequestTime());
+    }
+  }
+
+  /**
+   * Run queue processing in parallel.
+   *
+   * @param string $queue_id
+   *   Queue ID.
+   * @param int $items
+   *   Number of items to process.
+   * @param int $threads
+   *   Number of parallel threads.
+   */
+  protected function runParallel(string $queue_id, int $items, int $threads): void {
+    $items_per_thread = (int) ceil($items / $threads);
+    
+    for ($i = 0; $i < $threads; $i++) {
+      // Fork process to handle items in parallel.
+      $pid = pcntl_fork();
+      
+      if ($pid == -1) {
+        // Fork failed.
+        $this->logger->error('Failed to fork process for parallel queue processing');
+        continue;
+      }
+      elseif ($pid == 0) {
+        // Child process - process items.
+        $this->queueRunner->run($queue_id, $items_per_thread);
+        exit(0);
+      }
+      // Parent process continues to fork more children.
+    }
+    
+    // Wait for all child processes to complete.
+    for ($i = 0; $i < $threads; $i++) {
+      pcntl_wait($status);
     }
   }
 

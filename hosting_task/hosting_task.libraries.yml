@@ -1,0 +1,18 @@
+hosting-task:
+  css:
+    theme:
+      css/hosting-task.css: {}
+  dependencies:
+    - hosting/common
+
+task-queue:
+  version: 1.x
+  css:
+    theme:
+      css/task-queue.css: {}
+  js:
+    js/task-queue.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery
+    - core/drupalSettings

@@ -1,0 +1,37 @@
+{#
+/**
+ * @file
+ * Default theme implementation to display a hosting site.
+ *
+ * Available variables:
+ * - content: A list of content items. Use 'content' to print all content, or
+ *   print a subset such as 'content.field_example'.
+ * - attributes: HTML attributes for the container element.
+ * - label: The title of the entity.
+ * - title_prefix: Additional output populated by modules, intended to be
+ *   displayed in front of the main title tag that appears in the template.
+ * - title_suffix: Additional output populated by modules, intended to be
+ *   displayed after the main title tag that appears in the template.
+ * - title_attributes: HTML attributes for the title element.
+ * - entity: The full entity object.
+ * - view_mode: The view mode; e.g., 'full', 'teaser', etc.
+ * - sidebar: Sidebar content for the site.
+ *
+ * @ingroup themeable
+ */
+#}
+<article{{ attributes.addClass('hosting-site') }}>
+  {{ title_prefix }}
+  {% if label %}
+    <h2{{ title_attributes }}>{{ label }}</h2>
+  {% endif %}
+  {{ title_suffix }}
+  <div class="hosting-site-content">
+    {{ content }}
+  </div>
+  {% if sidebar %}
+    <aside class="hosting-site-sidebar">
+      {{ sidebar }}
+    </aside>
+  {% endif %}
+</article>

@@ -1,0 +1,19 @@
+{#
+/**
+ * @file
+ * Shared template for hosting entity navigation sections.
+ *
+ * Available variables:
+ * - title: The section title.
+ * - list: The navigation list render array.
+ * - attributes: HTML attributes for the container element.
+ *
+ * @ingroup themeable
+ */
+#}
+<nav{{ attributes.addClass('hosting-navigation-section') }}>
+  {% if title %}
+    <h3>{{ title }}</h3>
+  {% endif %}
+  {{ list }}
+</nav>

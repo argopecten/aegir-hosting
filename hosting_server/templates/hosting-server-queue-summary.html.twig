@@ -1,4 +1,17 @@
+{#
+/**
+ * @file
+ * Template for hosting server queue summary section.
+ *
+ * Available variables:
+ * - title: The section title.
+ * - list: The queue summary list.
+ * - attributes: HTML attributes for the section element.
+ */
+#}
 <section{{ attributes }}>
-  <h2>{{ title }}</h2>
+  {% if title %}
+    <h3>{{ title }}</h3>
+  {% endif %}
   {{ list }}
 </section>

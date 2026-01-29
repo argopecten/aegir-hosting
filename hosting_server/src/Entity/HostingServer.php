@@ -14,6 +14,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   label = @Translation("Hosting server"),
  *   base_table = "hosting_server",
  *   handlers = {
+ *     "view_builder" = "Drupal\hosting_server\Entity\HostingServerViewBuilder",
  *     "list_builder" = "Drupal\hosting_server\Entity\HostingServerListBuilder",
  *     "form" = {
  *       "default" = "Drupal\hosting_server\Form\HostingServerForm",

@@ -18,12 +18,44 @@ function hosting_cron() {
 function hosting_theme($existing, $type, $theme, $path): array {
   return [
     'hosting_queues_table' => [
-      'variables' => [
-        'table' => NULL,
-        'queues' => NULL,
-        'attributes' => NULL,
-      ],
+      'render element' => 'elements',
       'template' => 'hosting-queues-table',
     ],
+    'hosting_task_queue' => [
+      'render element' => 'elements',
+      'template' => 'hosting-task-queue',
+    ],
+    'hosting_navigation' => [
+      'render element' => 'elements',
+      'template' => 'hosting-navigation',
+    ],
+    'hosting_sidebar' => [
+      'render element' => 'elements',
+      'template' => 'hosting-sidebar',
+    ],
   ];
+}
+
+/**
+ * Prepares variables for hosting queues table template.
+ *
+ * Default template: hosting-queues-table.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - elements: An associative array containing the queue table data.
+ */
+function template_preprocess_hosting_queues_table(array &$variables): void {
+  // Extract table and queues from elements.
+  foreach (\Drupal\Core\Render\Element::children($variables['elements']) as $key) {
+    $variables[$key] = $variables['elements'][$key];
+  }
+  
+  // Maintain backward compatibility.
+  if (isset($variables['elements']['#table'])) {
+    $variables['table'] = $variables['elements']['#table'];
+  }
+  if (isset($variables['elements']['#queues'])) {
+    $variables['queues'] = $variables['elements']['#queues'];
+  }
 }

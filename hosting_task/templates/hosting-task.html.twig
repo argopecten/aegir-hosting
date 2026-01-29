@@ -1,0 +1,93 @@
+{#
+/**
+ * @file
+ * Default theme implementation for a hosting task.
+ *
+ * Available variables:
+ * - task: The full hosting task entity.
+ * - label: The task label.
+ * - task_type: The type of task (e.g., 'verify', 'install', 'delete').
+ * - status: The task status (e.g., 'queued', 'processing', 'success', 'error').
+ * - command: The drush command to execute.
+ * - args: Array of command arguments, if any.
+ * - options: Array of command options, if any.
+ * - started: Formatted start timestamp.
+ * - completed: Formatted completion timestamp.
+ * - duration: Formatted duration string.
+ * - view_mode: View mode; e.g., 'full', 'teaser'.
+ *
+ * @ingroup themeable
+ */
+#}
+<article{{ attributes.addClass('hosting-task', 'hosting-task--' ~ status, 'hosting-task--type-' ~ task_type|clean_class) }}>
+  <header class="hosting-task__header">
+    <h1 class="hosting-task__title">{{ label }}</h1>
+    <div class="hosting-task__meta">
+      <span class="hosting-task__type">{{ task_type }}</span>
+      <span class="hosting-task__status hosting-task__status--{{ status }}">{{ status }}</span>
+    </div>
+  </header>
+
+  <div class="hosting-task__content">
+    <section class="hosting-task__section hosting-task__section--details">
+      <h2 class="hosting-task__section-title">Task Details</h2>
+      <dl class="hosting-task__details">
+        <div class="hosting-task__detail-item">
+          <dt class="hosting-task__detail-label">Command</dt>
+          <dd class="hosting-task__detail-value"><code>{{ command }}</code></dd>
+        </div>
+
+        {% if args %}
+          <div class="hosting-task__detail-item">
+            <dt class="hosting-task__detail-label">Arguments</dt>
+            <dd class="hosting-task__detail-value">
+              <pre><code>{{ args|json_encode(constant('JSON_PRETTY_PRINT')) }}</code></pre>
+            </dd>
+          </div>
+        {% endif %}
+
+        {% if options %}
+          <div class="hosting-task__detail-item">
+            <dt class="hosting-task__detail-label">Options</dt>
+            <dd class="hosting-task__detail-value">
+              <pre><code>{{ options|json_encode(constant('JSON_PRETTY_PRINT')) }}</code></pre>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </section>
+
+    <section class="hosting-task__section hosting-task__section--timing">
+      <h2 class="hosting-task__section-title">Timing</h2>
+      <dl class="hosting-task__timing">
+        {% if started %}
+          <div class="hosting-task__timing-item">
+            <dt class="hosting-task__timing-label">Started</dt>
+            <dd class="hosting-task__timing-value">{{ started }}</dd>
+          </div>
+        {% endif %}
+
+        {% if completed %}
+          <div class="hosting-task__timing-item">
+            <dt class="hosting-task__timing-label">Completed</dt>
+            <dd class="hosting-task__timing-value">{{ completed }}</dd>
+          </div>
+        {% endif %}
+
+        {% if duration %}
+          <div class="hosting-task__timing-item">
+            <dt class="hosting-task__timing-label">Duration</dt>
+            <dd class="hosting-task__timing-value">{{ duration }}</dd>
+          </div>
+        {% endif %}
+
+        {% if not started %}
+          <div class="hosting-task__timing-item">
+            <dt class="hosting-task__timing-label">Status</dt>
+            <dd class="hosting-task__timing-value">Task not yet started</dd>
+          </div>
+        {% endif %}
+      </dl>
+    </section>
+  </div>
+</article>

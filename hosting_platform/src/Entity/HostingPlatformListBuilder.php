@@ -1,0 +1,90 @@
+<?php
+
+namespace Drupal\hosting_platform\Entity;
+
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\EntityListBuilder;
+use Drupal\Core\Entity\EntityStorageInterface;
+use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\hosting_platform\Service\PlatformManager;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+class HostingPlatformListBuilder extends EntityListBuilder {
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function createInstance(ContainerInterface $container, EntityTypeInterface $entity_type): static {
+    return new static(
+      $entity_type,
+      $container->get('entity_type.manager')->getStorage($entity_type->id())
+    );
+  }
+
+  public function buildHeader(): array {
+    return [
+      'name' => $this->t('Name'),
+      'path' => $this->t('Platform Path'),
+      'web_server' => $this->t('Web Server'),
+      'status' => $this->t('Status'),
+      'verified' => $this->t('Last Verified'),
+    ];
+  }
+
+  public function buildRow(EntityInterface $entity): array {
+    /** @var \Drupal\hosting_platform\Entity\HostingPlatform $entity */
+    $row = [];
+    
+    $name = $entity->get('name')->value;
+    $publish_path = $entity->get('publish_path')->value;
+    
+    $row['name'] = $entity->toLink($name);
+    
+    // Check if path exists and style accordingly
+    $path_exists = is_dir($publish_path);
+    if ($path_exists) {
+      $row['path'] = [
+        'data' => [
+          '#markup' => '<span style="color: green;">✓</span> ' . $publish_path,
+        ],
+      ];
+    } else {
+      $row['path'] = [
+        'data' => [
+          '#markup' => '<span style="color: red;">✗</span> ' . $publish_path,
+        ],
+      ];
+    }
+    
+    // Get web server name
+    $web_server = $entity->get('web_server')->entity;
+    if ($web_server) {
+      $server_name = $web_server->get('human_name')->value ?: $web_server->get('hostname')->value;
+      $row['web_server'] = $server_name;
+    } else {
+      $row['web_server'] = $this->t('None');
+    }
+    
+    // Get status
+    $status_value = (int) $entity->get('status')->value;
+    $status_labels = [
+      HostingPlatform::STATUS_QUEUED => $this->t('Queued'),
+      HostingPlatform::STATUS_ENABLED => $this->t('Enabled'),
+      HostingPlatform::STATUS_LOCKED => $this->t('Locked'),
+      HostingPlatform::STATUS_DELETED => $this->t('Deleted'),
+    ];
+    $row['status'] = $status_labels[$status_value] ?? $this->t('Unknown');
+    
+    // Get verified timestamp
+    $verified = (int) $entity->get('verified')->value;
+    if ($verified > 0) {
+      $row['verified'] = \Drupal::service('date.formatter')->format($verified, 'short');
+    } else {
+      $row['verified'] = $this->t('Never');
+    }
+    
+    return $row;
+  }
+
+}
+

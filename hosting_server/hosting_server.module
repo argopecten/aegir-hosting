@@ -26,14 +26,7 @@ function hosting_server_hosting_feature() {
 function hosting_server_theme($existing, $type, $theme, $path): array {
   return [
     'hosting_server' => [
-      'variables' => [
-        'content' => NULL,
-        'sidebar' => NULL,
-        'attributes' => NULL,
-        'label' => NULL,
-        'entity' => NULL,
-        'view_mode' => NULL,
-      ],
+      'render element' => 'elements',
       'template' => 'hosting-server',
     ],
     'hosting_service_status_cell' => [
@@ -49,12 +42,11 @@ function hosting_server_theme($existing, $type, $theme, $path): array {
     ],
     'hosting_server_sidebar' => [
       'variables' => [
-        'task_queue' => NULL,
-        'navigation' => NULL,
-        'queue_summary' => NULL,
+        'content' => NULL,
         'attributes' => NULL,
       ],
-      'template' => 'hosting-server-sidebar',
+      'template' => 'hosting-sidebar',
+      'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
     ],
     'hosting_server_task_queue' => [
       'variables' => [
@@ -62,7 +54,8 @@ function hosting_server_theme($existing, $type, $theme, $path): array {
         'list' => NULL,
         'attributes' => NULL,
       ],
-      'template' => 'hosting-server-task-queue',
+      'template' => 'hosting-task-queue',
+      'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
     ],
     'hosting_server_navigation' => [
       'variables' => [
@@ -70,7 +63,8 @@ function hosting_server_theme($existing, $type, $theme, $path): array {
         'list' => NULL,
         'attributes' => NULL,
       ],
-      'template' => 'hosting-server-navigation',
+      'template' => 'hosting-navigation',
+      'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
     ],
     'hosting_server_queue_summary' => [
       'variables' => [
@@ -81,6 +75,40 @@ function hosting_server_theme($existing, $type, $theme, $path): array {
       'template' => 'hosting-server-queue-summary',
     ],
   ];
+}
+
+/**
+ * Prepares variables for hosting server templates.
+ *
+ * Default template: hosting-server.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - elements: An associative array containing the server information and any
+ *     fields attached to the entity.
+ *   - attributes: HTML attributes for the containing element.
+ */
+function template_preprocess_hosting_server(array &$variables): void {
+  $variables['view_mode'] = $variables['elements']['#view_mode'];
+  $variables['server'] = $variables['elements']['#hosting_server'];
+  $variables['entity'] = $variables['server'];
+  
+  // Helpful $content variable for templates.
+  foreach (\Drupal\Core\Render\Element::children($variables['elements']) as $key) {
+    $variables['content'][$key] = $variables['elements'][$key];
+  }
+  
+  // Add title prefix/suffix.
+  $variables['title_prefix'] = $variables['elements']['#title_prefix'] ?? [];
+  $variables['title_suffix'] = $variables['elements']['#title_suffix'] ?? [];
+  
+  // Set label and title attributes.
+  $variables['label'] = $variables['server']->label();
+  $variables['title_attributes'] = $variables['elements']['#title_attributes'] ?? new \Drupal\Core\Template\Attribute();
+  
+  // Pass sidebar if it exists.
+  $variables['sidebar'] = $variables['content']['hosting_sidebar'] ?? NULL;
+  unset($variables['content']['hosting_sidebar']);
 }
 
 /**
@@ -191,78 +219,65 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
 
   $build['hosting_sidebar'] = [
     '#theme' => 'hosting_server_sidebar',
-    '#task_queue' => [
-      '#theme' => 'hosting_server_task_queue',
-      '#title' => t('Task queue'),
-      '#list' => [
-        '#theme' => 'item_list',
-        '#items' => $task_items,
-        '#empty' => t('No tasks available.'),
-        '#attributes' => ['class' => ['hosting-task-queue']],
-      ],
-      '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--task-queue']],
-    ],
-    '#navigation' => [
-      '#theme' => 'hosting_server_navigation',
-      '#title' => t('Navigation'),
-      '#list' => [
-        '#theme' => 'item_list',
-        '#items' => [
-          [
-            '#type' => 'link',
-            '#title' => t('All tasks'),
-            '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection'),
-            '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')->access(),
-          ],
-          [
-            '#type' => 'link',
-            '#title' => t('Queues'),
-            '#url' => \Drupal\Core\Url::fromRoute('hosting.admin.queues'),
-            '#access' => \Drupal\Core\Url::fromRoute('hosting.admin.queues')->access(),
-          ],
-          [
-            '#type' => 'link',
-            '#title' => t('Edit server'),
-            '#url' => $entity->toUrl('edit-form'),
-            '#access' => $entity->toUrl('edit-form')->access(),
-          ],
+    '#content' => [
+      'task_queue' => [
+        '#theme' => 'hosting_server_task_queue',
+        '#title' => t('Task queue'),
+        '#list' => [
+          '#theme' => 'item_list',
+          '#items' => $task_items,
+          '#empty' => t('No tasks available.'),
+          '#attributes' => ['class' => ['hosting-task-queue']],
         ],
-        '#attributes' => ['class' => ['hosting-navigation']],
+        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--task-queue']],
       ],
-      '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--navigation']],
-    ],
-    '#queue_summary' => [
-      '#theme' => 'hosting_server_queue_summary',
-      '#title' => t('Queues summary'),
-      '#list' => [
-        '#theme' => 'item_list',
-        '#items' => $queue_items,
-        '#empty' => t('No queues configured.'),
-        '#attributes' => ['class' => ['hosting-queue-summary']],
+      'navigation' => [
+        '#theme' => 'hosting_server_navigation',
+        '#title' => t('Navigation'),
+        '#list' => [
+          '#theme' => 'item_list',
+          '#items' => [
+            [
+              '#type' => 'link',
+              '#title' => t('All tasks'),
+              '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection'),
+              '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')->access(),
+            ],
+            [
+              '#type' => 'link',
+              '#title' => t('Queues'),
+              '#url' => \Drupal\Core\Url::fromRoute('hosting.admin.queues'),
+              '#access' => \Drupal\Core\Url::fromRoute('hosting.admin.queues')->access(),
+            ],
+            [
+              '#type' => 'link',
+              '#title' => t('Edit server'),
+              '#url' => $entity->toUrl('edit-form'),
+              '#access' => $entity->toUrl('edit-form')->access(),
+            ],
+          ],
+          '#attributes' => ['class' => ['hosting-navigation']],
+        ],
+        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--navigation']],
       ],
-      '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--queue-summary']],
+      'queue_summary' => [
+        '#theme' => 'hosting_server_queue_summary',
+        '#title' => t('Queues summary'),
+        '#list' => [
+          '#theme' => 'item_list',
+          '#items' => $queue_items,
+          '#empty' => t('No queues configured.'),
+          '#attributes' => ['class' => ['hosting-queue-summary']],
+        ],
+        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--queue-summary']],
+      ],
     ],
     '#attributes' => ['class' => ['hosting-sidebar']],
     '#weight' => 60,
   ];
 
-  $children = \Drupal\Core\Render\Element::children($build);
-  $content = [];
-  $sidebar = NULL;
-  foreach ($children as $key) {
-    if ($key === 'hosting_sidebar') {
-      $sidebar = $build[$key];
-    }
-    else {
-      $content[$key] = $build[$key];
-    }
-    unset($build[$key]);
-  }
-  $build['#content'] = $content;
-  $build['#sidebar'] = $sidebar;
-  $build['#label'] = $entity->label();
-  $build['#entity'] = $entity;
-  $build['#attributes'] = $build['#attributes'] ?? new \Drupal\Core\Template\Attribute();
+  // Add wrapper class to the entire build.
+  $build['#attributes']['class'][] = 'hosting-server-view';
 
   $tags = $build['#cache']['tags'] ?? [];
   foreach ($instances as $instance) {
@@ -270,11 +285,9 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
   }
   if ($task_tags) {
     $tags = \Drupal\Core\Cache\Cache::mergeTags($tags, $task_tags);
-    $build['hosting_sidebar']['#task_queue']['#cache']['tags'] = $task_tags;
   }
   if ($tags) {
     $build['#cache']['tags'] = $tags;
-    $build['hosting_services']['#cache']['tags'] = $tags;
   }
 
   $build['hosting_sidebar']['#queue_summary']['#cache']['max-age'] = 0;

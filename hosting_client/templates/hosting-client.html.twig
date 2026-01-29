@@ -1,0 +1,116 @@
+{#
+/**
+ * @file
+ * Default theme implementation for a hosting client.
+ *
+ * Available variables:
+ * - client: The full hosting client entity.
+ * - name: The client name.
+ * - uname: The internal/system name.
+ * - status: The client status (1 = active, 0 = inactive).
+ * - owner: The owner user entity.
+ * - owner_name: The owner's display name.
+ * - users: Array of associated users with:
+ *   - user: User entity
+ *   - name: User display name
+ *   - contact_type: Contact type/role
+ * - sites: Array of hosting site entities associated with this client.
+ * - site_count: Number of associated sites.
+ * - view_mode: View mode; e.g., 'full', 'teaser'.
+ *
+ * @ingroup themeable
+ */
+#}
+<article{{ attributes.addClass('hosting-client', status ? 'hosting-client--active' : 'hosting-client--inactive') }}>
+  <header class="hosting-client__header">
+    <h1 class="hosting-client__title">{{ name }}</h1>
+    <div class="hosting-client__meta">
+      <span class="hosting-client__uname">{{ uname }}</span>
+      <span class="hosting-client__status hosting-client__status--{{ status ? 'active' : 'inactive' }}">
+        {{ status ? 'Active'|t : 'Inactive'|t }}
+      </span>
+    </div>
+  </header>
+
+  <div class="hosting-client__content">
+    <section class="hosting-client__section hosting-client__section--info">
+      <h2 class="hosting-client__section-title">Client Information</h2>
+      <dl class="hosting-client__details">
+        <div class="hosting-client__detail-item">
+          <dt class="hosting-client__detail-label">Name</dt>
+          <dd class="hosting-client__detail-value">{{ name }}</dd>
+        </div>
+
+        <div class="hosting-client__detail-item">
+          <dt class="hosting-client__detail-label">Internal Name</dt>
+          <dd class="hosting-client__detail-value"><code>{{ uname }}</code></dd>
+        </div>
+
+        {% if owner_name %}
+          <div class="hosting-client__detail-item">
+            <dt class="hosting-client__detail-label">Owner</dt>
+            <dd class="hosting-client__detail-value">
+              <a href="{{ path('entity.user.canonical', {'user': owner.id}) }}">{{ owner_name }}</a>
+            </dd>
+          </div>
+        {% endif %}
+
+        <div class="hosting-client__detail-item">
+          <dt class="hosting-client__detail-label">Status</dt>
+          <dd class="hosting-client__detail-value">
+            <span class="hosting-client__status-badge hosting-client__status-badge--{{ status ? 'active' : 'inactive' }}">
+              {{ status ? 'Active'|t : 'Inactive'|t }}
+            </span>
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <aside class="hosting-client__sidebar">
+      {% if users %}
+        <section class="hosting-client__section hosting-client__section--users">
+          <h2 class="hosting-client__section-title">Associated Users</h2>
+          <ul class="hosting-client__user-list">
+            {% for user_info in users %}
+              <li class="hosting-client__user-item">
+                <a href="{{ path('entity.user.canonical', {'user': user_info.user.id}) }}" class="hosting-client__user-link">
+                  {{ user_info.name }}
+                </a>
+                {% if user_info.contact_type %}
+                  <span class="hosting-client__user-role">({{ user_info.contact_type }})</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      {% if sites %}
+        <section class="hosting-client__section hosting-client__section--sites">
+          <h2 class="hosting-client__section-title">
+            Sites ({{ site_count }})
+          </h2>
+          <ul class="hosting-client__site-list">
+            {% for site in sites|slice(0, 10) %}
+              <li class="hosting-client__site-item">
+                <a href="{{ path('entity.hosting_site.canonical', {'hosting_site': site.id}) }}" class="hosting-client__site-link">
+                  {{ site.label }}
+                </a>
+              </li>
+            {% endfor %}
+            {% if site_count > 10 %}
+              <li class="hosting-client__site-item hosting-client__site-item--more">
+                <em>{{ 'and @count more'|t({'@count': site_count - 10}) }}</em>
+              </li>
+            {% endif %}
+          </ul>
+        </section>
+      {% else %}
+        <section class="hosting-client__section hosting-client__section--sites">
+          <h2 class="hosting-client__section-title">Sites</h2>
+          <p class="hosting-client__no-sites">{{ 'No sites associated with this client.'|t }}</p>
+        </section>
+      {% endif %}
+    </aside>
+  </div>
+</article>

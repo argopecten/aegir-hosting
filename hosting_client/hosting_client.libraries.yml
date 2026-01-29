@@ -1,0 +1,6 @@
+hosting-client:
+  css:
+    theme:
+      css/hosting-client.css: {}
+  dependencies:
+    - hosting/common

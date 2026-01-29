@@ -1,0 +1,172 @@
+<?php
+
+/**
+ * @file
+ * Install hooks for the Hosting Server module.
+ */
+
+use Drupal\hosting_server\Entity\HostingServer;
+
+/**
+ * Implements hook_install().
+ *
+ * Note: Server seeding happens in hook_modules_installed() when service
+ * modules (hosting_web_server, hosting_db_server) are installed, since
+ * they depend on hosting_server and are installed after it.
+ */
+function hosting_server_install(): void {
+  // Server seeding is handled by hook_modules_installed().
+  // This hook is kept for potential future initialization tasks.
+}
+
+/**
+ * Implements hook_modules_installed().
+ *
+ * Seeds default servers when hosting_web_server or hosting_db_server are installed.
+ */
+function hosting_server_modules_installed(array $modules): void {
+  $relevant_modules = ['hosting_web_server', 'hosting_db_server'];
+  $intersection = array_intersect($modules, $relevant_modules);
+  
+  if (empty($intersection)) {
+    return;
+  }
+
+  _hosting_server_seed_default_servers();
+}
+
+/**
+ * Helper function to seed default web and database servers.
+ */
+function _hosting_server_seed_default_servers(): void {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  $storage = $entity_type_manager->getStorage('hosting_server');
+  $service_storage = $entity_type_manager->getStorage('hosting_service_instance');
+  $service_manager = \Drupal::service('hosting.service_manager');
+  $module_handler = \Drupal::moduleHandler();
+  
+  $host = gethostname() ?: 'localhost';
+  $web_hostname = $host;
+  $db_hostname = $host . '-db';
+  if ($db_hostname === $web_hostname) {
+    $db_hostname = 'localhost-db';
+  }
+
+  // Create web server if hosting_web_server module is installed
+  if ($module_handler->moduleExists('hosting_web_server')) {
+    $existing = $storage->loadByProperties(['hostname' => $web_hostname]);
+    if (empty($existing)) {
+      /** @var \Drupal\hosting_server\Entity\HostingServer $web_server */
+      $web_server = $storage->create([
+        'hostname' => $web_hostname,
+        'human_name' => 'Local web server',
+        'status' => HostingServer::STATUS_ENABLED,
+        'verified' => \Drupal::time()->getRequestTime(),
+      ]);
+      $web_server->save();
+      \Drupal::logger('hosting_server')->info('Created default web server: @hostname', [
+        '@hostname' => $web_hostname,
+      ]);
+    } else {
+      $web_server = reset($existing);
+    }
+
+    // Create http service instance if it doesn't exist
+    $existing_service = $service_storage->loadByProperties([
+      'server' => $web_server->id(),
+      'service_type' => 'http',
+    ]);
+    if (empty($existing_service)) {
+      try {
+        $provider = $service_manager->createProvider('apache', []);
+        $config = $provider->defaultConfiguration();
+        
+        $instance = $service_storage->create([
+          'server' => $web_server->id(),
+          'service_type' => 'http',
+          'provider' => 'apache',
+          'available' => TRUE,
+          'config' => \Drupal::service('serialization.json')->encode($config),
+        ]);
+        
+        if (isset($config['port'])) {
+          $instance->set('port', (int) $config['port']);
+        }
+        if (isset($config['restart_cmd'])) {
+          $instance->set('restart_cmd', (string) $config['restart_cmd']);
+        }
+        
+        $instance->save();
+        \Drupal::logger('hosting_server')->info('Created Apache service instance for web server');
+      } catch (\Exception $e) {
+        \Drupal::logger('hosting_server')->warning('Failed to create Apache service instance: @message', [
+          '@message' => $e->getMessage(),
+        ]);
+      }
+    }
+  }
+
+  // Create database server if hosting_db_server module is installed
+  if ($module_handler->moduleExists('hosting_db_server')) {
+    $existing = $storage->loadByProperties(['hostname' => $db_hostname]);
+    if (empty($existing)) {
+      /** @var \Drupal\hosting_server\Entity\HostingServer $db_server */
+      $db_server = $storage->create([
+        'hostname' => $db_hostname,
+        'human_name' => 'Local database server',
+        'status' => HostingServer::STATUS_ENABLED,
+        'verified' => \Drupal::time()->getRequestTime(),
+      ]);
+      $db_server->save();
+      \Drupal::logger('hosting_server')->info('Created default database server: @hostname', [
+        '@hostname' => $db_hostname,
+      ]);
+    } else {
+      $db_server = reset($existing);
+    }
+
+    // Create db service instance if it doesn't exist
+    $existing_service = $service_storage->loadByProperties([
+      'server' => $db_server->id(),
+      'service_type' => 'db',
+    ]);
+    if (empty($existing_service)) {
+      try {
+        $db_options = \Drupal\Core\Database\Database::getConnection()->getConnectionOptions();
+        $provider = $service_manager->createProvider('mysql', []);
+        $config = array_replace($provider->defaultConfiguration(), [
+          'db_user' => (string) ($db_options['username'] ?? ''),
+          'db_passwd' => (string) ($db_options['password'] ?? ''),
+          'port' => (int) ($db_options['port'] ?? 3306),
+        ]);
+        
+        $instance = $service_storage->create([
+          'server' => $db_server->id(),
+          'service_type' => 'db',
+          'provider' => 'mysql',
+          'available' => TRUE,
+          'config' => \Drupal::service('serialization.json')->encode($config),
+        ]);
+        
+        if (isset($config['port'])) {
+          $instance->set('port', (int) $config['port']);
+        }
+        if (isset($config['restart_cmd'])) {
+          $instance->set('restart_cmd', (string) $config['restart_cmd']);
+        }
+        
+        $instance->save();
+        
+        if (empty($config['db_user'])) {
+          \Drupal::logger('hosting_server')->warning('Database username is empty; update the MySQL service instance config manually.');
+        } else {
+          \Drupal::logger('hosting_server')->info('Created MySQL service instance for database server');
+        }
+      } catch (\Exception $e) {
+        \Drupal::logger('hosting_server')->warning('Failed to create MySQL service instance: @message', [
+          '@message' => $e->getMessage(),
+        ]);
+      }
+    }
+  }
+}
