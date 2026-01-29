@@ -1127,6 +1127,26 @@ class HostingTask extends ContentEntityBase implements HostingTaskInterface {
       ->setLabel(t('Completed'))
       ->setDisplayOptions('view', ['label' => 'inline', 'weight' => 11]);
     
+    $fields['retry_count'] = BaseFieldDefinition::create('integer')
+      ->setLabel(t('Retry count'))
+      ->setDefaultValue(0);
+    
+    $fields['max_retries'] = BaseFieldDefinition::create('integer')
+      ->setLabel(t('Max retries'))
+      ->setDefaultValue(3);
+    
+    $fields['next_retry_time'] = BaseFieldDefinition::create('timestamp')
+      ->setLabel(t('Next retry time'))
+      ->setDefaultValue(0);
+    
+    $fields['cancelled_by'] = BaseFieldDefinition::create('entity_reference')
+      ->setLabel(t('Cancelled by'))
+      ->setSetting('target_type', 'user');
+    
+    $fields['process_id'] = BaseFieldDefinition::create('integer')
+      ->setLabel(t('Process ID'))
+      ->setDefaultValue(0);
+    
     $fields['duration'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Duration'))
       ->setDescription(t('Task duration in seconds'))
@@ -1306,6 +1326,102 @@ class TaskManager {
       default => throw new \RuntimeException("Unsupported entity type: {$type}"),
     };
   }
+  
+  /**
+   * Cancel a task.
+   */
+  public function cancelTask(int $task_id, int $user_id): bool {
+    $task = $this->loadTask($task_id);
+    if (!$task || !in_array($task->getStatus(), ['queued', 'processing', 'failed'])) {
+      return FALSE;
+    }
+    
+    // Kill process if running.
+    if ($task->getStatus() === 'processing') {
+      $pid = (int) $task->get('process_id')->value;
+      if ($pid > 0) {
+        posix_kill($pid, SIGTERM);
+        sleep(2);
+        if (posix_kill($pid, 0)) {
+          posix_kill($pid, SIGKILL);
+        }
+      }
+    }
+    
+    $task->setStatus('cancelled');
+    $task->set('cancelled_by', $user_id);
+    $task->set('completed', time());
+    $task->save();
+    
+    return TRUE;
+  }
+  
+  /**
+   * Retry a failed task.
+   */
+  public function retryTask(int $task_id): bool {
+    $task = $this->loadTask($task_id);
+    if (!$task || $task->getStatus() !== 'failed') {
+      return FALSE;
+    }
+    
+    $task->set('next_retry_time', 0);
+    $task->setStatus('queued');
+    $task->save();
+    $this->queueTask($task);
+    
+    return TRUE;
+  }
+}
+```
+
+### Automatic Task Creation
+
+**Entity Hooks**: Tasks are automatically created on entity save.
+
+**File**: [hosting_site/hosting_site.module](hosting_site/hosting_site.module)
+
+```php
+/**
+ * Implements hook_ENTITY_TYPE_insert() for hosting_site.
+ */
+function hosting_site_hosting_site_insert(\Drupal\hosting_site\Entity\HostingSite $site) {
+  $task_manager = \Drupal::service('hosting.task_manager');
+  $task_manager->createTask($site->get('domain')->value, 'install', [], []);
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_update() for hosting_site.
+ */
+function hosting_site_hosting_site_update(\Drupal\hosting_site\Entity\HostingSite $site) {
+  if ($site->isPublished() && !$site->original->isPublished()) {
+    $task_manager = \Drupal::service('hosting.task_manager');
+    $task_manager->createTask($site->get('domain')->value, 'verify', [], []);
+  }
+}
+```
+
+**File**: [hosting_platform/hosting_platform.module](hosting_platform/hosting_platform.module)
+
+```php
+/**
+ * Implements hook_ENTITY_TYPE_insert() for hosting_platform.
+ */
+function hosting_platform_hosting_platform_insert(\Drupal\hosting_platform\Entity\HostingPlatform $platform) {
+  $task_manager = \Drupal::service('hosting.task_manager');
+  $context_name = 'platform_' . $platform->id();
+  $task_manager->createTask($context_name, 'verify', [], []);
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_update() for hosting_platform.
+ */
+function hosting_platform_hosting_platform_update(\Drupal\hosting_platform\Entity\HostingPlatform $platform) {
+  if ($platform->get('publish_path')->value !== $platform->original->get('publish_path')->value) {
+    $task_manager = \Drupal::service('hosting.task_manager');
+    $context_name = 'platform_' . $platform->id();
+    $task_manager->createTask($context_name, 'verify', [], []);
+  }
 }
 ```
 
@@ -1330,16 +1446,219 @@ class HostingTaskQueueWorker extends QueueWorkerBase {
    */
   public function processItem($data) {
     $task_id = $data['task_id'];
-    
-    $task_manager = \Drupal::service('hosting_task.manager');
+    $task_manager = \Drupal::service('hosting.task_manager');
     $task_manager->runTaskId($task_id);
   }
 }
 ```
 
+**Task Execution with Retry Logic**:
+
+```php
+public function runTaskId(int $task_id): void {
+  $task = $this->loadTask($task_id);
+  
+  // Check retry timing.
+  if ($task->getStatus() === 'failed' && $task->get('next_retry_time')->value > time()) {
+    return;
+  }
+  
+  // Check if cancelled.
+  if ($task->getStatus() === 'cancelled') {
+    return;
+  }
+  
+  $task->setStatus('processing');
+  $task->set('started', time());
+  $task->save();
+  
+  // Use streaming output.
+  $callback = function ($type, $buffer) use ($task_id) {
+    if ($type === Process::OUT) {
+      $this->taskLogManager->log($task_id, 'status', $buffer);
+    } else {
+      $this->taskLogManager->log($task_id, 'error', $buffer, $buffer);
+    }
+  };
+  
+  $result = $this->backendInvoker->invokeStreaming(
+    $task->getCommand(),
+    [$task->get('context_name')->value],
+    $task->getOptions(),
+    $callback
+  );
+  
+  // Store PID for cancellation.
+  if (!empty($result['pid'])) {
+    $task->set('process_id', $result['pid']);
+    $task->save();
+  }
+  
+  // Handle failure with retry.
+  if (!empty($result['exit_code'])) {
+    $retry_count = (int) $task->get('retry_count')->value;
+    $max_retries = (int) $task->get('max_retries')->value;
+    
+    if ($retry_count < $max_retries) {
+      // Exponential backoff: 2^retry_count * 60 seconds.
+      $delay = pow(2, $retry_count) * 60;
+      $task->set('retry_count', $retry_count + 1);
+      $task->set('next_retry_time', time() + $delay);
+      $task->setStatus('failed');
+      $this->queueTask($task);
+    } else {
+      $task->setStatus('failed');
+    }
+  } else {
+    $task->setStatus('success');
+    $task->set('retry_count', 0);
+    $task->set('next_retry_time', 0);
+  }
+  
+  $task->set('completed', time());
+  $task->set('process_id', 0);
+  $task->save();
+}
+```
+
+### Streaming Output
+
+**File**: [src/Service/BackendInvoker.php](src/Service/BackendInvoker.php)
+
+```php
+/**
+ * Invoke with streaming output callback.
+ */
+public function invokeStreaming(
+  string $command,
+  array $args = [],
+  array $options = [],
+  ?callable $callback = NULL,
+  ?string $alias = NULL
+): array {
+  
+  $process = new Process($this->buildCommand($command, $args, $options, $alias));
+  $process->setTimeout(NULL);
+  
+  // Run with callback for real-time output.
+  if ($callback) {
+    $process->run($callback);
+  } else {
+    $process->run();
+  }
+  
+  return [
+    'output' => $process->getOutput(),
+    'error' => $process->getErrorOutput(),
+    'exit_code' => $process->getExitCode(),
+    'pid' => $process->getPid(),
+  ];
+}
+```
+
+### Task Queue Management UI
+
+**Controller**: [hosting_task/src/Controller/TaskQueueController.php](hosting_task/src/Controller/TaskQueueController.php)
+
+**Routes**:
+- `/admin/hosting/tasks/queue` - Dashboard with statistics and task table
+- `/admin/hosting/tasks/queue/refresh` - AJAX endpoint for live updates
+- `/admin/hosting/tasks/{task}/cancel` - Cancel task
+- `/admin/hosting/tasks/{task}/retry` - Retry failed task
+
+**Features**:
+- Live auto-refresh (5 seconds)
+- Statistics cards (queued, processing, failed, success)
+- Task operations (view, retry, cancel)
+- Status badges with animations
+```
+
 ### Queue Dispatcher
 
 **File**: [src/Service/QueueDispatcher.php](src/Service/QueueDispatcher.php)
+
+```php
+class QueueDispatcher {
+  
+  /**
+   * Dispatch queues (called by cron).
+   */
+  public function dispatch(): void {
+    if (!$this->config->get('hosting.settings.dispatch_enabled')) {
+      return;
+    }
+    
+    foreach ($this->getQueuesWithState() as $queue_id => $queue) {
+      if (!$queue['enabled'] || empty($queue['queue_id'])) {
+        continue;
+      }
+      if ($queue['next_run'] > time()) {
+        continue;
+      }
+      if ($queue['calc_items'] <= 0) {
+        continue;
+      }
+      
+      $threads = $queue['calc_threads'] ?? 1;
+      
+      if ($threads > 1) {
+        // Parallel processing with forked processes.
+        $this->runParallel($queue['queue_id'], (int) $queue['calc_items'], $threads);
+      } else {
+        // Serial processing.
+        $this->queueRunner->run($queue['queue_id'], (int) $queue['calc_items']);
+      }
+      
+      $this->setLastRun($queue_id, time());
+    }
+  }
+  
+  /**
+   * Run queue processing in parallel.
+   */
+  protected function runParallel(string $queue_id, int $items, int $threads): void {
+    $items_per_thread = (int) ceil($items / $threads);
+    
+    for ($i = 0; $i < $threads; $i++) {
+      $pid = pcntl_fork();
+      
+      if ($pid == -1) {
+        $this->logger->error('Failed to fork process');
+        continue;
+      }
+      elseif ($pid == 0) {
+        // Child process.
+        $this->queueRunner->run($queue_id, $items_per_thread);
+        exit(0);
+      }
+    }
+    
+    // Wait for all children.
+    for ($i = 0; $i < $threads; $i++) {
+      pcntl_wait($status);
+    }
+  }
+}
+```
+
+**Current State**:
+- ✅ Complete task entity with retry/cancellation fields
+- ✅ Automatic task creation on entity save
+- ✅ Queue worker plugin
+- ✅ Task manager with retry logic (exponential backoff)
+- ✅ Task cancellation with process killing
+- ✅ Streaming output for real-time logs
+- ✅ Task logging
+- ✅ Parallel execution (when pcntl available)
+- ✅ Task queue management UI
+- ❌ Task dependencies
+- ❌ Task scheduling (run at specific time)
+
+**Future Goals**:
+- Support task dependencies (task B waits for task A)
+- Add task scheduling (cron-like)
+- Add distributed queue workers (multiple servers)
+
 
 ```php
 class QueueDispatcher {
@@ -1584,19 +1903,24 @@ public function submitForm(array &$form, FormStateInterface $form_state) {
    - Add batch operations
    - Improve validation messages
 
-5. **Theme Integration**
-   - Use `item_info_listing` theme hook consistently
-   - Create proper view builders
-   - Add entity view modes (full, teaser)
-   - Implement template suggestions
+5. **Theme Integration** ✅ **COMPLETED**
+   - ✅ Use `item_info_listing` theme hook consistently
+   - ✅ Create proper view builders (all 5 entities)
+   - ⏳ Add entity view modes (full, teaser) - partial (full mode implemented)
+   - ✅ Implement template suggestions (all entities)
+   - ✅ Consolidate shared CSS (~300 lines in hosting-common.css)
+   - ✅ Consolidate shared templates (task-queue, navigation, sidebar)
+   - ✅ Implement custom ListBuilders for collection displays
+   - ✅ Use semantic HTML5 and CSS Grid layouts
+   - **See "Theming Architecture" section above for full details**
 
 ### Medium Priority
 
-6. **Client Entity**
-   - Implement client entity
-   - Link sites to clients
-   - Add client permissions
-   - Implement client quotas
+6. **Client Entity** ✅ **COMPLETED**
+   - ✅ Implement client entity (done)
+   - ✅ Link sites to clients (entity reference field)
+   - ✅ Add client permissions (view/create/edit/delete)
+   - ⏳ Implement client quotas - not yet started
 
 7. **Package Tracking**
    - Implement package entity
@@ -1642,6 +1966,340 @@ public function submitForm(array &$form, FormStateInterface $form_state) {
     - Automated scaling
     - Self-healing infrastructure
 
+## Theming Architecture
+
+### Overview
+
+All hosting entities follow a consistent modern Drupal 11 theming pattern:
+
+**ViewBuilder → Preprocess → Template → CSS**
+
+This pattern ensures:
+- Consistent rendering across all entities
+- Separation of concerns (logic vs presentation)
+- Easy theme customization
+- Proper Drupal render API integration
+
+### Implemented Components
+
+#### Entity ViewBuilders
+
+All major entities have custom ViewBuilder classes:
+
+| Entity | ViewBuilder Class | Template Theme |
+|--------|------------------|----------------|
+| `hosting_platform` | `HostingPlatformViewBuilder` | `hosting_platform` |
+| `hosting_server` | `HostingServerViewBuilder` | `hosting_server` |
+| `hosting_site` | `HostingSiteViewBuilder` | `hosting_site` |
+| `hosting_task` | `HostingTaskViewBuilder` | `hosting_task` |
+| `hosting_client` | `HostingClientViewBuilder` | `hosting_client` |
+
+**ViewBuilder Pattern:**
+```php
+class HostingPlatformViewBuilder extends EntityViewBuilder {
+  public function view(EntityInterface $entity, $view_mode = 'full', $langcode = NULL): array {
+    $build = [
+      '#theme' => 'hosting_platform',
+      '#hosting_platform' => $entity,
+      '#view_mode' => $view_mode,
+    ];
+    
+    // Attach entity-specific CSS
+    $build['#attached']['library'][] = 'hosting_platform/hosting_platform.entity_view';
+    
+    return $build;
+  }
+}
+```
+
+**Entity Annotation:**
+```php
+/**
+ * @ContentEntityType(
+ *   id = "hosting_platform",
+ *   handlers = {
+ *     "view_builder" = "Drupal\hosting_platform\Entity\HostingPlatformViewBuilder",
+ *     "list_builder" = "Drupal\hosting_platform\Entity\HostingPlatformListBuilder",
+ *   },
+ * )
+ */
+```
+
+#### Entity ListBuilders
+
+Custom list builders provide formatted collection displays:
+
+| Entity | ListBuilder Class | Route |
+|--------|------------------|-------|
+| `hosting_platform` | `HostingPlatformListBuilder` | `/hosting/platforms` |
+| `hosting_task` | `HostingTaskListBuilder` | `/hosting/tasks` |
+| `hosting_client` | `HostingClientListBuilder` | `/hosting/clients` |
+
+**ListBuilder Pattern:**
+```php
+class HostingClientListBuilder extends EntityListBuilder {
+  public function buildHeader(): array {
+    return [
+      'name' => $this->t('Name'),
+      'uname' => $this->t('Internal Name'),
+      'owner' => $this->t('Owner'),
+      'users' => $this->t('Users'),
+      'sites' => $this->t('Sites'),
+      'status' => $this->t('Status'),
+    ] + parent::buildHeader();
+  }
+  
+  public function buildRow(EntityInterface $entity): array {
+    $row['name'] = $entity->toLink($entity->get('name')->value);
+    $row['uname'] = $entity->get('uname')->value;
+    // ... format each column
+    return $row + parent::buildRow($entity);
+  }
+}
+```
+
+#### Theme Hooks
+
+All entities use the modern `'render element' => 'elements'` pattern:
+
+```php
+function hosting_platform_theme($existing, $type, $theme, $path): array {
+  return [
+    'hosting_platform' => [
+      'render element' => 'elements',
+      'template' => 'hosting-platform',
+    ],
+  ];
+}
+```
+
+#### Preprocess Functions
+
+Each entity has a preprocess function to extract variables:
+
+```php
+function template_preprocess_hosting_platform(array &$variables): void {
+  /** @var \Drupal\hosting_platform\Entity\HostingPlatform $entity */
+  $entity = $variables['elements']['#hosting_platform'];
+  $variables['entity'] = $entity;
+  $variables['view_mode'] = $variables['elements']['#view_mode'];
+  
+  // Extract content from render elements
+  foreach (\Drupal\Core\Render\Element::children($variables['elements']) as $key) {
+    $variables['content'][$key] = $variables['elements'][$key];
+  }
+  
+  // Support Drupal's title system
+  $variables['title_prefix'] = $variables['elements']['#title_prefix'] ?? [];
+  $variables['title_suffix'] = $variables['elements']['#title_suffix'] ?? [];
+  $variables['label'] = $entity->label();
+  
+  // Separate sidebar from main content
+  $variables['sidebar'] = $variables['content']['hosting_sidebar'] ?? NULL;
+  unset($variables['content']['hosting_sidebar']);
+}
+```
+
+### Template Consolidation
+
+To reduce duplication, shared templates are centralized in the main `hosting` module:
+
+#### Shared Templates (`hosting/templates/`)
+
+- **`hosting-task-queue.html.twig`** - Reusable task queue component
+- **`hosting-navigation.html.twig`** - Reusable navigation component  
+- **`hosting-sidebar.html.twig`** - Reusable sidebar wrapper
+- **`hosting-queues-table.html.twig`** - Queue status table
+
+**Usage in Submodules:**
+```php
+'hosting_platform_task_queue' => [
+  'variables' => ['title' => NULL, 'list' => NULL, 'attributes' => NULL],
+  'template' => 'hosting-task-queue',
+  'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
+],
+```
+
+#### Entity-Specific Templates
+
+Each entity keeps its main template and unique components:
+
+- **Platform**: `hosting-platform.html.twig`, `hosting-platform-sites-list.html.twig`
+- **Server**: `hosting-server.html.twig`, `hosting-server-queue-summary.html.twig`, `hosting-service-status-cell.html.twig`
+- **Site**: `hosting-site.html.twig`
+- **Task**: `hosting-task.html.twig` 
+- **Client**: `hosting-client.html.twig`
+
+### CSS Architecture
+
+#### Shared Styles (`hosting/css/hosting-common.css`)
+
+All CSS variables and common patterns are centralized:
+
+```css
+:root {
+  /* Primary colors */
+  --hosting-primary: #0074bd;
+  --hosting-primary-hover: #005a9c;
+  --hosting-secondary: #5c5c5c;
+  
+  /* Status colors */
+  --hosting-success-bg: #d4edda;
+  --hosting-error-bg: #f8d7da;
+  --hosting-warning-bg: #fff3cd;
+  --hosting-info-bg: #cce5ff;
+  
+  /* Task status colors */
+  --hosting-task-queued: #ffc107;
+  --hosting-task-processing: #2196f3;
+  --hosting-task-success: #4caf50;
+  --hosting-task-error: #f44336;
+  
+  /* Neutral colors */
+  --hosting-border: #ddd;
+  --hosting-bg-light: #f9f9f9;
+  --hosting-shadow: rgba(0, 0, 0, 0.1);
+  --hosting-text-muted: #666;
+}
+
+/* Utility classes */
+.hosting-status-badge { /* ... */ }
+.hosting-layout-two-column { /* ... */ }
+.hosting-section { /* ... */ }
+.hosting-navigation-section { /* ... */ }
+```
+
+#### Entity-Specific Styles
+
+Each entity module has its own CSS file that depends on the common library:
+
+```yaml
+# hosting_platform/hosting_platform.libraries.yml
+hosting_platform.entity_view:
+  css:
+    theme:
+      css/hosting-platform.css: {}
+  dependencies:
+    - hosting/common
+```
+
+Entity CSS files contain only entity-specific rules (using the shared CSS variables).
+
+#### Responsive Layout Pattern
+
+All entities use CSS Grid for responsive layouts:
+
+```css
+/* Mobile-first: single column */
+.hosting-platform-view {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+/* Desktop: 2-column (content + sidebar) */
+@media (min-width: 768px) {
+  .hosting-platform-view {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+```
+
+### Theming Best Practices
+
+✅ **DO:**
+- Use `'render element' => 'elements'` for entity templates
+- Implement custom ViewBuilder for entity rendering control
+- Implement custom ListBuilder for collection displays
+- Use preprocess functions to extract variables
+- Use semantic HTML5 (article, section, nav, aside)
+- Use CSS Grid for responsive layouts
+- Follow mobile-first approach
+- Use shared CSS variables from `hosting/common`
+- Document all template variables in Twig docblocks
+- Leverage shared templates for common components
+
+❌ **DON'T:**
+- Use old `'variables'` pattern for entity templates
+- Put business logic in templates or preprocess functions
+- Skip title_prefix/title_suffix support
+- Use inline styles or hardcoded colors
+- Duplicate CSS variables across modules
+- Duplicate templates across modules
+- Use deprecated HTML elements
+
+### Template Structure Example
+
+```twig
+{#
+/**
+ * @file
+ * Default theme implementation for a hosting platform.
+ *
+ * Available variables:
+ * - entity: The full platform entity object.
+ * - content: Main content render array.
+ * - sidebar: Sidebar render array.
+ * - label: The entity label.
+ * - view_mode: View mode (e.g., 'full', 'teaser').
+ * - title_prefix: Additional output before the title.
+ * - title_suffix: Additional output after the title.
+ * - attributes: HTML attributes for the container.
+ *
+ * @ingroup themeable
+ */
+#}
+<article{{ attributes.addClass('hosting-platform') }}>
+  {{ title_prefix }}
+  {% if label %}
+    <h2{{ title_attributes }}>{{ label }}</h2>
+  {% endif %}
+  {{ title_suffix }}
+  
+  <div class="hosting-platform-content">
+    {{ content }}
+  </div>
+  
+  {% if sidebar %}
+    <aside class="hosting-platform-sidebar">
+      {{ sidebar }}
+    </aside>
+  {% endif %}
+</article>
+```
+
+### Theme Suggestions
+
+Each entity supports theme suggestions for customization:
+
+```php
+function hosting_platform_theme_suggestions_hosting_platform(array $variables) {
+  $suggestions = [];
+  if (!empty($variables['entity'])) {
+    $entity = $variables['entity'];
+    $suggestions[] = 'hosting_platform__' . $entity->id();
+    if (isset($variables['view_mode'])) {
+      $suggestions[] = 'hosting_platform__' . $variables['view_mode'];
+    }
+  }
+  return $suggestions;
+}
+```
+
+This allows overrides like:
+- `hosting-platform--full.html.twig` (view mode)
+- `hosting-platform--123.html.twig` (specific entity ID)
+
+### Benefits of This Architecture
+
+1. **Consistency**: All entities follow the same pattern
+2. **Maintainability**: Shared components reduce duplication (~900 lines saved)
+3. **Performance**: Shared CSS loaded once across all entities
+4. **Customization**: Easy to override with theme suggestions
+5. **Standards**: Follows Drupal 11 best practices
+6. **Accessibility**: Semantic HTML5 structure
+7. **Responsive**: Mobile-first CSS Grid layouts
+
 ## Key Files Reference
 
 - [src/Entity/HostingContext.php](src/Entity/HostingContext.php) - Entity ↔ Context registry
@@ -1655,3 +2313,18 @@ public function submitForm(array &$form, FormStateInterface $form_state) {
 - [hosting_task/src/Entity/HostingTask.php](hosting_task/src/Entity/HostingTask.php) - Task entity
 - [hosting_task/src/Service/TaskManager.php](hosting_task/src/Service/TaskManager.php) - Task management
 - [hosting_task/src/Plugin/QueueWorker/HostingTaskQueueWorker.php](hosting_task/src/Plugin/QueueWorker/HostingTaskQueueWorker.php) - Queue worker
+
+**Theming Files:**
+- [hosting.libraries.yml](hosting.libraries.yml) - Shared CSS library definition
+- [css/hosting-common.css](css/hosting-common.css) - Shared CSS variables and utilities
+- [templates/hosting-task-queue.html.twig](templates/hosting-task-queue.html.twig) - Shared task queue component
+- [templates/hosting-navigation.html.twig](templates/hosting-navigation.html.twig) - Shared navigation component
+- [templates/hosting-sidebar.html.twig](templates/hosting-sidebar.html.twig) - Shared sidebar component
+- [hosting_platform/src/Entity/HostingPlatformViewBuilder.php](hosting_platform/src/Entity/HostingPlatformViewBuilder.php) - Platform ViewBuilder
+- [hosting_platform/src/Entity/HostingPlatformListBuilder.php](hosting_platform/src/Entity/HostingPlatformListBuilder.php) - Platform ListBuilder
+- [hosting_server/src/Entity/HostingServerViewBuilder.php](hosting_server/src/Entity/HostingServerViewBuilder.php) - Server ViewBuilder
+- [hosting_site/src/Entity/HostingSiteViewBuilder.php](hosting_site/src/Entity/HostingSiteViewBuilder.php) - Site ViewBuilder
+- [hosting_task/src/Entity/HostingTaskViewBuilder.php](hosting_task/src/Entity/HostingTaskViewBuilder.php) - Task ViewBuilder
+- [hosting_task/src/Entity/HostingTaskListBuilder.php](hosting_task/src/Entity/HostingTaskListBuilder.php) - Task ListBuilder
+- [hosting_client/src/Entity/HostingClientViewBuilder.php](hosting_client/src/Entity/HostingClientViewBuilder.php) - Client ViewBuilder
+- [hosting_client/src/Entity/HostingClientListBuilder.php](hosting_client/src/Entity/HostingClientListBuilder.php) - Client ListBuilder

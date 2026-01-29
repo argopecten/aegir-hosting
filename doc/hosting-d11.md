@@ -335,7 +335,346 @@ class HostingSiteForm extends ContentEntityForm {
 - Platform deployment automation
 - Advanced task features (chaining, progress tracking)
 
-## 13. Dependencies
+## 13. Theming Architecture
+
+### 13.1 Entity View Theming Pattern
+
+All entity views (platform, server, site, task, client) follow a consistent modern pattern:
+
+**ViewBuilder → Preprocess → Template → CSS**
+
+#### ViewBuilder Classes
+
+**Implemented ViewBuilders:**
+- `hosting_platform`: `HostingPlatformViewBuilder`
+- `hosting_server`: `HostingServerViewBuilder`
+- `hosting_site`: `HostingSiteViewBuilder`
+- `hosting_task`: `HostingTaskViewBuilder`
+- `hosting_client`: `HostingClientViewBuilder`
+
+Each ViewBuilder:
+- Sets `#theme` to use custom template
+- Adds entity reference (`#hosting_platform`, `#hosting_server`, etc.)
+- Sets `#view_mode` for template suggestions
+- Attaches entity-specific CSS library
+
+```php
+class HostingPlatformViewBuilder extends EntityViewBuilder {
+  public function view(EntityInterface $entity, $view_mode = 'full', $langcode = NULL): array {
+    $build = [
+      '#theme' => 'hosting_platform',
+      '#hosting_platform' => $entity,
+      '#view_mode' => $view_mode,
+    ];
+    
+    $build['#attached']['library'][] = 'hosting_platform/hosting_platform.entity_view';
+    
+    return $build;
+  }
+}
+```
+
+Entity annotations specify the ViewBuilder:
+```php
+ *   handlers = {
+ *     "view_builder" = "Drupal\hosting_platform\Entity\HostingPlatformViewBuilder",
+ *     "list_builder" = "Drupal\hosting_platform\Entity\HostingPlatformListBuilder",
+ *   },
+```
+
+#### ListBuilder Classes
+
+**Implemented ListBuilders:**
+- `hosting_platform`: `HostingPlatformListBuilder`
+- `hosting_task`: `HostingTaskListBuilder`
+- `hosting_client`: `HostingClientListBuilder`
+
+ListBuilders provide custom columns and formatting for entity collection pages:
+```php
+class HostingClientListBuilder extends EntityListBuilder {
+  public function buildHeader(): array {
+    return [
+      'name' => $this->t('Name'),
+      'uname' => $this->t('Internal Name'),
+      'owner' => $this->t('Owner'),
+      'users' => $this->t('Users'),
+      'sites' => $this->t('Sites'),
+      'status' => $this->t('Status'),
+    ] + parent::buildHeader();
+  }
+}
+```
+
+#### Preprocess Functions
+Each entity has a `template_preprocess_hosting_*()` function that:
+- Extracts entity and view mode from elements
+- Builds `$variables['content']` from render element children
+- Sets `title_prefix`, `title_suffix`, and `title_attributes`
+- Separates sidebar from main content
+
+```php
+function template_preprocess_hosting_platform(array &$variables): void {
+  $variables['entity'] = $variables['elements']['#hosting_platform'];
+  $variables['view_mode'] = $variables['elements']['#view_mode'];
+  
+  foreach (\Drupal\Core\Render\Element::children($variables['elements']) as $key) {
+    $variables['content'][$key] = $variables['elements'][$key];
+  }
+  
+  $variables['title_prefix'] = $variables['elements']['#title_prefix'] ?? [];
+  $variables['title_suffix'] = $variables['elements']['#title_suffix'] ?? [];
+  $variables['label'] = $variables['entity']->label();
+  
+  $variables['sidebar'] = $variables['content']['hosting_sidebar'] ?? NULL;
+  unset($variables['content']['hosting_sidebar']);
+}
+```
+
+#### Theme Hook Registration
+All entity theme hooks use `'render element' => 'elements'` pattern:
+
+```php
+function hosting_platform_theme($existing, $type, $theme, $path): array {
+  return [
+    'hosting_platform' => [
+      'render element' => 'elements',
+      'template' => 'hosting-platform',
+    ],
+    // Component templates use 'variables' pattern
+    'hosting_platform_sidebar' => [
+      'variables' => ['task_queue' => NULL, 'navigation' => NULL, ...],
+      'template' => 'hosting-platform-sidebar',
+    ],
+  ];
+}
+```
+
+### 13.2 Template Structure
+
+#### Entity Templates (Semantic HTML5)
+```twig
+<article{{ attributes.addClass('hosting-platform') }}>
+  {{ title_prefix }}
+  {% if label %}
+    <h2{{ title_attributes }}>{{ label }}</h2>
+  {% endif %}
+  {{ title_suffix }}
+  <div class="hosting-platform-content">
+    {{ content }}
+  </div>
+  {% if sidebar %}
+    <aside class="hosting-platform-sidebar">
+      {{ sidebar }}
+    </aside>
+  {% endif %}
+</article>
+```
+
+#### Component Templates
+- **Task Queues**: `<section>` elements with `.hosting-panel` class
+- **Navigation**: `<nav>` elements with `.hosting-navigation-section` class
+- **Sidebars**: `<div>` containers with `.hosting-sidebar` class
+- **Lists**: Semantic sections with conditional title rendering
+
+### 13.3 CSS Architecture
+
+#### Library Files
+Each entity has a dedicated `.libraries.yml` file:
+
+```yaml
+hosting_platform.entity_view:
+  css:
+    theme:
+      css/hosting-platform.css: {}
+```
+
+#### CSS Grid Layout Pattern
+All entity views use responsive CSS Grid:
+
+```css
+/* Base: Mobile-first single column */
+.hosting-platform-view {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+/* Desktop: 2-column layout (content + sidebar) */
+@media (min-width: 768px) {
+  .hosting-platform-view {
+    grid-template-columns: 2fr 1fr;
+  }
+  
+  .hosting-platform-view .hosting-sidebar {
+    order: 2;
+  }
+}
+```
+
+#### CSS Variables (Standardized Color Scheme)
+
+All CSS variables are now centralized in `hosting/css/hosting-common.css` and shared across all entity submodules:
+
+```css
+:root {
+  /* Primary colors */
+  --hosting-primary: #0074bd;
+  --hosting-primary-hover: #005a9c;
+  --hosting-secondary: #5c5c5c;
+  
+  /* Status colors */
+  --hosting-success-bg: #d4edda;
+  --hosting-success-text: #155724;
+  --hosting-error-bg: #f8d7da;
+  --hosting-error-text: #721c24;
+  --hosting-warning-bg: #fff3cd;
+  --hosting-warning-text: #856404;
+  --hosting-info-bg: #cce5ff;
+  --hosting-info-text: #004085;
+  
+  /* Neutral colors */
+  --hosting-border: #ddd;
+  --hosting-bg-light: #f9f9f9;
+  --hosting-panel-bg: #f5f5f5;
+  --hosting-text-dark: #333;
+  --hosting-text-muted: #666;
+  --hosting-shadow: rgba(0, 0, 0, 0.1);
+  
+  /* Task status colors */
+  --hosting-task-queued: #ffc107;
+  --hosting-task-processing: #2196f3;
+  --hosting-task-success: #4caf50;
+  --hosting-task-error: #f44336;
+  --hosting-task-warning: #ff9800;
+  
+  /* Client status colors */
+  --hosting-client-active: #4caf50;
+  --hosting-client-inactive: #9e9e9e;
+}
+```
+
+All submodule libraries declare dependency on `hosting/common`:
+```yaml
+# hosting_platform/hosting_platform.libraries.yml
+hosting_platform.entity_view:
+  css:
+    theme:
+      css/hosting-platform.css: {}
+  dependencies:
+    - hosting/common
+```
+
+### 13.4 Component Architecture
+
+#### Shared Components (hosting module)
+
+The hosting module provides shared templates used across all entity submodules:
+- `hosting-task-queue.html.twig` - Task queue section component
+- `hosting-navigation.html.twig` - Navigation section component
+- `hosting-sidebar.html.twig` - Sidebar wrapper component
+- `hosting-queues-table.html.twig` - Queue status table
+
+These shared templates are referenced by submodules via the `path` parameter:
+```php
+'hosting_platform_task_queue' => [
+  'variables' => ['title' => NULL, 'list' => NULL, 'attributes' => NULL],
+  'template' => 'hosting-task-queue',
+  'path' => \Drupal::service('extension.list.module')->getPath('hosting') . '/templates',
+],
+```
+
+#### Entity-Specific Components
+
+**hosting_platform:**
+- `hosting-platform.html.twig` (main entity)
+- `hosting-platform-sites-list.html.twig` (platform-specific)
+- Uses shared: task-queue, navigation, sidebar
+
+**hosting_server:**
+- `hosting-server.html.twig` (main entity)
+- `hosting-server-queue-summary.html.twig` (server-specific)
+- `hosting-service-status-cell.html.twig` (service status display)
+- Uses shared: task-queue, navigation, sidebar
+
+**hosting_site:**
+- `hosting-site.html.twig` (main entity)
+- Uses shared: task-queue, navigation, sidebar
+
+**hosting_task:**
+- `hosting-task.html.twig` (main entity)
+- Standalone display with status-based styling
+
+**hosting_client:**
+- `hosting-client.html.twig` (main entity)
+- Displays associated users and sites
+
+### 13.5 Theme Suggestions
+
+Each entity implements `hook_theme_suggestions_HOOK()` for customization:
+
+```php
+function hosting_platform_theme_suggestions_hosting_platform(array $variables) {
+  $suggestions = [];
+  if (!empty($variables['entity'])) {
+    $entity = $variables['entity'];
+    $suggestions[] = 'hosting_platform__' . $entity->id();
+    if (isset($variables['view_mode'])) {
+      $suggestions[] = 'hosting_platform__' . $variables['view_mode'];
+    }
+  }
+  return $suggestions;
+}
+```
+
+This allows theme overrides like:
+- `hosting-platform--full.html.twig` (view mode)
+- `hosting-platform--123.html.twig` (specific entity)
+
+### 13.6 Theming Best Practices
+
+✅ **DO:**
+- Use `'render element' => 'elements'` for entity templates
+- Implement preprocess functions for variable extraction
+- Use semantic HTML5 elements (article, section, nav, aside)
+- Implement ViewBuilder classes for custom entity rendering
+- Implement ListBuilder classes for custom collection displays
+- Use CSS Grid for responsive layouts
+- Follow mobile-first approach
+- Attach libraries in ViewBuilder
+- Document all template variables in docblocks
+- Leverage shared templates and CSS from hosting/common
+- Use standardized CSS variables for colors and spacing
+
+❌ **DON'T:**
+- Use old `'variables'` pattern for entity templates
+- Put business logic in templates or preprocess
+- Skip title_prefix/title_suffix support
+- Use inline styles or deprecated HTML
+- Bypass ViewBuilder for entity rendering
+- Duplicate CSS variables or templates across modules
+- Hardcode colors or spacing values
+
+### 13.7 Template Consolidation
+
+The hosting module provides shared components to reduce duplication:
+
+**Shared Templates (`hosting/templates/`):**
+- `hosting-task-queue.html.twig` - Reusable task queue component
+- `hosting-navigation.html.twig` - Reusable navigation component
+- `hosting-sidebar.html.twig` - Reusable sidebar wrapper
+- `hosting-queues-table.html.twig` - Queue status table
+
+**Shared CSS (`hosting/css/`):**
+- `hosting-common.css` - CSS variables, utility classes, common patterns
+
+**Benefits:**
+- Single source of truth for styling
+- Easier maintenance and customization
+- Consistent UX across all entities
+- Reduced code duplication (~900 lines saved)
+- Better performance (shared CSS loaded once)
+
+## 14. Dependencies
 - **PHP**: >=8.3
 - **Drupal Core**: ^11.2
 - **Drush**: 13.x
