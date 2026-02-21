@@ -24,22 +24,25 @@ function hosting_platform_hosting_feature() {
  * Implements hook_ENTITY_TYPE_insert() for hosting_platform.
  */
 function hosting_platform_hosting_platform_insert(\Drupal\hosting_platform\Entity\HostingPlatform $platform) {
-  // Auto-create verify task for new platforms to scan packages.
-  $task_manager = \Drupal::service('hosting.task_manager');
-  $context_name = 'platform_' . $platform->id();
-  $task_manager->createTask($context_name, 'verify', [], []);
-  \Drupal::messenger()->addStatus(t('Platform verification task has been queued.'));
+  // Task creation (save + verify chain) is handled in HostingPlatform::postSave().
+  \Drupal::messenger()->addStatus(t('Platform %name has been created. A save and verify task chain has been queued.', [
+    '%name' => $platform->label(),
+  ]));
 }
 
 /**
  * Implements hook_ENTITY_TYPE_update() for hosting_platform.
  */
 function hosting_platform_hosting_platform_update(\Drupal\hosting_platform\Entity\HostingPlatform $platform) {
-  // Auto-create verify task when platform path changes.
+  // Auto-create save + verify tasks when platform path changes.
   if ($platform->get('publish_path')->value !== $platform->original->get('publish_path')->value) {
     $task_manager = \Drupal::service('hosting.task_manager');
     $context_name = 'platform_' . $platform->id();
-    $task_manager->createTask($context_name, 'verify', [], []);
+    $provision_data = $platform->getProvisionContextData();
+    $task_manager->createTask($context_name, 'save', [], [
+      'data' => json_encode($provision_data),
+      'type' => 'platform',
+    ], 'verify');
   }
 }
 

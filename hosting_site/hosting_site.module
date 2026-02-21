@@ -24,21 +24,39 @@ function hosting_site_hosting_feature() {
  * Implements hook_ENTITY_TYPE_insert() for hosting_site.
  */
 function hosting_site_hosting_site_insert(\Drupal\hosting_site\Entity\HostingSite $site) {
-  // Auto-create install task for new sites.
-  $task_manager = \Drupal::service('hosting.task_manager');
-  $task_manager->createTask($site->get('domain')->value, 'install', [], []);
-  \Drupal::messenger()->addStatus(t('Site installation task has been queued.'));
+  // Task creation (save + install chain) is handled in HostingSite::postSave().
+  \Drupal::messenger()->addStatus(t('Site %domain has been created. A save and install task chain has been queued.', [
+    '%domain' => $site->get('domain')->value,
+  ]));
 }
 
 /**
  * Implements hook_ENTITY_TYPE_update() for hosting_site.
  */
 function hosting_site_hosting_site_update(\Drupal\hosting_site\Entity\HostingSite $site) {
-  // Auto-create verify task when site is updated.
-  if ($site->isPublished() && !$site->original->isPublished()) {
-    // Site was enabled - run verify.
+  $new_status = (int) $site->get('status')->value;
+  $old_status = (int) $site->original->get('status')->value;
+
+  // Auto-create save + verify task when site status changes to enabled.
+  if ($new_status === \Drupal\hosting_site\Entity\HostingSite::STATUS_ENABLED
+      && $old_status !== \Drupal\hosting_site\Entity\HostingSite::STATUS_ENABLED) {
     $task_manager = \Drupal::service('hosting.task_manager');
-    $task_manager->createTask($site->get('domain')->value, 'verify', [], []);
+    $context_name = $site->get('domain')->value;
+    $provision_data = $site->getProvisionContextData();
+    $task_manager->createTask($context_name, 'save', [], [
+      'data' => json_encode($provision_data),
+      'type' => 'site',
+    ], 'verify');
+  }
+  // Also re-save + verify when domain changes.
+  elseif ($site->get('domain')->value !== $site->original->get('domain')->value) {
+    $task_manager = \Drupal::service('hosting.task_manager');
+    $context_name = $site->get('domain')->value;
+    $provision_data = $site->getProvisionContextData();
+    $task_manager->createTask($context_name, 'save', [], [
+      'data' => json_encode($provision_data),
+      'type' => 'site',
+    ], 'verify');
   }
 }
 

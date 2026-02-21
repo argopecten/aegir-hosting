@@ -21,6 +21,32 @@ function hosting_server_hosting_feature() {
 }
 
 /**
+ * Implements hook_ENTITY_TYPE_insert() for hosting_server.
+ */
+function hosting_server_hosting_server_insert(\Drupal\hosting_server\Entity\HostingServer $server) {
+  // Task creation (save + verify chain) is handled in HostingServer::postSave().
+  \Drupal::messenger()->addStatus(t('Server %name has been created. A save and verify task chain has been queued.', [
+    '%name' => $server->label(),
+  ]));
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_update() for hosting_server.
+ */
+function hosting_server_hosting_server_update(\Drupal\hosting_server\Entity\HostingServer $server) {
+  // Auto-create save + verify tasks when server hostname changes.
+  if ($server->get('hostname')->value !== $server->original->get('hostname')->value) {
+    $task_manager = \Drupal::service('hosting.task_manager');
+    $context_name = 'server_' . $server->id();
+    $provision_data = $server->getProvisionContextData();
+    $task_manager->createTask($context_name, 'save', [], [
+      'data' => json_encode($provision_data),
+      'type' => 'server',
+    ], 'verify');
+  }
+}
+
+/**
  * Implements hook_theme().
  */
 function hosting_server_theme($existing, $type, $theme, $path): array {

@@ -3,6 +3,7 @@
 namespace Drupal\hosting_server\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 
@@ -120,6 +121,60 @@ class HostingServer extends ContentEntityBase {
       ->setDisplayConfigurable('form', TRUE);
 
     return $fields;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function postSave(EntityStorageInterface $storage, $update = TRUE): void {
+    parent::postSave($storage, $update);
+
+    // Register this server in the context registry.
+    $context_name = 'server_' . $this->id();
+    /** @var \Drupal\hosting\Service\ContextRegistry $registry */
+    $registry = \Drupal::service('hosting.context_registry');
+    $registry->register($context_name, 'hosting_server', (int) $this->id());
+
+    if (!$update) {
+      // New server: queue a save task (creates backend context), then verify.
+      /** @var \Drupal\hosting_task\Service\TaskManagerInterface $task_manager */
+      $task_manager = \Drupal::service('hosting.task_manager');
+      $provision_data = $this->getProvisionContextData();
+      $task_manager->createTask($context_name, 'save', [], [
+        'data' => json_encode($provision_data),
+        'type' => 'server',
+      ], 'verify');
+    }
+  }
+
+  /**
+   * Build the provision context data array from entity fields.
+   *
+   * Maps Drupal entity fields to the provision backend's expected keys.
+   *
+   * @return array
+   *   Associative array of provision context data.
+   */
+  public function getProvisionContextData(): array {
+    $data = [
+      'remote_host' => $this->get('hostname')->value,
+    ];
+
+    // Load service instances for this server to get service types.
+    $service_storage = \Drupal::entityTypeManager()->getStorage('hosting_service_instance');
+    $services = $service_storage->loadByProperties(['server' => $this->id()]);
+    foreach ($services as $service) {
+      $service_type = $service->get('service_type')->value;
+      $provider = $service->get('provider')->value;
+      if ($service_type === 'http') {
+        $data['http_service_type'] = $provider;
+      }
+      elseif ($service_type === 'db') {
+        $data['db_service_type'] = $provider;
+      }
+    }
+
+    return $data;
   }
 
 }
