@@ -48,6 +48,23 @@ function hosting_task_theme($existing, $type, $theme, $path) {
     'hosting_task' => [
       'render element' => 'elements',
     ],
+    'hosting_task_table' => [
+      'variables' => [
+        'entity' => NULL,
+        'task_rows' => [],
+        'attributes' => [],
+      ],
+      'template' => 'hosting-task-table',
+    ],
+    'hosting_task_log' => [
+      'variables' => [
+        'task' => NULL,
+        'rows' => [],
+        'jump_links' => [],
+        'attributes' => [],
+      ],
+      'template' => 'hosting-task-log',
+    ],
   ];
 }
 
@@ -96,4 +113,120 @@ function template_preprocess_hosting_task(array &$variables): void {
   else {
     $variables['duration'] = NULL;
   }
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function hosting_task_entity_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, $display, $view_mode): void {
+  if ($entity->getEntityTypeId() !== 'hosting_task') {
+    return;
+  }
+
+  /** @var \Drupal\hosting_task\Entity\HostingTask $entity */
+  $date_formatter = \Drupal::service('date.formatter');
+  $status = (string) $entity->get('status')->value;
+
+  // Build info table for task details.
+  $info_items = [];
+
+  // Referenced entity.
+  $context_name = (string) $entity->get('context_name')->value;
+  if ($context_name) {
+    $context_storage = \Drupal::entityTypeManager()->getStorage('hosting_context');
+    $contexts = $context_storage->loadByProperties(['context_name' => $context_name]);
+    $context = $contexts ? reset($contexts) : NULL;
+    if ($context) {
+      $ref_entity_type = (string) $context->get('entity_type')->value;
+      $ref_entity_id = (int) $context->get('entity_id')->value;
+      $ref_storage = \Drupal::entityTypeManager()->getStorage($ref_entity_type);
+      $ref_entity = $ref_storage->load($ref_entity_id);
+      if ($ref_entity) {
+        $info_items[] = [
+          'label' => t('Reference'),
+          'value' => [
+            '#type' => 'link',
+            '#title' => $ref_entity->label(),
+            '#url' => $ref_entity->toUrl(),
+          ],
+          'weight' => -20,
+        ];
+      }
+    }
+  }
+
+  // Task type.
+  $info_items[] = [
+    'label' => t('Task type'),
+    'value' => ['#markup' => \Drupal\Component\Utility\Html::escape((string) $entity->get('task_type')->value)],
+    'weight' => -18,
+  ];
+
+  // Status.
+  $status_class_map = [
+    'queued' => 'hosting-queue',
+    'processing' => 'hosting-info',
+    'success' => 'hosting-success',
+    'error' => 'hosting-error',
+    'warning' => 'hosting-warning',
+  ];
+  $css_class = $status_class_map[$status] ?? '';
+  $info_items[] = [
+    'label' => t('Status'),
+    'value' => ['#markup' => '<span class="' . $css_class . '">' . \Drupal\Component\Utility\Html::escape($status) . '</span>'],
+    'weight' => -15,
+  ];
+
+  // Started.
+  $started = (int) $entity->get('started')->value;
+  if ($started) {
+    $info_items[] = [
+      'label' => t('Started'),
+      'value' => ['#markup' => $date_formatter->format($started, 'medium')],
+      'weight' => -12,
+    ];
+  }
+
+  // Completed.
+  $completed = (int) $entity->get('completed')->value;
+  if ($completed) {
+    $info_items[] = [
+      'label' => t('Completed'),
+      'value' => ['#markup' => $date_formatter->format($completed, 'medium')],
+      'weight' => -10,
+    ];
+  }
+
+  // Duration.
+  if ($started && $completed) {
+    $duration = $completed - $started;
+    $info_items[] = [
+      'label' => t('Execution time'),
+      'value' => ['#markup' => $date_formatter->formatInterval($duration)],
+      'weight' => -8,
+    ];
+  }
+
+  $build['info'] = [
+    '#theme' => 'hosting_info_table',
+    '#items' => $info_items,
+    '#attributes' => ['id' => 'hosting-task-info'],
+    '#weight' => -5,
+  ];
+
+  // Task log built by TaskLogBuilder service.
+  $build['task_log'] = \Drupal::service('hosting.task_log_builder')->build($entity);
+  $build['task_log']['#weight'] = 10;
+
+  // Attach task log AJAX refresh for active tasks.
+  $build['#attached']['library'][] = 'hosting_task/task-log-refresh';
+  $build['#attached']['drupalSettings']['hostingTaskLog'] = [
+    'refreshUrl' => \Drupal\Core\Url::fromRoute('hosting_task.refresh.task_log', [
+      'hosting_task' => $entity->id(),
+    ])->toString(),
+    'status' => $status,
+  ];
+
+  $build['#attributes']['class'][] = 'hosting-task-view';
+  $build['#attributes']['class'][] = 'hosting-task--' . \Drupal\Component\Utility\Html::getClass($status);
 }

@@ -4,18 +4,16 @@
  * Default theme implementation to display a hosting platform.
  *
  * Available variables:
- * - content: A list of content items. Use 'content' to print all content, or
- *   print a subset such as 'content.field_example'.
+ * - content: Remaining content items after extraction.
  * - attributes: HTML attributes for the container element.
  * - label: The title of the entity.
- * - title_prefix: Additional output populated by modules, intended to be
- *   displayed in front of the main title tag that appears in the template.
- * - title_suffix: Additional output populated by modules, intended to be
- *   displayed after the main title tag that appears in the template.
+ * - title_prefix/title_suffix: Additional module output around title.
  * - title_attributes: HTML attributes for the title element.
  * - entity: The full entity object.
  * - view_mode: The view mode; e.g., 'full', 'teaser', etc.
  * - sidebar: Sidebar content for the platform.
+ * - info: Hosting info table render array.
+ * - tasks_view: Task action table render array.
  *
  * @ingroup themeable
  */
@@ -26,6 +24,19 @@
     <h2{{ title_attributes }}>{{ label }}</h2>
   {% endif %}
   {{ title_suffix }}
+
+  {% if info %}
+    <div class="hosting-platform-info">
+      {{ info }}
+    </div>
+  {% endif %}
+
+  {% if tasks_view %}
+    <div class="hosting-platform-tasks">
+      {{ tasks_view }}
+    </div>
+  {% endif %}
+
   <div class="hosting-platform-content">
     {{ content }}
   </div>

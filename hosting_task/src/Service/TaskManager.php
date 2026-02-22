@@ -28,24 +28,15 @@ class TaskManager implements TaskManagerInterface {
     $this->taskLogManager = $taskLogManager;
   }
 
-  public function createTask(string $context_name, string $task_type, array $args = [], array $options = [], ?string $chain_next = NULL): HostingTaskInterface {
+  public function createTask(string $context_name, string $task_type, array $args = [], array $options = []): HostingTaskInterface {
     $storage = $this->entityTypeManager->getStorage('hosting_task');
-
-    // Store chain_next in the options metadata if provided.
-    $task_options = $options;
-    $task_metadata = [];
-    if ($chain_next !== NULL) {
-      $task_metadata['chain_next'] = $chain_next;
-    }
-
     $task = $storage->create([
       'label' => sprintf('%s %s', $task_type, $context_name),
       'task_type' => $task_type,
       'status' => 'queued',
       'command' => 'provision-' . $task_type,
       'args' => json_encode($args),
-      'options' => json_encode($task_options),
-      'metadata' => json_encode($task_metadata),
+      'options' => json_encode($options),
       'context_name' => $context_name,
       'started' => 0,
       'completed' => 0,
@@ -132,11 +123,6 @@ class TaskManager implements TaskManagerInterface {
     $task->set('completed', $this->time->getRequestTime());
     $task->set('process_id', 0);
     $task->save();
-
-    // Chain next task if this one succeeded.
-    if ($task->getStatus() === 'success') {
-      $this->processTaskChain($task);
-    }
   }
 
   /**
@@ -178,35 +164,6 @@ class TaskManager implements TaskManagerInterface {
         '@max' => $max_retries,
       ]);
     }
-  }
-
-  /**
-   * Process task chain — create follow-up task if chain_next is specified.
-   *
-   * @param \Drupal\hosting_task\Entity\HostingTaskInterface $task
-   *   The completed task.
-   */
-  protected function processTaskChain(HostingTaskInterface $task): void {
-    $metadata_raw = $task->get('metadata')->value ?? '';
-    if (empty($metadata_raw)) {
-      return;
-    }
-
-    $metadata = json_decode($metadata_raw, TRUE);
-    if (empty($metadata['chain_next'])) {
-      return;
-    }
-
-    $chain_next = $metadata['chain_next'];
-    $context_name = $task->get('context_name')->value;
-
-    $this->logger->info('Chaining task @next for context @context after successful @type', [
-      '@next' => $chain_next,
-      '@context' => $context_name,
-      '@type' => $task->getTaskType(),
-    ]);
-
-    $this->createTask($context_name, $chain_next, [], []);
   }
 
   /**

@@ -223,11 +223,6 @@ class HostingTask extends ContentEntityBase implements HostingTaskInterface {
       ->setDescription(t('PID of the running backend process'))
       ->setDefaultValue(0);
 
-    $fields['metadata'] = BaseFieldDefinition::create('string_long')
-      ->setLabel(t('Metadata'))
-      ->setDescription(t('JSON-encoded task metadata (e.g., chain_next for task chaining)'))
-      ->setDefaultValue('{}');
-
     return $fields;
   }
 

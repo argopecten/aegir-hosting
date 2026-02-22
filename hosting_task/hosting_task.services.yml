@@ -6,3 +6,11 @@ services:
   hosting.task_log_manager:
     class: Drupal\hosting_task\Service\TaskLogManager
     arguments: ['@entity_type.manager', '@datetime.time']
+
+  hosting.task_availability_resolver:
+    class: Drupal\hosting_task\Service\TaskAvailabilityResolver
+    arguments: ['@entity_type.manager']
+
+  hosting.task_log_builder:
+    class: Drupal\hosting_task\Service\TaskLogBuilder
+    arguments: ['@entity_type.manager']

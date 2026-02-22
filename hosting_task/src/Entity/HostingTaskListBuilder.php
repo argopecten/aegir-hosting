@@ -6,6 +6,7 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityListBuilder;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Render\Markup;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -16,11 +17,21 @@ class HostingTaskListBuilder extends EntityListBuilder {
   /**
    * {@inheritdoc}
    */
+  protected string $iconSpritePath;
+
   public static function createInstance(ContainerInterface $container, EntityTypeInterface $entity_type): static {
-    return new static(
+    $instance = new static(
       $entity_type,
       $container->get('entity_type.manager')->getStorage($entity_type->id())
     );
+    try {
+      $theme_path = $container->get('extension.list.theme')->getPath('aegir_eldir');
+    }
+    catch (\Throwable) {
+      $theme_path = 'themes/contrib/aegir-eldir';
+    }
+    $instance->iconSpritePath = base_path() . $theme_path . '/images/svg/aegir-icons-sprite.svg';
+    return $instance;
   }
 
   /**
@@ -47,19 +58,20 @@ class HostingTaskListBuilder extends EntityListBuilder {
     $row['label'] = $entity->toLink($entity->label());
     $row['task_type'] = $entity->getTaskType();
     
-    // Style status with color.
+    // Status with SVG icon and CSS class.
     $status = $entity->getStatus();
-    $status_colors = [
-      'queued' => 'orange',
-      'processing' => 'blue',
-      'success' => 'green',
-      'error' => 'red',
-      'warning' => 'orange',
+    $icon_map = [
+      'success' => 'icon-ok',
+      'error' => 'icon-error',
+      'warning' => 'icon-warning',
+      'queued' => 'icon-queue',
+      'processing' => 'icon-info',
     ];
-    $color = $status_colors[$status] ?? 'gray';
+    $icon_id = $icon_map[$status] ?? 'icon-queue';
+    $icon = '<svg class="hosting-icon" aria-hidden="true"><use href="' . $this->iconSpritePath . '#' . $icon_id . '"></use></svg>';
     $row['status'] = [
       'data' => [
-        '#markup' => '<span style="color: ' . $color . '; font-weight: bold;">' . $status . '</span>',
+        '#markup' => Markup::create($icon . '<strong>' . ucfirst($status) . '</strong>'),
       ],
     ];
     
@@ -103,6 +115,38 @@ class HostingTaskListBuilder extends EntityListBuilder {
     }
     
     return $operations;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function render(): array {
+    $build = parent::render();
+    $build['table']['#attributes']['class'][] = 'hosting-table';
+    $build['table']['#attributes']['class'][] = 'hosting-task-list';
+    $build['#cache']['tags'][] = 'hosting_task_list';
+
+    if (!empty($build['table']['#rows'])) {
+      $entities = $this->load();
+      $css_map = [
+        'success' => 'hosting-success',
+        'error' => 'hosting-error',
+        'warning' => 'hosting-warning',
+        'queued' => 'hosting-queue',
+        'processing' => 'hosting-info',
+      ];
+      $idx = 0;
+      foreach ($entities as $entity) {
+        $status = $entity->getStatus();
+        $css = $css_map[$status] ?? '';
+        if ($css && isset($build['table']['#rows'][$idx])) {
+          $build['table']['#rows'][$idx]['class'][] = $css;
+        }
+        $idx++;
+      }
+    }
+
+    return $build;
   }
 
 }

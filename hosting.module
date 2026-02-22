@@ -22,18 +22,75 @@ function hosting_theme($existing, $type, $theme, $path): array {
       'template' => 'hosting-queues-table',
     ],
     'hosting_task_queue' => [
-      'render element' => 'elements',
+      'variables' => [
+        'title' => NULL,
+        'list' => NULL,
+        'attributes' => NULL,
+      ],
       'template' => 'hosting-task-queue',
     ],
     'hosting_navigation' => [
-      'render element' => 'elements',
+      'variables' => [
+        'title' => NULL,
+        'list' => NULL,
+        'attributes' => NULL,
+      ],
       'template' => 'hosting-navigation',
     ],
     'hosting_sidebar' => [
-      'render element' => 'elements',
+      'variables' => [
+        'content' => NULL,
+        'attributes' => NULL,
+      ],
       'template' => 'hosting-sidebar',
     ],
+    'hosting_info_table' => [
+      'variables' => [
+        'items' => [],
+        'attributes' => [],
+      ],
+      'template' => 'hosting-info-table',
+    ],
+    'hosting_dashboard' => [
+      'variables' => [
+        'summary_cards' => [],
+        'site_table' => NULL,
+        'recent_tasks' => NULL,
+        'quick_links' => NULL,
+        'attributes' => [],
+      ],
+      'template' => 'hosting-dashboard',
+    ],
   ];
+}
+
+/**
+ * Prepares variables for hosting info table template.
+ *
+ * Default template: hosting-info-table.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - items: Array of info items, each with 'label', 'value', 'weight',
+ *     and optional 'description' keys.
+ *   - attributes: HTML attributes for the table element.
+ */
+function template_preprocess_hosting_info_table(array &$variables): void {
+  $items = $variables['items'] ?? [];
+
+  // Assign default weight to items without one.
+  $weight = 0;
+  foreach ($items as &$item) {
+    if (!isset($item['weight'])) {
+      $weight += 0.001;
+      $item['weight'] = $weight;
+    }
+  }
+  unset($item);
+
+  // Sort by weight.
+  usort($items, [\Drupal\Component\Utility\SortArray::class, 'sortByWeightElement']);
+  $variables['items'] = $items;
 }
 
 /**

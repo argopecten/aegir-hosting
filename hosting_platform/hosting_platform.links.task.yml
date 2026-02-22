@@ -7,3 +7,44 @@ hosting_platform.add:
   route_name: entity.hosting_platform.add_form
   title: 'Add platform'
   base_route: entity.hosting_platform.collection
+
+# Tabs on the platform canonical page.
+hosting_platform.view:
+  route_name: entity.hosting_platform.canonical
+  title: 'View'
+  base_route: entity.hosting_platform.canonical
+
+hosting_platform.edit:
+  route_name: entity.hosting_platform.edit_form
+  title: 'Edit'
+  base_route: entity.hosting_platform.canonical
+
+hosting_platform.task.verify:
+  route_name: hosting_platform.task.verify
+  title: 'Verify'
+  base_route: entity.hosting_platform.canonical
+  weight: 10
+
+hosting_platform.task.lock:
+  route_name: hosting_platform.task.lock
+  title: 'Lock'
+  base_route: entity.hosting_platform.canonical
+  weight: 20
+
+hosting_platform.task.unlock:
+  route_name: hosting_platform.task.unlock
+  title: 'Unlock'
+  base_route: entity.hosting_platform.canonical
+  weight: 21
+
+hosting_platform.task.migrate:
+  route_name: hosting_platform.task.migrate
+  title: 'Migrate'
+  base_route: entity.hosting_platform.canonical
+  weight: 30
+
+hosting_platform.task.delete:
+  route_name: hosting_platform.task.delete
+  title: 'Delete'
+  base_route: entity.hosting_platform.canonical
+  weight: 100

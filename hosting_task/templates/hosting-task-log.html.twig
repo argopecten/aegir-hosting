@@ -1,0 +1,77 @@
+{#
+/**
+ * @file
+ * Theme implementation for a hosting task log table.
+ *
+ * Displays task log entries with status-based row colors, jump-to-error
+ * links, and expandable long messages using native HTML5 details/summary.
+ *
+ * Available variables:
+ * - task: The hosting_task entity.
+ * - rows: Array of log entries, each containing:
+ *   - message: The log message (may be HTML).
+ *   - type: Log type (ok, error, warning, info, notice).
+ *   - timestamp: Entry timestamp.
+ *   - exec_time: Execution time since previous entry.
+ *   - row_class: CSS class for the row.
+ *   - is_long: Whether the message exceeds 300 characters.
+ *   - summary: Truncated message for long entries.
+ * - jump_links: Array of anchor links (error, warning).
+ * - attributes: HTML attributes for the wrapper.
+ */
+#}
+{% if rows %}
+<div{{ attributes.addClass('hosting-task-log-wrapper') }}>
+
+  {# Jump-to links for errors and warnings #}
+  {% if jump_links %}
+  <div class="hosting-task-log-jumps">
+    {% for link in jump_links %}
+      <a href="#{{ link.anchor }}" class="hosting-task-log-jump hosting-task-log-jump--{{ link.type }}">
+        {{ link.label }}
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <table id="hosting-task-log" class="hosting-table hosting-task-log-table">
+    <thead>
+      <tr>
+        <th>{{ 'Log message'|t }}</th>
+        <th>{{ 'Time'|t }}</th>
+        <th>{{ 'Type'|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in rows %}
+        <tr class="{{ entry.row_class }}">
+          <td class="hosting-status">
+            {% if entry.type == 'error' %}
+              <a id="error"></a>
+            {% elseif entry.type == 'warning' %}
+              <a id="warning"></a>
+            {% endif %}
+
+            {% if entry.is_long %}
+              <details>
+                <summary>{{ entry.summary }}...</summary>
+                {{ entry.message }}
+              </details>
+            {% else %}
+              {{ entry.message }}
+            {% endif %}
+          </td>
+          <td>
+            {% if entry.exec_time is not null and entry.exec_time >= 1 %}
+              <strong>{{ entry.exec_time }} {{ 's.'|t }}</strong>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>{{ entry.type }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

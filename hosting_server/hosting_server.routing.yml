@@ -1,0 +1,8 @@
+hosting_server.task.verify:
+  path: '/hosting/servers/{hosting_server}/verify'
+  defaults:
+    _form: '\Drupal\hosting_server\Form\ServerVerifyForm'
+    _title: 'Verify server'
+  requirements:
+    _permission: 'administer servers'
+    hosting_server: \d+

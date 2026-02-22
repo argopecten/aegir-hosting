@@ -24,25 +24,22 @@ function hosting_platform_hosting_feature() {
  * Implements hook_ENTITY_TYPE_insert() for hosting_platform.
  */
 function hosting_platform_hosting_platform_insert(\Drupal\hosting_platform\Entity\HostingPlatform $platform) {
-  // Task creation (save + verify chain) is handled in HostingPlatform::postSave().
-  \Drupal::messenger()->addStatus(t('Platform %name has been created. A save and verify task chain has been queued.', [
-    '%name' => $platform->label(),
-  ]));
+  // Auto-create verify task for new platforms to scan packages.
+  $task_manager = \Drupal::service('hosting.task_manager');
+  $context_name = 'platform_' . $platform->id();
+  $task_manager->createTask($context_name, 'verify', [], []);
+  \Drupal::messenger()->addStatus(t('Platform verification task has been queued.'));
 }
 
 /**
  * Implements hook_ENTITY_TYPE_update() for hosting_platform.
  */
 function hosting_platform_hosting_platform_update(\Drupal\hosting_platform\Entity\HostingPlatform $platform) {
-  // Auto-create save + verify tasks when platform path changes.
+  // Auto-create verify task when platform path changes.
   if ($platform->get('publish_path')->value !== $platform->original->get('publish_path')->value) {
     $task_manager = \Drupal::service('hosting.task_manager');
     $context_name = 'platform_' . $platform->id();
-    $provision_data = $platform->getProvisionContextData();
-    $task_manager->createTask($context_name, 'save', [], [
-      'data' => json_encode($provision_data),
-      'type' => 'platform',
-    ], 'verify');
+    $task_manager->createTask($context_name, 'verify', [], []);
   }
 }
 
@@ -124,6 +121,12 @@ function template_preprocess_hosting_platform(array &$variables): void {
   // Pass sidebar if it exists.
   $variables['sidebar'] = $variables['content']['hosting_sidebar'] ?? NULL;
   unset($variables['content']['hosting_sidebar']);
+
+  // Extract info table and task table for template regions.
+  $variables['info'] = $variables['content']['info'] ?? NULL;
+  unset($variables['content']['info']);
+  $variables['tasks_view'] = $variables['content']['tasks_view'] ?? NULL;
+  unset($variables['content']['tasks_view']);
 }
 
 /**
@@ -134,6 +137,121 @@ function hosting_platform_entity_view(array &$build, \Drupal\Core\Entity\EntityI
     return;
   }
 
+  /** @var \Drupal\hosting_platform\Entity\HostingPlatform $entity */
+  $date_formatter = \Drupal::service('date.formatter');
+
+  // Build info table matching D7 hosting_platform_view().
+  $info_items = [];
+
+  // Platform type.
+  $platform_type = $entity->get('platform_type')->value ?? 'manual';
+  $type_labels = ['manual' => t('Manual'), 'git' => t('Git')];
+  $info_items[] = [
+    'label' => t('Platform type'),
+    'value' => ['#markup' => (string) ($type_labels[$platform_type] ?? $platform_type)],
+    'weight' => -20,
+  ];
+
+  // Publish path.
+  $publish_path = $entity->get('publish_path')->value ?? '';
+  if ($publish_path) {
+    $info_items[] = [
+      'label' => t('Publish path'),
+      'value' => ['#markup' => '<code>' . \Drupal\Component\Utility\Html::escape($publish_path) . '</code>'],
+      'weight' => -18,
+    ];
+  }
+
+  // Git URL.
+  $git_url = $entity->get('git_url')->value ?? '';
+  if ($git_url) {
+    $info_items[] = [
+      'label' => t('Git URL'),
+      'value' => ['#markup' => '<code>' . \Drupal\Component\Utility\Html::escape($git_url) . '</code>'],
+      'weight' => -15,
+    ];
+  }
+
+  // Web server.
+  $web_server_id = $entity->get('web_server')->target_id ?? NULL;
+  if ($web_server_id) {
+    $web_server = \Drupal::entityTypeManager()->getStorage('hosting_server')->load($web_server_id);
+    $info_items[] = [
+      'label' => t('Web server'),
+      'value' => $web_server ? [
+        '#type' => 'link',
+        '#title' => $web_server->label(),
+        '#url' => $web_server->toUrl(),
+      ] : ['#markup' => (string) $web_server_id],
+      'weight' => -10,
+    ];
+  }
+
+  // Verified.
+  $verified = (int) $entity->get('verified')->value;
+  $info_items[] = [
+    'label' => t('Verified'),
+    'value' => ['#markup' => $verified ? $date_formatter->formatTimeDiffSince($verified) . ' ' . t('ago') : t('Never')],
+    'weight' => -8,
+  ];
+
+  // Status.
+  $status = (int) $entity->get('status')->value;
+  $status_map = [
+    \Drupal\hosting_platform\Entity\HostingPlatform::STATUS_QUEUED => ['label' => t('Queued'), 'class' => 'hosting-queue'],
+    \Drupal\hosting_platform\Entity\HostingPlatform::STATUS_ENABLED => ['label' => t('Enabled'), 'class' => 'hosting-success'],
+    \Drupal\hosting_platform\Entity\HostingPlatform::STATUS_LOCKED => ['label' => t('Locked'), 'class' => 'hosting-warning'],
+    \Drupal\hosting_platform\Entity\HostingPlatform::STATUS_DELETED => ['label' => t('Deleted'), 'class' => 'hosting-error'],
+  ];
+  $status_info = $status_map[$status] ?? ['label' => t('Unknown'), 'class' => ''];
+  $info_items[] = [
+    'label' => t('Status'),
+    'value' => ['#markup' => '<span class="' . $status_info['class'] . '">' . $status_info['label'] . '</span>'],
+    'weight' => -5,
+  ];
+
+  $build['info'] = [
+    '#theme' => 'hosting_info_table',
+    '#items' => $info_items,
+    '#attributes' => ['id' => 'hosting-platform-info'],
+    '#weight' => -5,
+  ];
+
+  // Task table.
+  $task_resolver = \Drupal::service('hosting.task_availability_resolver');
+  $build['tasks_view'] = $task_resolver->buildTaskTable($entity);
+  $build['tasks_view']['#weight'] = 9;
+
+  // Attach task table AJAX refresh.
+  $build['#attached']['library'][] = 'hosting_task/task-table-refresh';
+  $build['#attached']['drupalSettings']['hostingTaskTable']['refreshUrl'] = \Drupal\Core\Url::fromRoute('hosting_task.refresh.task_table', [
+    'entity_type_id' => 'hosting_platform',
+    'entity_id' => $entity->id(),
+  ])->toString();
+
+  // Sites on this platform.
+  $site_storage = \Drupal::entityTypeManager()->getStorage('hosting_site');
+  $site_query = \Drupal::entityQuery('hosting_site')
+    ->condition('platform', $entity->id())
+    ->sort('domain', 'ASC')
+    ->range(0, 10)
+    ->accessCheck(TRUE);
+  $site_ids = $site_query->execute();
+  $site_items = [];
+  $site_tags = [];
+  if ($site_ids) {
+    $sites = $site_storage->loadMultiple($site_ids);
+    foreach ($sites as $site) {
+      $site_items[] = [
+        '#type' => 'link',
+        '#title' => $site->label(),
+        '#url' => $site->toUrl(),
+      ];
+      $site_tags = \Drupal\Core\Cache\Cache::mergeTags($site_tags, $site->getCacheTags());
+    }
+  }
+
+  // Sidebar: recent tasks + sites list + navigation.
   $context_storage = \Drupal::entityTypeManager()->getStorage('hosting_context');
   $context_records = $context_storage->loadByProperties([
     'entity_type' => 'hosting_platform',
@@ -155,11 +273,11 @@ function hosting_platform_entity_view(array &$build, \Drupal\Core\Entity\EntityI
       $task_storage = \Drupal::entityTypeManager()->getStorage('hosting_task');
       $tasks = $task_storage->loadMultiple($task_ids);
       foreach ($tasks as $task) {
-        $status = (string) $task->get('status')->value;
+        $t_status = (string) $task->get('status')->value;
         $task_items[] = [
           '#type' => 'container',
           '#attributes' => [
-            'class' => ['hosting-task-item', 'hosting-task-item--' . \Drupal\Component\Utility\Html::getClass($status)],
+            'class' => ['hosting-task-item', 'hosting-task-item--' . \Drupal\Component\Utility\Html::getClass($t_status)],
           ],
           'title' => [
             '#type' => 'link',
@@ -169,32 +287,12 @@ function hosting_platform_entity_view(array &$build, \Drupal\Core\Entity\EntityI
           'status' => [
             '#type' => 'html_tag',
             '#tag' => 'span',
-            '#value' => $status,
+            '#value' => $t_status,
             '#attributes' => ['class' => ['hosting-task-status']],
           ],
         ];
         $task_tags = \Drupal\Core\Cache\Cache::mergeTags($task_tags, $task->getCacheTags());
       }
-    }
-  }
-
-  // Load sites on this platform.
-  $site_storage = \Drupal::entityTypeManager()->getStorage('hosting_site');
-  $site_query = \Drupal::entityQuery('hosting_site')
-    ->condition('platform', $entity->id())
-    ->sort('domain', 'ASC')
-    ->range(0, 10)
-    ->accessCheck(TRUE);
-  $site_ids = $site_query->execute();
-  $site_items = [];
-  if ($site_ids) {
-    $sites = $site_storage->loadMultiple($site_ids);
-    foreach ($sites as $site) {
-      $site_items[] = [
-        '#type' => 'link',
-        '#title' => $site->label(),
-        '#url' => $site->toUrl(),
-      ];
     }
   }
 
@@ -212,35 +310,6 @@ function hosting_platform_entity_view(array &$build, \Drupal\Core\Entity\EntityI
         ],
         '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--task-queue']],
       ],
-      'navigation' => [
-        '#theme' => 'hosting_platform_navigation',
-        '#title' => t('Navigation'),
-        '#list' => [
-          '#theme' => 'item_list',
-          '#items' => [
-            [
-              '#type' => 'link',
-              '#title' => t('All tasks'),
-              '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection'),
-              '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')->access(),
-            ],
-            [
-              '#type' => 'link',
-              '#title' => t('Edit platform'),
-              '#url' => $entity->toUrl('edit-form'),
-              '#access' => $entity->toUrl('edit-form')->access(),
-            ],
-            [
-              '#type' => 'link',
-              '#title' => t('All platforms'),
-              '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_platform.collection'),
-              '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_platform.collection')->access(),
-            ],
-          ],
-          '#attributes' => ['class' => ['hosting-navigation']],
-        ],
-        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--navigation']],
-      ],
       'sites_list' => [
         '#theme' => 'hosting_platform_sites_list',
         '#title' => t('Sites on this platform'),
@@ -252,16 +321,32 @@ function hosting_platform_entity_view(array &$build, \Drupal\Core\Entity\EntityI
         ],
         '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--sites-list']],
       ],
+      'navigation' => [
+        '#theme' => 'hosting_platform_navigation',
+        '#title' => t('Navigation'),
+        '#list' => [
+          '#theme' => 'item_list',
+          '#items' => [
+            ['#type' => 'link', '#title' => t('All tasks'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')],
+            ['#type' => 'link', '#title' => t('Edit platform'), '#url' => $entity->toUrl('edit-form')],
+            ['#type' => 'link', '#title' => t('All platforms'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_platform.collection')],
+            ['#type' => 'link', '#title' => t('All sites'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_site.collection')],
+            ['#type' => 'link', '#title' => t('All servers'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_server.collection')],
+          ],
+          '#attributes' => ['class' => ['hosting-navigation']],
+        ],
+        '#attributes' => ['class' => ['hosting-panel', 'hosting-panel--navigation']],
+      ],
     ],
     '#attributes' => ['class' => ['hosting-sidebar']],
     '#weight' => 60,
   ];
 
-  // Add wrapper class to the entire build.
   $build['#attributes']['class'][] = 'hosting-platform-view';
 
-  if ($task_tags) {
-    $build['#cache']['tags'] = \Drupal\Core\Cache\Cache::mergeTags($build['#cache']['tags'] ?? [], $task_tags);
+  $all_tags = \Drupal\Core\Cache\Cache::mergeTags($task_tags, $site_tags);
+  if ($all_tags) {
+    $build['#cache']['tags'] = \Drupal\Core\Cache\Cache::mergeTags($build['#cache']['tags'] ?? [], $all_tags);
   }
 }
 

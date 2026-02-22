@@ -22,3 +22,7 @@ services:
   hosting.queue_dispatcher:
     class: Drupal\hosting\Service\QueueDispatcher
     arguments: ['@config.factory', '@keyvalue', '@hosting.queue_runner', '@datetime.time', '@logger.channel.hosting', '@database', '@module_handler']
+
+  hosting.sidebar_builder:
+    class: Drupal\hosting\Service\HostingSidebarBuilder
+    arguments: ['@entity_type.manager', '@hosting.queue_dispatcher', '@current_route_match']

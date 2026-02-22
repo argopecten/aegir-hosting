@@ -1,8 +1,8 @@
 hosting.admin:
   path: '/hosting'
   defaults:
-    _form: '\Drupal\hosting\Form\HostingFeaturesForm'
-    _title: 'Hosting'
+    _controller: '\Drupal\hosting\Controller\HostingDashboardController::dashboard'
+    _title: 'Hosting Dashboard'
   requirements:
     _permission: 'administer hosting'
 

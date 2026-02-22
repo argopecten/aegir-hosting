@@ -1,0 +1,54 @@
+hosting_platform.task.verify:
+  path: '/hosting/platforms/{hosting_platform}/verify'
+  defaults:
+    _form: '\Drupal\hosting_platform\Form\PlatformVerifyForm'
+    _title: 'Verify platform'
+  requirements:
+    _permission: 'administer platforms'
+    hosting_platform: \d+
+
+hosting_platform.task.lock:
+  path: '/hosting/platforms/{hosting_platform}/lock'
+  defaults:
+    _form: '\Drupal\hosting_platform\Form\PlatformLockForm'
+    _title: 'Lock platform'
+  requirements:
+    _permission: 'administer platforms'
+    hosting_platform: \d+
+
+hosting_platform.task.unlock:
+  path: '/hosting/platforms/{hosting_platform}/unlock'
+  defaults:
+    _form: '\Drupal\hosting_platform\Form\PlatformUnlockForm'
+    _title: 'Unlock platform'
+  requirements:
+    _permission: 'administer platforms'
+    hosting_platform: \d+
+
+hosting_platform.task.delete:
+  path: '/hosting/platforms/{hosting_platform}/delete-task'
+  defaults:
+    _form: '\Drupal\hosting_platform\Form\PlatformDeleteTaskForm'
+    _title: 'Delete platform'
+  requirements:
+    _permission: 'administer platforms'
+    hosting_platform: \d+
+
+hosting_platform.task.migrate:
+  path: '/hosting/platforms/{hosting_platform}/migrate'
+  defaults:
+    _form: '\Drupal\hosting_platform\Form\PlatformMigrateForm'
+    _title: 'Migrate platform'
+  requirements:
+    _permission: 'administer platforms'
+    hosting_platform: \d+
+
+hosting_platform.compare:
+  path: '/hosting/platforms/compare/{source}/{target}'
+  defaults:
+    _controller: '\Drupal\hosting_platform\Controller\PlatformComparisonController::compare'
+    _title: 'Compare platforms'
+  requirements:
+    _permission: 'administer platforms'
+    source: \d+
+    target: \d+

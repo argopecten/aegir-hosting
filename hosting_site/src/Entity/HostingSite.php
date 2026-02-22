@@ -3,7 +3,6 @@
 namespace Drupal\hosting_site\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
-use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 
@@ -16,7 +15,7 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   base_table = "hosting_site",
  *   handlers = {
  *     "view_builder" = "Drupal\hosting_site\Entity\HostingSiteViewBuilder",
- *     "list_builder" = "Drupal\Core\Entity\EntityListBuilder",
+ *     "list_builder" = "Drupal\hosting_site\Entity\HostingSiteListBuilder",
  *     "form" = {
  *       "default" = "Drupal\hosting_site\Form\HostingSiteForm",
  *       "add" = "Drupal\hosting_site\Form\HostingSiteForm",
@@ -203,80 +202,6 @@ class HostingSite extends ContentEntityBase {
       ->setDisplayConfigurable('view', TRUE);
 
     return $fields;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function postSave(EntityStorageInterface $storage, $update = TRUE): void {
-    parent::postSave($storage, $update);
-
-    // Sites use the domain name as their context name.
-    $context_name = $this->get('domain')->value;
-    /** @var \Drupal\hosting\Service\ContextRegistry $registry */
-    $registry = \Drupal::service('hosting.context_registry');
-    $registry->register($context_name, 'hosting_site', (int) $this->id());
-
-    if (!$update) {
-      // New site: queue a save task (creates backend context), then install.
-      /** @var \Drupal\hosting_task\Service\TaskManagerInterface $task_manager */
-      $task_manager = \Drupal::service('hosting.task_manager');
-      $provision_data = $this->getProvisionContextData();
-      $task_manager->createTask($context_name, 'save', [], [
-        'data' => json_encode($provision_data),
-        'type' => 'site',
-      ], 'install');
-    }
-  }
-
-  /**
-   * Build the provision context data array from entity fields.
-   *
-   * Maps Drupal entity fields to the provision backend's expected keys.
-   *
-   * @return array
-   *   Associative array of provision context data.
-   */
-  public function getProvisionContextData(): array {
-    $data = [
-      'uri' => $this->get('domain')->value,
-    ];
-
-    // Map platform entity reference to provision context name.
-    $platform_id = $this->get('platform')->target_id;
-    if ($platform_id) {
-      $data['platform'] = 'platform_' . $platform_id;
-    }
-
-    // Map db_server entity reference to provision context name.
-    $db_server_id = $this->get('db_server')->target_id;
-    if ($db_server_id) {
-      $data['db_server'] = 'server_' . $db_server_id;
-    }
-
-    // Map optional fields.
-    $profile = $this->get('profile')->target_id;
-    if ($profile) {
-      $profile_entity = $this->get('profile')->entity;
-      if ($profile_entity) {
-        $data['profile'] = $profile_entity->label();
-      }
-    }
-
-    $language = $this->get('language')->value;
-    if ($language) {
-      $data['language'] = $language;
-    }
-
-    $client = $this->get('client')->target_id;
-    if ($client) {
-      $client_entity = $this->get('client')->entity;
-      if ($client_entity) {
-        $data['client_name'] = $client_entity->label();
-      }
-    }
-
-    return $data;
   }
 
 }

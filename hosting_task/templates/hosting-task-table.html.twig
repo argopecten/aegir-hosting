@@ -1,0 +1,66 @@
+{#
+/**
+ * @file
+ * Theme implementation for the hosting task action table.
+ *
+ * Displays available tasks for a hosting entity in a table with
+ * Run/View action buttons per task type, matching the D7 Aegir
+ * hosting_task_table() pattern.
+ *
+ * Available variables:
+ * - entity: The parent hosting entity.
+ * - task_rows: Array of task row data, each containing:
+ *   - task_type: Machine name of the task type.
+ *   - label: Human-readable task label.
+ *   - status_class: CSS class for the row (hosting-success, hosting-error, etc.).
+ *   - run_url: URL for the Run action (or null if not permitted).
+ *   - run_dialog: Whether Run opens a modal dialog.
+ *   - view_url: URL to view the last task log (or null).
+ *   - permitted: Whether the current user can run this task.
+ * - attributes: HTML attributes for the wrapper div.
+ */
+#}
+{% if task_rows %}
+<div{{ attributes.addClass('hosting-task-list-wrapper') }} id="hosting-task-list">
+  <table class="hosting-table hosting-task-table">
+    <thead>
+      <tr>
+        <th>{{ 'Task'|t }}</th>
+        <th class="hosting-actions">{{ 'Actions'|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in task_rows %}
+        <tr class="{{ row.status_class }}">
+          <td class="hosting-status">{{ row.label }}</td>
+          <td class="hosting-actions">
+            {% if row.permitted and row.run_url %}
+              <a href="{{ row.run_url }}"
+                 class="hosting-button-enabled hosting-button-run{% if row.run_dialog %} use-ajax{% endif %}"
+                 {% if row.run_dialog %}
+                   data-dialog-type="modal"
+                   data-dialog-options='{"width":700,"title":"{{ row.label }}"}'
+                 {% endif %}
+                 title="{{ 'Run @task'|t({'@task': row.label}) }}">
+                {{ 'Run'|t }}
+              </a>
+            {% else %}
+              <span class="hosting-button-disabled hosting-button-run">{{ 'Run'|t }}</span>
+            {% endif %}
+
+            {% if row.view_url %}
+              <a href="{{ row.view_url }}"
+                 class="hosting-button-enabled hosting-button-log"
+                 title="{{ 'View task log'|t }}">
+                {{ 'View'|t }}
+              </a>
+            {% else %}
+              <span class="hosting-button-disabled hosting-button-log">{{ 'View'|t }}</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

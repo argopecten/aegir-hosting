@@ -1,19 +1,16 @@
 /**
  * @file
- * Task queue management interface with live updates.
+ * Task queue management interface with live updates using fetch() API.
  */
 
-(function ($, Drupal, drupalSettings) {
+(function (Drupal, drupalSettings, once) {
 
   'use strict';
 
-  /**
-   * Auto-refresh task queue.
-   */
   Drupal.behaviors.taskQueueRefresh = {
-    attach: function (context, settings) {
-      const $table = $('.task-queue-table', context).once('task-queue-refresh');
-      if (!$table.length) {
+    attach: function (context) {
+      const tables = once('task-queue-refresh', '.task-queue-table', context);
+      if (!tables.length) {
         return;
       }
 
@@ -22,59 +19,60 @@
         return;
       }
 
-      // Refresh every 5 seconds.
       setInterval(function () {
-        $.ajax({
-          url: refreshUrl,
+        fetch(refreshUrl, {
           method: 'GET',
-          dataType: 'json',
-          success: function (tasks) {
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+          })
+          .then(function (tasks) {
             updateTaskTable(tasks);
             updateStatistics(tasks);
-          },
-          error: function () {
-            console.error('Failed to refresh task queue');
-          }
-        });
+          })
+          .catch(function (err) {
+            // Silent failure - log only in development.
+            if (drupalSettings.path?.currentPath === 'admin/hosting/tasks/queue') {
+              console.warn('Task queue refresh failed:', err.message);
+            }
+          });
       }, 5000);
     }
   };
 
-  /**
-   * Update task table with fresh data.
-   */
   function updateTaskTable(tasks) {
-    const $tbody = $('.task-queue-table tbody');
-    
+    const tbody = document.querySelector('.task-queue-table tbody');
+    if (!tbody) return;
+
     tasks.forEach(function (task) {
-      const $row = $tbody.find('tr[data-task-id="' + task.id + '"]');
-      
-      if ($row.length) {
-        // Update existing row.
-        $row.find('.task-status')
-          .removeClass()
-          .addClass('task-status task-status--' + task.status)
-          .text(task.status);
-        
-        $row.find('td:nth-child(5)').text(task.retry_count + '/' + task.max_retries);
-        
-        if (task.duration) {
-          $row.find('td:nth-child(6)').text(formatDuration(task.duration));
+      const row = tbody.querySelector('tr[data-task-id="' + task.id + '"]');
+      if (!row) return;
+
+      const statusCell = row.querySelector('.task-status');
+      if (statusCell) {
+        statusCell.className = 'task-status task-status--' + task.status;
+        statusCell.textContent = task.status;
+      }
+
+      const retryCell = row.querySelector('td:nth-child(5)');
+      if (retryCell) {
+        retryCell.textContent = task.retry_count + '/' + task.max_retries;
+      }
+
+      if (task.duration) {
+        const durationCell = row.querySelector('td:nth-child(6)');
+        if (durationCell) {
+          durationCell.textContent = formatDuration(task.duration);
         }
       }
     });
   }
 
-  /**
-   * Update statistics cards.
-   */
   function updateStatistics(tasks) {
-    const stats = {
-      queued: 0,
-      processing: 0,
-      failed: 0,
-      success: 0
-    };
+    const stats = { queued: 0, processing: 0, failed: 0, success: 0 };
 
     tasks.forEach(function (task) {
       if (stats.hasOwnProperty(task.status)) {
@@ -83,13 +81,11 @@
     });
 
     Object.keys(stats).forEach(function (status) {
-      $('.stat-card--' + status + ' .stat-count').text(stats[status]);
+      const el = document.querySelector('.stat-card--' + status + ' .stat-count');
+      if (el) el.textContent = stats[status];
     });
   }
 
-  /**
-   * Format duration in seconds to human readable.
-   */
   function formatDuration(seconds) {
     if (seconds < 60) {
       return seconds + ' sec';
@@ -99,4 +95,4 @@
     return minutes + ' min ' + secs + ' sec';
   }
 
-})(jQuery, Drupal, drupalSettings);
+})(Drupal, drupalSettings, once);

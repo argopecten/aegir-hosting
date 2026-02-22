@@ -3,7 +3,6 @@
 namespace Drupal\hosting_platform\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
-use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 
@@ -159,52 +158,6 @@ class HostingPlatform extends ContentEntityBase {
       ->setDisplayConfigurable('view', TRUE);
 
     return $fields;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function postSave(EntityStorageInterface $storage, $update = TRUE): void {
-    parent::postSave($storage, $update);
-
-    // Register this platform in the context registry.
-    $context_name = 'platform_' . $this->id();
-    /** @var \Drupal\hosting\Service\ContextRegistry $registry */
-    $registry = \Drupal::service('hosting.context_registry');
-    $registry->register($context_name, 'hosting_platform', (int) $this->id());
-
-    if (!$update) {
-      // New platform: queue a save task (creates backend context), then verify.
-      /** @var \Drupal\hosting_task\Service\TaskManagerInterface $task_manager */
-      $task_manager = \Drupal::service('hosting.task_manager');
-      $provision_data = $this->getProvisionContextData();
-      $task_manager->createTask($context_name, 'save', [], [
-        'data' => json_encode($provision_data),
-        'type' => 'platform',
-      ], 'verify');
-    }
-  }
-
-  /**
-   * Build the provision context data array from entity fields.
-   *
-   * Maps Drupal entity fields to the provision backend's expected keys.
-   *
-   * @return array
-   *   Associative array of provision context data.
-   */
-  public function getProvisionContextData(): array {
-    $data = [
-      'root' => $this->get('publish_path')->value,
-    ];
-
-    // Map web_server entity reference to provision context name.
-    $web_server_id = $this->get('web_server')->target_id;
-    if ($web_server_id) {
-      $data['server'] = 'server_' . $web_server_id;
-    }
-
-    return $data;
   }
 
 }

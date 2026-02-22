@@ -21,32 +21,6 @@ function hosting_server_hosting_feature() {
 }
 
 /**
- * Implements hook_ENTITY_TYPE_insert() for hosting_server.
- */
-function hosting_server_hosting_server_insert(\Drupal\hosting_server\Entity\HostingServer $server) {
-  // Task creation (save + verify chain) is handled in HostingServer::postSave().
-  \Drupal::messenger()->addStatus(t('Server %name has been created. A save and verify task chain has been queued.', [
-    '%name' => $server->label(),
-  ]));
-}
-
-/**
- * Implements hook_ENTITY_TYPE_update() for hosting_server.
- */
-function hosting_server_hosting_server_update(\Drupal\hosting_server\Entity\HostingServer $server) {
-  // Auto-create save + verify tasks when server hostname changes.
-  if ($server->get('hostname')->value !== $server->original->get('hostname')->value) {
-    $task_manager = \Drupal::service('hosting.task_manager');
-    $context_name = 'server_' . $server->id();
-    $provision_data = $server->getProvisionContextData();
-    $task_manager->createTask($context_name, 'save', [], [
-      'data' => json_encode($provision_data),
-      'type' => 'server',
-    ], 'verify');
-  }
-}
-
-/**
  * Implements hook_theme().
  */
 function hosting_server_theme($existing, $type, $theme, $path): array {
@@ -135,6 +109,12 @@ function template_preprocess_hosting_server(array &$variables): void {
   // Pass sidebar if it exists.
   $variables['sidebar'] = $variables['content']['hosting_sidebar'] ?? NULL;
   unset($variables['content']['hosting_sidebar']);
+
+  // Extract info table and task table for template regions.
+  $variables['info'] = $variables['content']['info'] ?? NULL;
+  unset($variables['content']['info']);
+  $variables['tasks_view'] = $variables['content']['tasks_view'] ?? NULL;
+  unset($variables['content']['tasks_view']);
 }
 
 /**
@@ -145,36 +125,122 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
     return;
   }
 
-  $storage = \Drupal::entityTypeManager()->getStorage('hosting_service_instance');
-  $instances = $storage->loadByProperties(['server' => $entity->id()]);
-  if (!$instances) {
-    return;
-  }
+  /** @var \Drupal\hosting_server\Entity\HostingServer $entity */
+  $date_formatter = \Drupal::service('date.formatter');
 
-  $service_manager = \Drupal::service('hosting.service_manager');
-  $rows = [];
-  foreach ($instances as $instance) {
-    $service_type = (string) $instance->get('service_type')->value;
-    $provider_id = (string) $instance->get('provider')->value;
-    $available = (bool) $instance->get('available')->value;
-    $providers = $service_manager->getProvidersForType($service_type);
-    $provider_label = (string) ($providers[$provider_id] ?? $provider_id);
-    $rows[] = [
-      'data' => [
-        $service_type,
-        $provider_label,
-        $available ? t('Yes') : t('No'),
-      ],
+  // Build info table matching D7 hosting_server_view().
+  $info_items = [];
+
+  // Human name.
+  $human_name = $entity->get('human_name')->value ?? '';
+  if ($human_name) {
+    $info_items[] = [
+      'label' => t('Name'),
+      'value' => ['#markup' => \Drupal\Component\Utility\Html::escape($human_name)],
+      'weight' => -20,
     ];
   }
 
-  $build['hosting_services'] = [
-    '#type' => 'table',
-    '#header' => [t('Service type'), t('Provider'), t('Available')],
-    '#rows' => $rows,
-    '#weight' => 50,
+  // Hostname.
+  $hostname = $entity->get('hostname')->value ?? '';
+  if ($hostname) {
+    $info_items[] = [
+      'label' => t('Hostname'),
+      'value' => ['#markup' => '<code>' . \Drupal\Component\Utility\Html::escape($hostname) . '</code>'],
+      'weight' => -18,
+    ];
+  }
+
+  // IP addresses.
+  $ip_field = $entity->get('ip_addresses');
+  $ip_values = [];
+  foreach ($ip_field as $item) {
+    if ($item->value) {
+      $ip_values[] = $item->value;
+    }
+  }
+  if ($ip_values) {
+    $info_items[] = [
+      'label' => t('IP addresses'),
+      'value' => ['#markup' => '<code>' . implode('</code>, <code>', array_map([\Drupal\Component\Utility\Html::class, 'escape'], $ip_values)) . '</code>'],
+      'weight' => -15,
+    ];
+  }
+
+  // Verified.
+  $verified = (int) $entity->get('verified')->value;
+  $info_items[] = [
+    'label' => t('Verified'),
+    'value' => ['#markup' => $verified ? $date_formatter->formatTimeDiffSince($verified) . ' ' . t('ago') : t('Never')],
+    'weight' => -10,
   ];
 
+  // Status.
+  $status = (int) $entity->get('status')->value;
+  $status_map = [
+    \Drupal\hosting_server\Entity\HostingServer::STATUS_QUEUED => ['label' => t('Queued'), 'class' => 'hosting-queue'],
+    \Drupal\hosting_server\Entity\HostingServer::STATUS_ENABLED => ['label' => t('Enabled'), 'class' => 'hosting-success'],
+    \Drupal\hosting_server\Entity\HostingServer::STATUS_LOCKED => ['label' => t('Locked'), 'class' => 'hosting-warning'],
+    \Drupal\hosting_server\Entity\HostingServer::STATUS_DELETED => ['label' => t('Deleted'), 'class' => 'hosting-error'],
+  ];
+  $status_info = $status_map[$status] ?? ['label' => t('Unknown'), 'class' => ''];
+  $info_items[] = [
+    'label' => t('Status'),
+    'value' => ['#markup' => '<span class="' . $status_info['class'] . '">' . $status_info['label'] . '</span>'],
+    'weight' => -5,
+  ];
+
+  $build['info'] = [
+    '#theme' => 'hosting_info_table',
+    '#items' => $info_items,
+    '#attributes' => ['id' => 'hosting-server-info'],
+    '#weight' => -5,
+  ];
+
+  // Services table.
+  $storage = \Drupal::entityTypeManager()->getStorage('hosting_service_instance');
+  $instances = $storage->loadByProperties(['server' => $entity->id()]);
+
+  if ($instances) {
+    $service_manager = \Drupal::service('hosting.service_manager');
+    $rows = [];
+    foreach ($instances as $instance) {
+      $service_type = (string) $instance->get('service_type')->value;
+      $provider_id = (string) $instance->get('provider')->value;
+      $available = (bool) $instance->get('available')->value;
+      $providers = $service_manager->getProvidersForType($service_type);
+      $provider_label = (string) ($providers[$provider_id] ?? $provider_id);
+      $rows[] = [
+        'data' => [
+          $service_type,
+          $provider_label,
+          $available ? t('Yes') : t('No'),
+        ],
+      ];
+    }
+
+    $build['hosting_services'] = [
+      '#type' => 'table',
+      '#header' => [t('Service type'), t('Provider'), t('Available')],
+      '#rows' => $rows,
+      '#attributes' => ['class' => ['hosting-table', 'hosting-services-table']],
+      '#weight' => 50,
+    ];
+  }
+
+  // Task table.
+  $task_resolver = \Drupal::service('hosting.task_availability_resolver');
+  $build['tasks_view'] = $task_resolver->buildTaskTable($entity);
+  $build['tasks_view']['#weight'] = 9;
+
+  // Attach task table AJAX refresh.
+  $build['#attached']['library'][] = 'hosting_task/task-table-refresh';
+  $build['#attached']['drupalSettings']['hostingTaskTable']['refreshUrl'] = \Drupal\Core\Url::fromRoute('hosting_task.refresh.task_table', [
+    'entity_type_id' => 'hosting_server',
+    'entity_id' => $entity->id(),
+  ])->toString();
+
+  // Sidebar: recent tasks + queues + navigation.
   $context_storage = \Drupal::entityTypeManager()->getStorage('hosting_context');
   $context_records = $context_storage->loadByProperties([
     'entity_type' => 'hosting_server',
@@ -196,11 +262,11 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
       $task_storage = \Drupal::entityTypeManager()->getStorage('hosting_task');
       $tasks = $task_storage->loadMultiple($task_ids);
       foreach ($tasks as $task) {
-        $status = (string) $task->get('status')->value;
+        $t_status = (string) $task->get('status')->value;
         $task_items[] = [
           '#type' => 'container',
           '#attributes' => [
-            'class' => ['hosting-task-item', 'hosting-task-item--' . \Drupal\Component\Utility\Html::getClass($status)],
+            'class' => ['hosting-task-item', 'hosting-task-item--' . \Drupal\Component\Utility\Html::getClass($t_status)],
           ],
           'title' => [
             '#type' => 'link',
@@ -210,7 +276,7 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
           'status' => [
             '#type' => 'html_tag',
             '#tag' => 'span',
-            '#value' => $status,
+            '#value' => $t_status,
             '#attributes' => ['class' => ['hosting-task-status']],
           ],
         ];
@@ -263,24 +329,12 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
         '#list' => [
           '#theme' => 'item_list',
           '#items' => [
-            [
-              '#type' => 'link',
-              '#title' => t('All tasks'),
-              '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection'),
-              '#access' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')->access(),
-            ],
-            [
-              '#type' => 'link',
-              '#title' => t('Queues'),
-              '#url' => \Drupal\Core\Url::fromRoute('hosting.admin.queues'),
-              '#access' => \Drupal\Core\Url::fromRoute('hosting.admin.queues')->access(),
-            ],
-            [
-              '#type' => 'link',
-              '#title' => t('Edit server'),
-              '#url' => $entity->toUrl('edit-form'),
-              '#access' => $entity->toUrl('edit-form')->access(),
-            ],
+            ['#type' => 'link', '#title' => t('All tasks'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_task.collection')],
+            ['#type' => 'link', '#title' => t('Queues'), '#url' => \Drupal\Core\Url::fromRoute('hosting.admin.queues')],
+            ['#type' => 'link', '#title' => t('Edit server'), '#url' => $entity->toUrl('edit-form')],
+            ['#type' => 'link', '#title' => t('All servers'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_server.collection')],
+            ['#type' => 'link', '#title' => t('All sites'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_site.collection')],
+            ['#type' => 'link', '#title' => t('All platforms'), '#url' => \Drupal\Core\Url::fromRoute('entity.hosting_platform.collection')],
           ],
           '#attributes' => ['class' => ['hosting-navigation']],
         ],
@@ -302,12 +356,13 @@ function hosting_server_entity_view(array &$build, \Drupal\Core\Entity\EntityInt
     '#weight' => 60,
   ];
 
-  // Add wrapper class to the entire build.
   $build['#attributes']['class'][] = 'hosting-server-view';
 
   $tags = $build['#cache']['tags'] ?? [];
-  foreach ($instances as $instance) {
-    $tags = \Drupal\Core\Cache\Cache::mergeTags($tags, $instance->getCacheTags());
+  if ($instances) {
+    foreach ($instances as $instance) {
+      $tags = \Drupal\Core\Cache\Cache::mergeTags($tags, $instance->getCacheTags());
+    }
   }
   if ($task_tags) {
     $tags = \Drupal\Core\Cache\Cache::mergeTags($tags, $task_tags);

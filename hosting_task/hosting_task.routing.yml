@@ -32,3 +32,23 @@ hosting_task.queue.retry:
   requirements:
     _permission: 'administer tasks'
     task: \d+
+
+hosting_task.refresh.task_table:
+  path: '/hosting/ajax/task-table/{entity_type_id}/{entity_id}'
+  defaults:
+    _controller: '\Drupal\hosting_task\Controller\TaskRefreshController::refreshTaskTable'
+  requirements:
+    _permission: 'access content'
+    entity_id: \d+
+  options:
+    no_cache: TRUE
+
+hosting_task.refresh.task_log:
+  path: '/hosting/ajax/task-log/{hosting_task}'
+  defaults:
+    _controller: '\Drupal\hosting_task\Controller\TaskRefreshController::refreshTaskLog'
+  requirements:
+    _permission: 'access content'
+    hosting_task: \d+
+  options:
+    no_cache: TRUE

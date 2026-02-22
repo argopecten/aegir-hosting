@@ -73,21 +73,15 @@ class HostingClientListBuilder extends EntityListBuilder {
       ->execute();
     $row['sites'] = $site_count;
     
-    // Get status.
+    // Status with CSS class.
     $status = (int) $entity->get('status')->value;
-    if ($status === 1) {
-      $row['status'] = [
-        'data' => [
-          '#markup' => '<span style="color: green; font-weight: bold;">' . $this->t('Active') . '</span>',
-        ],
-      ];
-    } else {
-      $row['status'] = [
-        'data' => [
-          '#markup' => '<span style="color: gray;">' . $this->t('Inactive') . '</span>',
-        ],
-      ];
-    }
+    $status_class = $status === 1 ? 'hosting-success' : 'hosting-disable';
+    $status_label = $status === 1 ? $this->t('Active') : $this->t('Inactive');
+    $row['status'] = [
+      'data' => [
+        '#markup' => '<strong class="' . $status_class . '" style="padding: 2px 6px;">' . $status_label . '</strong>',
+      ],
+    ];
     
     return $row + parent::buildRow($entity);
   }

@@ -1,0 +1,80 @@
+hosting_site.task.verify:
+  path: '/hosting/sites/{hosting_site}/verify'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteVerifyForm'
+    _title: 'Verify site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.disable:
+  path: '/hosting/sites/{hosting_site}/disable'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteDisableForm'
+    _title: 'Disable site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.enable:
+  path: '/hosting/sites/{hosting_site}/enable'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteEnableForm'
+    _title: 'Enable site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.delete:
+  path: '/hosting/sites/{hosting_site}/delete-task'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteDeleteTaskForm'
+    _title: 'Delete site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.backup:
+  path: '/hosting/sites/{hosting_site}/backup'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteBackupForm'
+    _title: 'Backup site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.restore:
+  path: '/hosting/sites/{hosting_site}/restore'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteRestoreForm'
+    _title: 'Restore site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.reset_password:
+  path: '/hosting/sites/{hosting_site}/reset-password'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteResetPasswordForm'
+    _title: 'Reset password'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.clone:
+  path: '/hosting/sites/{hosting_site}/clone'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteCloneForm'
+    _title: 'Clone site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+
+
+hosting_site.task.migrate:
+  path: '/hosting/sites/{hosting_site}/migrate'
+  defaults:
+    _form: '\Drupal\hosting_site\Form\SiteMigrateForm'
+    _title: 'Migrate site'
+  requirements:
+    _permission: 'administer sites'
+    hosting_site: \d+

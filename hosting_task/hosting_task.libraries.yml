@@ -14,5 +14,23 @@ task-queue:
     js/task-queue.js: {}
   dependencies:
     - core/drupal
-    - core/jquery
+    - core/once
+    - core/drupalSettings
+
+task-table-refresh:
+  version: 1.x
+  js:
+    js/hosting-task-refresh.js: {}
+  dependencies:
+    - core/drupal
+    - core/once
+    - core/drupalSettings
+
+task-log-refresh:
+  version: 1.x
+  js:
+    js/hosting-task-log-refresh.js: {}
+  dependencies:
+    - core/drupal
+    - core/once
     - core/drupalSettings

@@ -7,3 +7,20 @@ hosting_server.add:
   route_name: entity.hosting_server.add_form
   title: 'Add server'
   base_route: entity.hosting_server.collection
+
+# Tabs on the server canonical page.
+hosting_server.view:
+  route_name: entity.hosting_server.canonical
+  title: 'View'
+  base_route: entity.hosting_server.canonical
+
+hosting_server.edit:
+  route_name: entity.hosting_server.edit_form
+  title: 'Edit'
+  base_route: entity.hosting_server.canonical
+
+hosting_server.task.verify:
+  route_name: hosting_server.task.verify
+  title: 'Verify'
+  base_route: entity.hosting_server.canonical
+  weight: 10

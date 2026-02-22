@@ -7,3 +7,68 @@ hosting_site.add:
   route_name: entity.hosting_site.add_form
   title: 'Add site'
   base_route: entity.hosting_site.collection
+
+# Tabs on the site canonical page.
+hosting_site.view:
+  route_name: entity.hosting_site.canonical
+  title: 'View'
+  base_route: entity.hosting_site.canonical
+
+hosting_site.edit:
+  route_name: entity.hosting_site.edit_form
+  title: 'Edit'
+  base_route: entity.hosting_site.canonical
+
+hosting_site.task.verify:
+  route_name: hosting_site.task.verify
+  title: 'Verify'
+  base_route: entity.hosting_site.canonical
+  weight: 10
+
+hosting_site.task.disable:
+  route_name: hosting_site.task.disable
+  title: 'Disable'
+  base_route: entity.hosting_site.canonical
+  weight: 20
+
+hosting_site.task.enable:
+  route_name: hosting_site.task.enable
+  title: 'Enable'
+  base_route: entity.hosting_site.canonical
+  weight: 21
+
+hosting_site.task.backup:
+  route_name: hosting_site.task.backup
+  title: 'Backup'
+  base_route: entity.hosting_site.canonical
+  weight: 30
+
+hosting_site.task.restore:
+  route_name: hosting_site.task.restore
+  title: 'Restore'
+  base_route: entity.hosting_site.canonical
+  weight: 31
+
+hosting_site.task.clone:
+  route_name: hosting_site.task.clone
+  title: 'Clone'
+  base_route: entity.hosting_site.canonical
+  weight: 40
+
+hosting_site.task.migrate:
+  route_name: hosting_site.task.migrate
+  title: 'Migrate'
+  base_route: entity.hosting_site.canonical
+  weight: 41
+
+hosting_site.task.reset_password:
+  route_name: hosting_site.task.reset_password
+  title: 'Reset password'
+  base_route: entity.hosting_site.canonical
+  weight: 50
+
+hosting_site.task.delete:
+  route_name: hosting_site.task.delete
+  title: 'Delete'
+  base_route: entity.hosting_site.canonical
+  weight: 100

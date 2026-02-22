@@ -1,0 +1,34 @@
+{#
+/**
+ * @file
+ * Theme implementation for a hosting entity info table.
+ *
+ * Displays entity properties in a two-column label/value table,
+ * matching the D7 Aegir hosting info table pattern.
+ *
+ * Available variables:
+ * - items: Array of info items, each containing:
+ *   - label: The property label.
+ *   - value: The property value (render array or string).
+ *   - description: Optional description text.
+ *   - weight: Sorting weight (items are pre-sorted).
+ * - attributes: HTML attributes for the table element.
+ */
+#}
+{% if items %}
+<table{{ attributes.addClass('hosting-info-table') }}>
+  <tbody>
+    {% for item in items %}
+      <tr class="info-row">
+        <td class="info-label">{{ item.label }}</td>
+        <td class="info-value">
+          {{ item.value }}
+          {% if item.description %}
+            <div class="info-description">{{ item.description }}</div>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

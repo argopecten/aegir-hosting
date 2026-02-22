@@ -1,0 +1,40 @@
+{#
+/**
+ * @file
+ * Theme implementation for the Hosting Dashboard at /hosting.
+ *
+ * Displays summary cards and the site listing table.
+ * The sidebar (task queue, navigation, queues) is handled by the
+ * page--hosting.html.twig template via HostingSidebarBuilder.
+ *
+ * Available variables:
+ * - summary_cards: Array of card data, each containing:
+ *   - type: Card type (site, platform, server, task).
+ *   - label: Display label.
+ *   - count: Entity count.
+ *   - url: Link URL.
+ * - site_table: Render array for the site listing table.
+ * - attributes: HTML attributes for the wrapper.
+ */
+#}
+<div{{ attributes.addClass('hosting-dashboard') }}>
+
+  {# Summary cards #}
+  {% if summary_cards %}
+  <div class="hosting-dashboard__cards">
+    {% for card in summary_cards %}
+      <a href="{{ card.url }}" class="hosting-dashboard__card hosting-dashboard__card--{{ card.type }}">
+        <span class="hosting-dashboard__card-count">{{ card.count }}</span>
+        <span class="hosting-dashboard__card-label">{{ card.label }}</span>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Site list table (mirrors D7 hosting/sites) #}
+  {% if site_table %}
+    <h3 class="hosting-dashboard__section-title">{{ 'Sites'|t }}</h3>
+    {{ site_table }}
+  {% endif %}
+
+</div>
