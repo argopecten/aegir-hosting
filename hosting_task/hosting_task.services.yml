@@ -7,6 +7,9 @@ services:
     class: Drupal\hosting_task\Service\TaskLogManager
     arguments: ['@entity_type.manager', '@datetime.time']
 
+  Drupal\hosting_task\Service\TaskManagerInterface:
+    alias: hosting.task_manager
+
   hosting.task_availability_resolver:
     class: Drupal\hosting_task\Service\TaskAvailabilityResolver
     arguments: ['@entity_type.manager']

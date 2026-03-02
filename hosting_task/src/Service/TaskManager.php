@@ -34,7 +34,7 @@ class TaskManager implements TaskManagerInterface {
       'label' => sprintf('%s %s', $task_type, $context_name),
       'task_type' => $task_type,
       'status' => 'queued',
-      'command' => 'provision-' . $task_type,
+      'command' => 'provision:' . $task_type,
       'args' => json_encode($args),
       'options' => json_encode($options),
       'context_name' => $context_name,

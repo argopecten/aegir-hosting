@@ -6,6 +6,7 @@
  */
 
 use Drupal\hosting_server\Entity\HostingServer;
+use Drupal\hosting\Service\ContextRegistry;
 
 /**
  * Implements hook_install().
@@ -37,14 +38,25 @@ function hosting_server_modules_installed(array $modules): void {
 
 /**
  * Helper function to seed default web and database servers.
+ *
+ * Creates server entities, service instances, backend context YAML files,
+ * hosting_context records, and queues verify tasks. The seeding flag prevents
+ * the server insert hook from duplicating context saves before service
+ * instances are attached.
  */
 function _hosting_server_seed_default_servers(): void {
+  // Set flag to prevent insert hook from saving contexts prematurely.
+  ContextRegistry::$seedingInProgress = TRUE;
+
   $entity_type_manager = \Drupal::entityTypeManager();
   $storage = $entity_type_manager->getStorage('hosting_server');
   $service_storage = $entity_type_manager->getStorage('hosting_service_instance');
   $service_manager = \Drupal::service('hosting.service_manager');
   $module_handler = \Drupal::moduleHandler();
-  
+
+  /** @var \Drupal\hosting\Service\ContextRegistry $context_registry */
+  $context_registry = \Drupal::service('hosting.context_registry');
+
   $host = gethostname() ?: 'localhost';
   $web_hostname = $host;
   $db_hostname = $host . '-db';
@@ -52,7 +64,10 @@ function _hosting_server_seed_default_servers(): void {
     $db_hostname = 'localhost-db';
   }
 
-  // Create web server if hosting_web_server module is installed
+  // Collect servers to save contexts for after all entities are created.
+  $servers_to_save = [];
+
+  // Create web server if hosting_web_server module is installed.
   if ($module_handler->moduleExists('hosting_web_server')) {
     $existing = $storage->loadByProperties(['hostname' => $web_hostname]);
     if (empty($existing)) {
@@ -67,11 +82,12 @@ function _hosting_server_seed_default_servers(): void {
       \Drupal::logger('hosting_server')->info('Created default web server: @hostname', [
         '@hostname' => $web_hostname,
       ]);
-    } else {
+    }
+    else {
       $web_server = reset($existing);
     }
 
-    // Create http service instance if it doesn't exist
+    // Create http service instance if it doesn't exist.
     $existing_service = $service_storage->loadByProperties([
       'server' => $web_server->id(),
       'service_type' => 'http',
@@ -80,7 +96,7 @@ function _hosting_server_seed_default_servers(): void {
       try {
         $provider = $service_manager->createProvider('apache', []);
         $config = $provider->defaultConfiguration();
-        
+
         $instance = $service_storage->create([
           'server' => $web_server->id(),
           'service_type' => 'http',
@@ -88,25 +104,28 @@ function _hosting_server_seed_default_servers(): void {
           'available' => TRUE,
           'config' => \Drupal::service('serialization.json')->encode($config),
         ]);
-        
+
         if (isset($config['port'])) {
           $instance->set('port', (int) $config['port']);
         }
         if (isset($config['restart_cmd'])) {
           $instance->set('restart_cmd', (string) $config['restart_cmd']);
         }
-        
+
         $instance->save();
         \Drupal::logger('hosting_server')->info('Created Apache service instance for web server');
-      } catch (\Exception $e) {
+      }
+      catch (\Exception $e) {
         \Drupal::logger('hosting_server')->warning('Failed to create Apache service instance: @message', [
           '@message' => $e->getMessage(),
         ]);
       }
     }
+
+    $servers_to_save[] = $web_server;
   }
 
-  // Create database server if hosting_db_server module is installed
+  // Create database server if hosting_db_server module is installed.
   if ($module_handler->moduleExists('hosting_db_server')) {
     $existing = $storage->loadByProperties(['hostname' => $db_hostname]);
     if (empty($existing)) {
@@ -121,11 +140,12 @@ function _hosting_server_seed_default_servers(): void {
       \Drupal::logger('hosting_server')->info('Created default database server: @hostname', [
         '@hostname' => $db_hostname,
       ]);
-    } else {
+    }
+    else {
       $db_server = reset($existing);
     }
 
-    // Create db service instance if it doesn't exist
+    // Create db service instance if it doesn't exist.
     $existing_service = $service_storage->loadByProperties([
       'server' => $db_server->id(),
       'service_type' => 'db',
@@ -139,7 +159,7 @@ function _hosting_server_seed_default_servers(): void {
           'db_passwd' => (string) ($db_options['password'] ?? ''),
           'port' => (int) ($db_options['port'] ?? 3306),
         ]);
-        
+
         $instance = $service_storage->create([
           'server' => $db_server->id(),
           'service_type' => 'db',
@@ -147,26 +167,62 @@ function _hosting_server_seed_default_servers(): void {
           'available' => TRUE,
           'config' => \Drupal::service('serialization.json')->encode($config),
         ]);
-        
+
         if (isset($config['port'])) {
           $instance->set('port', (int) $config['port']);
         }
         if (isset($config['restart_cmd'])) {
           $instance->set('restart_cmd', (string) $config['restart_cmd']);
         }
-        
+
         $instance->save();
-        
+
         if (empty($config['db_user'])) {
           \Drupal::logger('hosting_server')->warning('Database username is empty; update the MySQL service instance config manually.');
-        } else {
+        }
+        else {
           \Drupal::logger('hosting_server')->info('Created MySQL service instance for database server');
         }
-      } catch (\Exception $e) {
+      }
+      catch (\Exception $e) {
         \Drupal::logger('hosting_server')->warning('Failed to create MySQL service instance: @message', [
           '@message' => $e->getMessage(),
         ]);
       }
     }
+
+    $servers_to_save[] = $db_server;
   }
+
+  // Now save contexts and queue verify tasks for all created servers.
+  // This runs AFTER service instances exist, ensuring complete context data.
+  $has_task_manager = $module_handler->moduleExists('hosting_task');
+  foreach ($servers_to_save as $server_entity) {
+    try {
+      $context_name = $context_registry->saveContextToBackend($server_entity);
+      \Drupal::logger('hosting_server')->info('Saved backend context @context for server @hostname.', [
+        '@context' => $context_name,
+        '@hostname' => $server_entity->get('hostname')->value,
+      ]);
+
+      // Queue a verify task if the task system is available.
+      if ($has_task_manager) {
+        /** @var \Drupal\hosting_task\Service\TaskManagerInterface $task_manager */
+        $task_manager = \Drupal::service('hosting.task_manager');
+        $task_manager->createTask($context_name, 'verify', [], []);
+        \Drupal::logger('hosting_server')->info('Queued verify task for @context.', [
+          '@context' => $context_name,
+        ]);
+      }
+    }
+    catch (\Exception $e) {
+      \Drupal::logger('hosting_server')->warning('Failed to save context for server @hostname: @message', [
+        '@hostname' => $server_entity->get('hostname')->value,
+        '@message' => $e->getMessage(),
+      ]);
+    }
+  }
+
+  // Clear the seeding flag.
+  ContextRegistry::$seedingInProgress = FALSE;
 }

@@ -22,13 +22,7 @@ class HostingPlatformListBuilder extends EntityListBuilder {
       $entity_type,
       $container->get('entity_type.manager')->getStorage($entity_type->id())
     );
-    try {
-      $theme_path = $container->get('extension.list.theme')->getPath('aegir_eldir');
-    }
-    catch (\Throwable) {
-      $theme_path = 'themes/contrib/aegir-eldir';
-    }
-    $instance->iconSpritePath = base_path() . $theme_path . '/images/svg/aegir-icons-sprite.svg';
+    $instance->iconSpritePath = $container->get('hosting.icon_provider')->getSpriteUrl();
     return $instance;
   }
 

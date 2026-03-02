@@ -26,13 +26,7 @@ class HostingDashboardController extends ControllerBase {
   public static function create(ContainerInterface $container): static {
     $instance = parent::create($container);
     $instance->entityTypeManager = $container->get('entity_type.manager');
-    try {
-      $theme_path = $container->get('extension.list.theme')->getPath('aegir_eldir');
-    }
-    catch (\Throwable) {
-      $theme_path = 'themes/contrib/aegir-eldir';
-    }
-    $instance->iconSpritePath = base_path() . $theme_path . '/images/svg/aegir-icons-sprite.svg';
+    $instance->iconSpritePath = $container->get('hosting.icon_provider')->getSpriteUrl();
     return $instance;
   }
 

@@ -13,7 +13,7 @@ services:
 
   hosting.context_registry:
     class: Drupal\hosting\Service\ContextRegistry
-    arguments: ['@entity_type.manager', '@path.validator', '@logger.channel.hosting']
+    arguments: ['@entity_type.manager', '@path.validator', '@logger.channel.hosting', '@hosting.backend_invoker']
 
   hosting.queue_runner:
     class: Drupal\hosting\Service\QueueRunner
@@ -26,3 +26,13 @@ services:
   hosting.sidebar_builder:
     class: Drupal\hosting\Service\HostingSidebarBuilder
     arguments: ['@entity_type.manager', '@hosting.queue_dispatcher', '@current_route_match']
+
+  hosting.icon_provider:
+    class: Drupal\hosting\Service\HostingIconProvider
+    arguments: ['@theme.manager']
+
+  # Class-based aliases for autowiring in #[Hook] attribute classes.
+  Drupal\hosting\Service\ContextRegistry:
+    alias: hosting.context_registry
+  Drupal\hosting\Service\BackendInvokerInterface:
+    alias: hosting.backend_invoker

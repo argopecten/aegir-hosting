@@ -16,9 +16,45 @@ class BackendInvoker implements BackendInvokerInterface {
     $this->logger = $logger;
   }
 
+  /**
+   * Build the environment variables for the backend process.
+   *
+   * Sets DRUSH_SITE_ALIAS_PATH so the provision backend writes
+   * YAML alias files under the project directory.
+   */
+  protected function buildEnv(): array {
+    $config = $this->configFactory->get('hosting.settings');
+    $aliasPath = $config->get('backend.alias_path');
+    if (empty($aliasPath)) {
+      // Default: <app_root>/../drush/sites/aegir
+      $aliasPath = $this->projectRoot() . '/drush/sites/aegir';
+    }
+    return ['DRUSH_SITE_ALIAS_PATH' => $aliasPath];
+  }
+
+  /**
+   * Resolve the absolute path to the drush binary.
+   *
+   * Falls back to <project_root>/vendor/bin/drush when no config is set.
+   */
+  protected function drushPath(): string {
+    $configured = $this->configFactory->get('hosting.settings')->get('backend.drush_path');
+    if (!empty($configured)) {
+      return $configured;
+    }
+    return $this->projectRoot() . '/vendor/bin/drush';
+  }
+
+  /**
+   * Return the project root directory (parent of the Drupal web root).
+   */
+  protected function projectRoot(): string {
+    return dirname(\Drupal::root());
+  }
+
   public function invoke(string $command, array $args = [], array $options = [], ?string $alias = NULL): array {
     $config = $this->configFactory->get('hosting.settings');
-    $drush = $config->get('backend.drush_path') ?: 'drush';
+    $drush = $this->drushPath();
     $alias = $alias ?: $config->get('backend.alias');
 
     $cmd = [$drush];
@@ -42,6 +78,7 @@ class BackendInvoker implements BackendInvokerInterface {
 
     $process = new Process($cmd);
     $process->setTimeout(NULL);
+    $process->setEnv($this->buildEnv());
     $process->run();
 
     if (!$process->isSuccessful()) {
@@ -76,7 +113,7 @@ class BackendInvoker implements BackendInvokerInterface {
    */
   public function invokeStreaming(string $command, array $args = [], array $options = [], ?callable $callback = NULL, ?string $alias = NULL): array {
     $config = $this->configFactory->get('hosting.settings');
-    $drush = $config->get('backend.drush_path') ?: 'drush';
+    $drush = $this->drushPath();
     $alias = $alias ?: $config->get('backend.alias');
 
     $cmd = [$drush];
@@ -100,6 +137,7 @@ class BackendInvoker implements BackendInvokerInterface {
 
     $process = new Process($cmd);
     $process->setTimeout(NULL);
+    $process->setEnv($this->buildEnv());
 
     // Run with callback for streaming output.
     if ($callback) {

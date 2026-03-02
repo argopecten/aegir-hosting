@@ -16,7 +16,8 @@ use Drupal\Core\Field\BaseFieldDefinition;
  *   entity_keys = {
  *     "id" = "id",
  *     "uuid" = "uuid",
- *     "label" = "context_name"
+ *     "label" = "context_name",
+ *     "langcode" = "langcode"
  *   },
  *   admin_permission = "administer hosting"
  * )
@@ -25,6 +26,11 @@ class HostingContext extends ContentEntityBase implements HostingContextInterfac
 
   public static function baseFieldDefinitions(EntityTypeInterface $entity_type): array {
     $fields = parent::baseFieldDefinitions($entity_type);
+
+    // Set language default to English.
+    if (isset($fields['langcode'])) {
+      $fields['langcode']->setDefaultValue('en');
+    }
 
     $fields['context_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Context name'))
@@ -45,7 +51,7 @@ class HostingContext extends ContentEntityBase implements HostingContextInterfac
     return (string) $this->get('context_name')->value;
   }
 
-  public function getEntityTypeId(): string {
+  public function getContextEntityTypeId(): string {
     return (string) $this->get('entity_type')->value;
   }
 

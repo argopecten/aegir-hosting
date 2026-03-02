@@ -40,13 +40,7 @@ class HostingSiteListBuilder extends EntityListBuilder {
       $container->get('entity_type.manager')->getStorage($entity_type->id()),
     );
     $instance->dateFormatter = $container->get('date.formatter');
-    try {
-      $theme_path = $container->get('extension.list.theme')->getPath('aegir_eldir');
-    }
-    catch (\Throwable) {
-      $theme_path = 'themes/contrib/aegir-eldir';
-    }
-    $instance->iconSpritePath = base_path() . $theme_path . '/images/svg/aegir-icons-sprite.svg';
+    $instance->iconSpritePath = $container->get('hosting.icon_provider')->getSpriteUrl();
     return $instance;
   }
 

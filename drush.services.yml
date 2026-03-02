@@ -1,6 +1,6 @@
 services:
   hosting.commands:
     class: Drupal\hosting\Commands\HostingCommands
-    arguments: ['@hosting.queue_dispatcher', '@config.factory', '@hosting.context_registry']
+    arguments: ['@hosting.queue_dispatcher', '@config.factory', '@hosting.context_registry', '@hosting.backend_invoker']
     tags:
       - { name: drush.command }

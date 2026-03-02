@@ -21,28 +21,6 @@ function hosting_site_hosting_feature() {
 }
 
 /**
- * Implements hook_ENTITY_TYPE_insert() for hosting_site.
- */
-function hosting_site_hosting_site_insert(\Drupal\hosting_site\Entity\HostingSite $site) {
-  // Auto-create install task for new sites.
-  $task_manager = \Drupal::service('hosting.task_manager');
-  $task_manager->createTask($site->get('domain')->value, 'install', [], []);
-  \Drupal::messenger()->addStatus(t('Site installation task has been queued.'));
-}
-
-/**
- * Implements hook_ENTITY_TYPE_update() for hosting_site.
- */
-function hosting_site_hosting_site_update(\Drupal\hosting_site\Entity\HostingSite $site) {
-  // Auto-create verify task when site is updated.
-  if ($site->isPublished() && !$site->original->isPublished()) {
-    // Site was enabled - run verify.
-    $task_manager = \Drupal::service('hosting.task_manager');
-    $task_manager->createTask($site->get('domain')->value, 'verify', [], []);
-  }
-}
-
-/**
  * Implements hook_theme().
  */
 function hosting_site_theme($existing, $type, $theme, $path): array {
