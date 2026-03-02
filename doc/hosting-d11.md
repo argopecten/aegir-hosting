@@ -297,14 +297,6 @@ class HostingSiteForm extends ContentEntityForm {
 - Replace legacy nodeapi hooks with entity hooks
 - Convert Drush commands from Drush 8 to Drush 13 with PHP 8 attributes
 
-## 11. Migration from Drupal 7
-- Migrate `hosting_context` table to `hosting_context` content entity
-- Migrate variable settings to `hosting.settings` config
-- Convert feature registry from include files to config-based system
-- Update node-based entities to content entities
-- Replace legacy nodeapi hooks with entity hooks
-- Convert Drush commands from Drush 8 to Drush 13 with PHP 8 attributes
-
 ## 12. Current Implementation Status
 ✅ **Completed:**
 - Core service architecture (ContextRegistry, BackendInvoker, QueueDispatcher, etc.)
