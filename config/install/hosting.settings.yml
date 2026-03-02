@@ -1,6 +1,6 @@
 dispatch_enabled: true
 backend:
-  drush_path: /usr/bin/drush
+  drush_path: ''
   alias: '@hostmaster'
 queues:
   tasks:
